@@ -1,0 +1,115 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and sign release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Test
+        run: bun run test
+
+      - name: Build source archive
+        id: archive
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          tag="${GITHUB_REF_NAME}"
+          archive_name="aripa-${tag}.tar.gz"
+
+          git archive --format=tar --prefix="aripa-${tag}/" "${GITHUB_SHA}" | gzip -n > "${archive_name}"
+          archive_sha256="$(sha256sum "${archive_name}" | awk '{print $1}')"
+
+          echo "name=${archive_name}" >> "${GITHUB_OUTPUT}"
+          echo "sha256=${archive_sha256}" >> "${GITHUB_OUTPUT}"
+
+      - name: Create signed release manifest
+        env:
+          ARIPA_RELEASE_ARCHIVE_NAME: ${{ steps.archive.outputs.name }}
+          ARIPA_RELEASE_ARCHIVE_SHA256: ${{ steps.archive.outputs.sha256 }}
+          ARIPA_RELEASE_PRIVATE_KEY_PEM_B64: ${{ secrets.ARIPA_RELEASE_PRIVATE_KEY_PEM_B64 }}
+        run: |
+          bun - <<'TS'
+          import { sign } from "node:crypto";
+
+          const privateKeyBase64 = Bun.env.ARIPA_RELEASE_PRIVATE_KEY_PEM_B64?.trim();
+          if (!privateKeyBase64) {
+            throw new Error("Missing ARIPA_RELEASE_PRIVATE_KEY_PEM_B64 secret.");
+          }
+
+          const archiveName = Bun.env.ARIPA_RELEASE_ARCHIVE_NAME;
+          const archiveSha256 = Bun.env.ARIPA_RELEASE_ARCHIVE_SHA256;
+          const tagName = Bun.env.GITHUB_REF_NAME;
+          const commitSha = Bun.env.GITHUB_SHA;
+
+          if (!archiveName || !archiveSha256 || !tagName || !commitSha) {
+            throw new Error("Missing release manifest environment.");
+          }
+
+          const manifestText = `${JSON.stringify(
+            {
+              schemaVersion: 1,
+              tagName,
+              commitSha,
+              archive: {
+                name: archiveName,
+                sha256: archiveSha256,
+              },
+              generatedAt: new Date().toISOString(),
+            },
+            null,
+            2,
+          )}\n`;
+          const privateKeyPem = Buffer.from(privateKeyBase64, "base64").toString("utf8");
+          const signature = sign(null, Buffer.from(manifestText), privateKeyPem).toString("base64");
+
+          await Bun.write("aripa-release.json", manifestText);
+          await Bun.write("aripa-release.json.sig", `${signature}\n`);
+          TS
+
+      - name: Create or update GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARIPA_RELEASE_ARCHIVE_NAME: ${{ steps.archive.outputs.name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          tag="${GITHUB_REF_NAME}"
+          if ! gh release view "${tag}" >/dev/null 2>&1; then
+            gh release create "${tag}" \
+              --title "${tag}" \
+              --notes "Signed Aripa release ${tag}."
+          fi
+
+          gh release upload "${tag}" \
+            "${ARIPA_RELEASE_ARCHIVE_NAME}" \
+            aripa-release.json \
+            aripa-release.json.sig \
+            --clobber

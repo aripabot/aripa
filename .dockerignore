@@ -1,0 +1,16 @@
+.DS_Store
+.git
+.gitignore
+.cursor
+.env
+.env.*
+config.json
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+coverage
+node_modules
+docs
+user-docs
+tests
+*.log

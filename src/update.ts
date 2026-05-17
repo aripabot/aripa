@@ -1,0 +1,548 @@
+import {
+  BoxRenderable,
+  SelectRenderable,
+  SelectRenderableEvents,
+  TextRenderable,
+  createCliRenderer,
+  parseKeypress,
+  type BoxOptions,
+  type Renderable,
+  type SelectOption,
+  type SelectRenderableOptions,
+  type TextOptions,
+} from "@opentui/core";
+
+import { colors } from "@/onboarding-wizard/theme.ts";
+import { loadRuntimeJsonConfig } from "@/config/config.ts";
+import {
+  DEFAULT_GITHUB_REPO,
+  DEFAULT_RELEASE_PUBLIC_KEY_PEM_B64,
+  applyReleaseUpdate,
+  fetchGitHubReleases,
+  formatReleaseDate,
+  formatReleaseName,
+  type GitHubRelease,
+} from "@/update/release-updater.ts";
+import type { MinimalKeyEvent } from "@/onboarding-wizard/types.ts";
+
+type View = "loading" | "select" | "confirm" | "updating" | "done" | "error";
+
+const packageJson = (await Bun.file(new URL("../package.json", import.meta.url)).json()) as {
+  version?: string;
+};
+const currentVersion = packageJson.version ?? "unknown";
+const runtimeConfig = await loadRuntimeJsonConfig();
+const updateConfig = {
+  ...runtimeConfig.updates,
+  githubRepo:
+    Bun.env.ARIPA_UPDATE_GITHUB_REPO?.trim() ||
+    runtimeConfig.updates.githubRepo ||
+    DEFAULT_GITHUB_REPO,
+};
+const isOfficialUpdateRepo = updateConfig.githubRepo === DEFAULT_GITHUB_REPO;
+
+let renderer: Awaited<ReturnType<typeof createCliRenderer>> | null = null;
+let currentSelect: SelectRenderable | null = null;
+let currentSelectHandler: ((option: SelectOption) => void) | null = null;
+let focusCurrentControl: (() => void) | null = null;
+let rawExitHandler: ((chunk: Buffer | string) => void) | null = null;
+let finished = false;
+
+let view: View = "loading";
+let releases: GitHubRelease[] = [];
+let selectedRelease: GitHubRelease | null = null;
+let message = "Scanning GitHub releases...";
+let errorMessage: string | null = null;
+
+try {
+  renderer = await createCliRenderer({
+    exitOnCtrlC: false,
+    screenMode: "alternate-screen",
+    backgroundColor: colors.background,
+    openConsoleOnError: false,
+    prependInputHandlers: [
+      (sequence) => {
+        const key = parseUpdateKey(sequence);
+        return key ? handleKeyPress(key) : false;
+      },
+    ],
+  });
+
+  rawExitHandler = handleRawExitInput;
+  renderer.stdin.prependListener("data", rawExitHandler);
+  render();
+  void loadReleases();
+} catch (error) {
+  renderer?.destroy();
+  throw error;
+}
+
+async function loadReleases(): Promise<void> {
+  view = "loading";
+  message = "Scanning GitHub releases...";
+  errorMessage = null;
+  render();
+
+  try {
+    if (!updateConfig.enabled) {
+      throw new Error("Updates are disabled in config.json.");
+    }
+
+    releases = await fetchGitHubReleases({
+      repo: updateConfig.githubRepo,
+      token: Bun.env.GITHUB_TOKEN?.trim() || null,
+    });
+    selectedRelease = releases[0] ?? null;
+    view = releases.length > 0 ? "select" : "error";
+    errorMessage = releases.length > 0 ? null : "No published releases were found.";
+  } catch (error) {
+    view = "error";
+    errorMessage = error instanceof Error ? error.message : String(error);
+  }
+
+  render();
+}
+
+function render(): void {
+  if (!renderer || finished) {
+    return;
+  }
+
+  clearRoot();
+  currentSelect = null;
+  currentSelectHandler = null;
+  focusCurrentControl = null;
+
+  renderer.root.add(
+    Box(
+      {
+        width: "100%",
+        height: "100%",
+        backgroundColor: colors.background,
+        paddingX: 2,
+        paddingY: 1,
+        flexDirection: "column",
+        gap: 1,
+      },
+      header(),
+      body(),
+      footer(),
+    ),
+  );
+
+  (focusCurrentControl as null | (() => void))?.();
+  renderer.requestRender();
+}
+
+function Box(options: BoxOptions, ...children: Renderable[]): BoxRenderable {
+  const box = new BoxRenderable(requireRenderer(), options);
+  for (const child of children) {
+    box.add(child);
+  }
+
+  return box;
+}
+
+function Text(options: TextOptions): TextRenderable {
+  return new TextRenderable(requireRenderer(), options);
+}
+
+function Select(options: SelectRenderableOptions): SelectRenderable {
+  return new SelectRenderable(requireRenderer(), options);
+}
+
+function requireRenderer() {
+  if (!renderer) {
+    throw new Error("Update renderer has not been created.");
+  }
+
+  return renderer;
+}
+
+function header(): BoxRenderable {
+  return Box(
+    {
+      width: "100%",
+      height: 6,
+      border: true,
+      borderStyle: "rounded",
+      borderColor: colors.accent,
+      backgroundColor: colors.panel,
+      paddingX: 2,
+      paddingY: 1,
+      flexDirection: "column",
+    },
+    Text({ content: "Update Aripa", fg: colors.accent, attributes: 1 }),
+    Text({ content: `Current package version: ${currentVersion}`, fg: colors.muted }),
+  );
+}
+
+function body(): BoxRenderable {
+  return Box(
+    {
+      width: "100%",
+      flexGrow: 1,
+      border: true,
+      borderStyle: "rounded",
+      borderColor: colors.border,
+      backgroundColor: colors.panelMuted,
+      paddingX: 2,
+      paddingY: 1,
+      flexDirection: "column",
+      gap: 1,
+    },
+    ...viewContent(),
+  );
+}
+
+function viewContent(): Renderable[] {
+  switch (view) {
+    case "loading":
+      return [
+        Text({ content: message, fg: colors.text, attributes: 1 }),
+        Text({ content: `Repository: ${updateConfig.githubRepo}`, fg: colors.muted }),
+      ];
+    case "select":
+      return [
+        Text({ content: "Choose a release", fg: colors.text, attributes: 1 }),
+        Text({
+          content:
+            "Releases are listed newest to oldest. Pre-releases are marked before confirmation.",
+          fg: colors.muted,
+        }),
+        selectControl(
+          releaseOptions(),
+          handleReleaseSelection,
+          Math.min(16, Math.max(6, releases.length + 2)),
+        ),
+      ];
+    case "confirm":
+      return selectedRelease
+        ? confirmContent(selectedRelease)
+        : errorContent("No release is selected.");
+    case "updating":
+      return [
+        Text({
+          content: selectedRelease
+            ? `Updating to ${formatReleaseName(selectedRelease)}`
+            : "Updating",
+          fg: colors.text,
+          attributes: 1,
+        }),
+        Text({ content: message, fg: colors.muted }),
+        Text({
+          content: "Do not stop this process while files are being replaced.",
+          fg: colors.warning,
+        }),
+      ];
+    case "done":
+      return [
+        Text({ content: message, fg: colors.success, attributes: 1 }),
+        Text({ content: "Press Enter, Esc, or Ctrl+C to exit.", fg: colors.muted }),
+      ];
+    case "error":
+      return errorContent(errorMessage ?? "Unknown update error.");
+  }
+}
+
+function confirmContent(release: GitHubRelease): Renderable[] {
+  const warning = release.prerelease
+    ? [
+        Text({
+          content: "This is a pre-release. It may be less stable than a normal release.",
+          fg: colors.warning,
+        }),
+      ]
+    : [];
+
+  return [
+    Text({
+      content: `Confirm update to ${formatReleaseName(release)}`,
+      fg: colors.text,
+      attributes: 1,
+    }),
+    Text({ content: release.name, fg: colors.text }),
+    Text({
+      content: `Published ${formatReleaseDate(release.publishedAt)} | ${release.htmlUrl}`,
+      fg: colors.muted,
+    }),
+    ...warning,
+    Text({
+      content: "Local config, env files, SQLite databases, node_modules, and .git are preserved.",
+      fg: colors.muted,
+    }),
+    selectControl(
+      [
+        {
+          name: "Apply update",
+          description: "Download the release source, replace source files, then run bun install.",
+          value: "apply",
+        },
+        { name: "Back", description: "Return to the release list.", value: "back" },
+        { name: "Exit", description: "Leave this instance unchanged.", value: "exit" },
+      ],
+      handleConfirmSelection,
+      6,
+    ),
+  ];
+}
+
+function errorContent(error: string): Renderable[] {
+  return [
+    Text({ content: "Update unavailable", fg: colors.danger, attributes: 1 }),
+    Text({ content: error, fg: colors.text, wrapMode: "word" }),
+    selectControl(
+      [
+        { name: "Retry", description: "Scan GitHub releases again.", value: "retry" },
+        { name: "Exit", description: "Leave this instance unchanged.", value: "exit" },
+      ],
+      (option) => {
+        if (option.value === "retry") {
+          void loadReleases();
+          return;
+        }
+
+        finish("No changes made.");
+      },
+      5,
+    ),
+  ];
+}
+
+function footer(): BoxRenderable {
+  const content =
+    view === "done"
+      ? "Enter/Esc/Ctrl+C: exit"
+      : currentSelect
+        ? "Up/Down: choose | Enter: select | Esc/Ctrl+C: quit"
+        : "Esc/Ctrl+C: quit";
+
+  return Box(
+    {
+      width: "100%",
+      height: 3,
+      border: true,
+      borderStyle: "rounded",
+      borderColor: colors.border,
+      backgroundColor: colors.panel,
+      paddingX: 2,
+    },
+    Text({ content, fg: colors.muted }),
+  );
+}
+
+function releaseOptions(): SelectOption[] {
+  return [
+    ...releases.map((release) => ({
+      name: formatReleaseName(release),
+      description: `${formatReleaseDate(release.publishedAt)} - ${release.name}`,
+      value: release,
+    })),
+    { name: "Refresh releases", description: "Scan GitHub again.", value: "refresh" },
+    { name: "Exit", description: "Leave this instance unchanged.", value: "exit" },
+  ];
+}
+
+function selectControl(
+  options: SelectOption[],
+  onSelected: (option: SelectOption) => void,
+  height: number,
+  selectedIndex = 0,
+): SelectRenderable {
+  const select = Select({
+    width: "100%",
+    height,
+    options,
+    selectedIndex: Math.max(0, selectedIndex),
+    backgroundColor: colors.input,
+    textColor: colors.text,
+    focusedBackgroundColor: colors.input,
+    focusedTextColor: colors.text,
+    selectedBackgroundColor: colors.accentMuted,
+    selectedTextColor: colors.accent,
+    descriptionColor: colors.muted,
+    selectedDescriptionColor: colors.text,
+    showScrollIndicator: true,
+    showDescription: true,
+    wrapSelection: true,
+  });
+
+  select.on(SelectRenderableEvents.ITEM_SELECTED, (_index: number, option: SelectOption) =>
+    onSelected(option),
+  );
+  currentSelect = select;
+  currentSelectHandler = onSelected;
+  focusCurrentControl = () => select.focus();
+  return select;
+}
+
+function handleReleaseSelection(option: SelectOption): void {
+  if (option.value === "refresh") {
+    void loadReleases();
+    return;
+  }
+
+  if (option.value === "exit") {
+    finish("No changes made.");
+    return;
+  }
+
+  selectedRelease = option.value as GitHubRelease;
+  view = "confirm";
+  render();
+}
+
+function handleConfirmSelection(option: SelectOption): void {
+  if (option.value === "back") {
+    view = "select";
+    render();
+    return;
+  }
+
+  if (option.value === "exit") {
+    finish("No changes made.");
+    return;
+  }
+
+  if (option.value === "apply" && selectedRelease) {
+    void applySelectedRelease(selectedRelease);
+  }
+}
+
+async function applySelectedRelease(release: GitHubRelease): Promise<void> {
+  view = "updating";
+  message = "Starting update...";
+  render();
+
+  try {
+    const result = await applyReleaseUpdate({
+      release,
+      token: Bun.env.GITHUB_TOKEN?.trim() || null,
+      installDependencies: true,
+      releasePublicKeyPem: updateConfig.releasePublicKeyPem,
+      releasePublicKeyPemBase64:
+        updateConfig.releasePublicKeyPemBase64 ||
+        (isOfficialUpdateRepo ? DEFAULT_RELEASE_PUBLIC_KEY_PEM_B64 : undefined),
+      onProgress: (progress) => {
+        message = progress;
+        render();
+      },
+    });
+
+    view = "done";
+    message = `Updated ${result.updatedPath} to ${formatReleaseName(result.release)}.`;
+  } catch (error) {
+    view = "error";
+    errorMessage = error instanceof Error ? error.message : String(error);
+  }
+
+  render();
+}
+
+function handleKeyPress(key: MinimalKeyEvent): boolean {
+  if (view === "updating") {
+    return true;
+  }
+
+  if (view === "done" && (isExitKey(key) || key.name === "return" || key.name === "linefeed")) {
+    finish(message);
+    return true;
+  }
+
+  if (isExitKey(key)) {
+    finish("No changes made.");
+    return true;
+  }
+
+  if ((key.name === "return" || key.name === "linefeed") && currentSelect && currentSelectHandler) {
+    const selectedOption = currentSelect.getSelectedOption();
+    if (selectedOption) {
+      currentSelectHandler(selectedOption);
+    }
+    return true;
+  }
+
+  if (key.name === "up" && currentSelect) {
+    currentSelect.moveUp();
+    return true;
+  }
+
+  if (key.name === "down" && currentSelect) {
+    currentSelect.moveDown();
+    return true;
+  }
+
+  return false;
+}
+
+function clearRoot(): void {
+  if (!renderer) {
+    return;
+  }
+
+  for (const child of renderer.root.getChildren()) {
+    renderer.root.remove(child.id);
+  }
+}
+
+function finish(output: string): void {
+  if (finished) {
+    return;
+  }
+
+  finished = true;
+  if (rawExitHandler) {
+    renderer?.stdin.off("data", rawExitHandler);
+    rawExitHandler = null;
+  }
+  renderer?.destroy();
+  console.log(output);
+}
+
+function handleRawExitInput(chunk: Buffer | string): void {
+  const sequence = Buffer.isBuffer(chunk) ? chunk.toString("utf8") : chunk;
+  if (sequence === "\u0003" || sequence === "\u001B") {
+    if (view === "updating") {
+      return;
+    }
+
+    if (view === "done") {
+      finish(message);
+      return;
+    }
+
+    finish("No changes made.");
+    return;
+  }
+
+  const key = parseUpdateKey(sequence);
+  if (key && isExitKey(key)) {
+    if (view === "updating") {
+      return;
+    }
+
+    if (view === "done") {
+      finish(message);
+      return;
+    }
+
+    finish("No changes made.");
+  }
+}
+
+function parseUpdateKey(sequence: string): MinimalKeyEvent | null {
+  const key = parseKeypress(sequence);
+  if (key?.name) {
+    return key;
+  }
+
+  const kittyKey = parseKeypress(sequence, { useKittyKeyboard: true });
+  return kittyKey?.name ? kittyKey : null;
+}
+
+function isExitKey(key: MinimalKeyEvent): boolean {
+  return (
+    key.name === "escape" ||
+    (key.ctrl && (key.name === "c" || key.name === "C" || key.name === "\u0003"))
+  );
+}

@@ -1,0 +1,32 @@
+{
+  "name": "Aripa",
+  "stylePrompt": "match",
+  "agentRateLimitMessagesPerMinute": 10,
+  "agentTimeoutMs": 60000,
+  "agentMaxConcurrentRequests": 4,
+  "agentMaxConcurrentRequestsPerGuild": 2,
+  "logPrivacy": true,
+  "models": {
+    "agent": {
+      "provider": "openai",
+      "model": "gpt-5.5",
+      "reasoningEffort": "low"
+    },
+    "summarizer": {
+      "provider": "openai",
+      "model": "gpt-5.4-nano",
+      "reasoningEffort": "low"
+    },
+    "web": {
+      "enabled": true,
+      "provider": "google",
+      "model": "gemini-2.5-flash"
+    }
+  },
+  "providers": {},
+  "updates": {
+    "enabled": true,
+    "githubRepo": "aripabot/aripa"
+  },
+  "allowlistedServerIds": ["AT_LEAST_ONE_DISCORD_GUILD_ID"]
+}
