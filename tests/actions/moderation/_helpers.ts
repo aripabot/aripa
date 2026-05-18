@@ -29,6 +29,7 @@ interface CreateHarnessOptions {
   modLogSendFails?: boolean;
   guildMessageBatches?: Record<string, Array<Map<string, FakeMessage>>>;
   useBulkDelete?: boolean;
+  blockedCleanChannelIds?: string[];
 }
 
 export interface FakeMessage {
@@ -58,6 +59,7 @@ export function createModerationHarness({
   modLogSendFails = false,
   guildMessageBatches,
   useBulkDelete = true,
+  blockedCleanChannelIds = [],
 }: CreateHarnessOptions) {
   const replies: string[] = [];
   const dmMessages: unknown[] = [];
@@ -193,6 +195,11 @@ export function createModerationHarness({
     const channel = {
       id: nextChannelId,
       isTextBased: () => true,
+      permissionsFor: () => ({
+        has: (permission: string) =>
+          !blockedCleanChannelIds.includes(nextChannelId) ||
+          !["ViewChannel", "ReadMessageHistory", "ManageMessages"].includes(permission),
+      }),
       messages: {
         fetch: async (options: { limit: number; before?: string }) => {
           messageFetchCalls.push({ channelId: nextChannelId, ...options });

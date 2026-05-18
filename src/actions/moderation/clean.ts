@@ -23,6 +23,7 @@ const cleanAction = {
 export default cleanAction;
 
 const MAX_HISTORY_SCAN_BATCHES = 10;
+const CHANNEL_SCAN_CONCURRENCY = 8;
 
 export async function cleanMessages(
   context: ActionContext,
@@ -122,6 +123,7 @@ interface FetchableChannel {
   id: string;
   isTextBased?: () => boolean;
   messages?: FetchableMessageManager;
+  permissionsFor?: (memberOrUser: unknown) => { has: (permission: string) => boolean } | null;
   bulkDelete?: (
     messages: readonly FetchableMessage[],
     filterOld?: boolean,
@@ -150,32 +152,35 @@ export async function collectGuildMessagesForUser(
   options: { maxMessages?: number; sinceTimestampMs?: number } = {},
 ): Promise<CollectedGuildMessage[]> {
   const channels = await getFetchableGuildChannels(context);
-  const messages: CollectedGuildMessage[] = [];
+  const botMember = (context.message.guild as { members?: { me?: unknown } } | null)?.members?.me;
+  const cleanableChannels = channels.filter(
+    (channel): channel is FetchableChannel & { messages: FetchableMessageManager } =>
+      Boolean(channel) && isCleanableTextChannel(channel, botMember),
+  );
+  const messageGroups = await mapWithConcurrency(
+    cleanableChannels,
+    CHANNEL_SCAN_CONCURRENCY,
+    async (channel) =>
+      collectMessagesForUser(channel, userId, {
+        maxMessages: options.maxMessages,
+        sinceTimestampMs: options.sinceTimestampMs,
+      }).catch((error) => {
+        context.log
+          .withError(error)
+          .withMetadata({
+            guildId: context.message.guildId,
+            channelId: channel.id,
+            userId,
+          })
+          .info("Failed to fetch channel messages for clean.");
+        return [];
+      }),
+  );
 
-  for (const channel of channels) {
-    if (!channel || !isFetchableTextChannel(channel)) {
-      continue;
-    }
-
-    const channelMessages = await collectMessagesForUser(channel, userId, {
-      maxMessages: options.maxMessages,
-      sinceTimestampMs: options.sinceTimestampMs,
-    }).catch((error) => {
-      context.log
-        .withError(error)
-        .withMetadata({
-          guildId: context.message.guildId,
-          channelId: channel.id,
-          userId,
-        })
-        .info("Failed to fetch channel messages for clean.");
-      return [];
-    });
-
-    messages.push(...channelMessages);
-  }
-
-  return sortMessagesNewestFirst(messages).slice(0, options.maxMessages ?? messages.length);
+  return sortMessagesNewestFirst(messageGroups.flat()).slice(
+    0,
+    options.maxMessages ?? Number.POSITIVE_INFINITY,
+  );
 }
 
 export async function deleteCollectedGuildMessages(
@@ -244,6 +249,33 @@ function chunkMessages<T>(messages: readonly T[], chunkSize: number): T[][] {
   return chunks;
 }
 
+async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  concurrency: number,
+  mapper: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results = Array.from<R | undefined>({ length: items.length });
+  let nextIndex = 0;
+
+  async function worker(): Promise<void> {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      const item = items[index];
+
+      if (item === undefined) {
+        continue;
+      }
+
+      results[index] = await mapper(item);
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => worker()));
+
+  return results.filter((result): result is R => result !== undefined);
+}
+
 function isBulkDeleteEligible(message: FetchableMessage): boolean {
   const timestamp = getMessageTimestamp(message);
   return timestamp === null || Date.now() - timestamp < 14 * 24 * 60 * 60 * 1_000;
@@ -272,6 +304,27 @@ function isFetchableTextChannel(
   }
 
   return typeof channel.messages?.fetch === "function";
+}
+
+function isCleanableTextChannel(
+  channel: FetchableChannel,
+  botMember: unknown,
+): channel is FetchableChannel & { messages: FetchableMessageManager } {
+  if (!isFetchableTextChannel(channel)) {
+    return false;
+  }
+
+  const permissions = botMember ? channel.permissionsFor?.(botMember) : null;
+
+  if (!permissions) {
+    return true;
+  }
+
+  return (
+    permissions.has("ViewChannel") &&
+    permissions.has("ReadMessageHistory") &&
+    permissions.has("ManageMessages")
+  );
 }
 
 async function collectMessagesForUser(

@@ -205,4 +205,60 @@ describe("cleanMessages", () => {
       store.close();
     }
   });
+
+  test("skips channels the bot cannot clean", async () => {
+    const store = new GuildConfigStore(":memory:");
+    const deleted: string[] = [];
+
+    try {
+      const visibleBatch = new Map<string, FakeMessage>([
+        [
+          "m1",
+          {
+            id: "m1",
+            author: { id: targetUserId },
+            createdTimestamp: Date.now(),
+            delete: async () => {
+              deleted.push("m1");
+            },
+          },
+        ],
+      ]);
+      const blockedBatch = new Map<string, FakeMessage>([
+        [
+          "m2",
+          {
+            id: "m2",
+            author: { id: targetUserId },
+            createdTimestamp: Date.now(),
+            delete: async () => {
+              deleted.push("m2");
+            },
+          },
+        ],
+      ]);
+
+      const harness = createModerationHarness({
+        actionName: "clean",
+        args: ["user", `<@${targetUserId}>`, "2"],
+        guildMessageBatches: {
+          "111111111111111111": [visibleBatch],
+          "222222222222222223": [blockedBatch],
+        },
+        blockedCleanChannelIds: ["222222222222222223"],
+      });
+
+      await cleanMessages(harness.context, { guildConfigStore: store });
+
+      expect(deleted).toEqual(["m1"]);
+      expect(harness.messageFetchCalls).toEqual([
+        {
+          channelId: "111111111111111111",
+          limit: 100,
+        },
+      ]);
+    } finally {
+      store.close();
+    }
+  });
 });
