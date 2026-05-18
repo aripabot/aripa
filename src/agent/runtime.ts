@@ -53,6 +53,10 @@ export interface AgentMetadata {
   currentDateTime: string;
 }
 
+export interface AgentPromptTemplateContext {
+  prefix: string;
+}
+
 export interface HandleAgentMentionOptions {
   client: Client;
   message: Message;
@@ -141,7 +145,9 @@ export async function handleAgentMention({
       log,
     });
     const promptParts = await loadPromptParts();
-    const system = buildAgentSystemPrompt(promptParts, createAgentMetadata(now, botName));
+    const system = buildAgentSystemPrompt(promptParts, createAgentMetadata(now, botName), {
+      prefix,
+    });
     const tools = createAgentTools({
       client,
       message,
@@ -351,17 +357,22 @@ export async function buildDefaultAgentPrompt({
 export function buildAgentSystemPrompt(
   promptParts: AgentPromptParts,
   metadata: AgentMetadata,
+  templateContext: AgentPromptTemplateContext = { prefix: "-" },
 ): string {
   return [
-    promptParts.defaultPrompt,
-    promptParts.webPrompt,
-    promptParts.stylePrompt,
-    promptParts.metadataPrompt,
+    renderPromptTemplate(promptParts.defaultPrompt, templateContext),
+    renderPromptTemplate(promptParts.webPrompt, templateContext),
+    renderPromptTemplate(promptParts.stylePrompt, templateContext),
+    renderPromptTemplate(promptParts.metadataPrompt, templateContext),
     renderMetadata(metadata),
   ]
     .map((part) => part.trim())
     .filter((part) => part.length > 0)
     .join("\n\n");
+}
+
+function renderPromptTemplate(prompt: string, { prefix }: AgentPromptTemplateContext): string {
+  return prompt.replaceAll("{{PREFIX}}", prefix);
 }
 
 export async function loadAgentPromptParts(

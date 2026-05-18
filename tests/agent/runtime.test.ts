@@ -58,7 +58,7 @@ describe("buildAgentSystemPrompt", () => {
   test("combines default, style, metadata prompt, and injected metadata", () => {
     const system = buildAgentSystemPrompt(
       {
-        defaultPrompt: "default instructions",
+        defaultPrompt: "default instructions\n`{{PREFIX}}ping`",
         webPrompt: "web instructions",
         stylePrompt: "match style",
         metadataPrompt: "metadata header",
@@ -67,9 +67,14 @@ describe("buildAgentSystemPrompt", () => {
         botName: "Aripa",
         currentDateTime: "2026-04-26T12:34:56.000Z",
       },
+      {
+        prefix: "!",
+      },
     );
 
     expect(system).toContain("default instructions");
+    expect(system).toContain("`!ping`");
+    expect(system).not.toContain("{{PREFIX}}");
     expect(system).toContain("match style");
     expect(system).toContain("metadata header");
     expect(system).toContain("- Bot name: Aripa");
@@ -128,6 +133,7 @@ describe("loadAgentPromptParts", () => {
     const parts = await loadAgentPromptParts();
 
     expect(parts.defaultPrompt).toContain("You are an agentic Discord bot");
+    expect(parts.defaultPrompt).toContain("{{PREFIX}}ping");
     expect(parts.webPrompt).toContain("Web search is enabled");
     expect(parts.stylePrompt).toContain("Match the vibe");
     expect(parts.metadataPrompt).toContain("Operator supplied metadata");

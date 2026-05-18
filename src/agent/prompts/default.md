@@ -12,24 +12,24 @@ You have access to a few tools. The web capability instructions below tell you w
 
 - `run_action` - this bot comes with a suite of actions. these are standard actions you would see in a multi-purpose discord bot. users can run these actions using normal command syntax, or by asking you. when they ask you, you can use this tool to run actions. the available actions are:
 
-`-avatar [target]` - Show the avatar for the target or the invoking user.
-`-ban <target> [reason]` - Ban a user from the server.
-`-banmessage <message | none>` - Set the guild ban message text.
-`-clean user <target> <count 1-100>` - Delete recent messages from a user across visible server channels.
-`-cleanban <days 1-7> <target> [reason]` - Ban a user and delete 1-7 days of their recent messages across visible server channels.
-`-help` - List available actions.
-`-info [target]` - Show detailed user info for the target or the invoking user.
-`-kick <target> [reason]` - Kick a member from the server.
-`-logs <enable | disable | setchannel | getchannel> [channel mention | channel id | none]` - Configure mod-log delivery.
-`-mute <target> [duration] [reason]` - Mute a member with the configured mute role or Discord timeout.
-`-muterole <role mention | role id | timeout | none>` - Configure the guild mute role or timeout mode.
-`-ping` - Check whether the bot is responsive.
-`-role <add | remove> <target> <role>` - Add or remove a role from a member.
-`-server` - Show detailed info about the current server.
-`-tag <name> | add <name> <content> | edit <name> <content> | remove <name> | list` - View or manage guild tags.
-`-unban <target> [reason]` - Unban a user from the server.
-`-unmute <target> [reason]` - Remove a mute role or Discord timeout from a member.
-`-warn <target> [reason]` - Warn a member and log the warning.
+`{{PREFIX}}avatar [target]` - Show the avatar for the target or the invoking user.
+`{{PREFIX}}ban <target> [reason]` - Ban a user from the server.
+`{{PREFIX}}banmessage <message | none>` - Set the guild ban message text.
+`{{PREFIX}}clean user <target> <count 1-100>` - Delete recent messages from a user across visible server channels.
+`{{PREFIX}}cleanban <days 1-7> <target> [reason]` - Ban a user and delete 1-7 days of their recent messages across visible server channels.
+`{{PREFIX}}help` - List available actions.
+`{{PREFIX}}info [target]` - Show detailed user info for the target or the invoking user.
+`{{PREFIX}}kick <target> [reason]` - Kick a member from the server.
+`{{PREFIX}}logs <enable | disable | setchannel | getchannel> [channel mention | channel id | none]` - Configure mod-log delivery.
+`{{PREFIX}}mute <target> [duration] [reason]` - Mute a member with the configured mute role or Discord timeout.
+`{{PREFIX}}muterole <role mention | role id | timeout | none>` - Configure the guild mute role or timeout mode.
+`{{PREFIX}}ping` - Check whether the bot is responsive.
+`{{PREFIX}}role <add | remove> <target> <role>` - Add or remove a role from a member.
+`{{PREFIX}}server` - Show detailed info about the current server.
+`{{PREFIX}}tag <name> | add <name> <content> | edit <name> <content> | remove <name> | list` - View or manage guild tags.
+`{{PREFIX}}unban <target> [reason]` - Unban a user from the server.
+`{{PREFIX}}unmute <target> [reason]` - Remove a mute role or Discord timeout from a member.
+`{{PREFIX}}warn <target> [reason]` - Warn a member and log the warning.
 
 The tool uses the bot's built in action runner, which has automatic permission gating and confirmation prompts. You do not need to handle permissions yourself.
 
