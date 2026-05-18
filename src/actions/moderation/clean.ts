@@ -3,6 +3,7 @@ import { resolveCount, resolveUserReference } from "@/commands/command-resolvers
 import { getGuildConfigStore, type GuildConfigStore } from "@/config/guild-config-store.ts";
 import {
   deleteMessagesIndividually,
+  type DeleteMessagesResult,
   formatUserLabel,
   parseTrailingDryRunFlag,
   replyUsage,
@@ -12,7 +13,7 @@ import {
 const cleanAction = {
   name: "clean",
   requiredUserPermissions: ["ManageMessages"],
-  description: "Delete recent messages from a user in the current channel.",
+  description: "Delete recent messages from a user across the server.",
   usage: "user <target> <count 1-100>",
   async execute(context) {
     return cleanMessages(context);
@@ -56,28 +57,19 @@ export async function cleanMessages(
     return context.reply(resolvedCount.error.message);
   }
 
-  const channel = context.message.channel;
-  const messageManager = "messages" in channel ? channel.messages : null;
-
-  if (!messageManager || typeof messageManager.fetch !== "function") {
-    return context.reply("I cannot clean messages in this channel.");
-  }
-
-  const matchingMessages = await collectMessagesForUser(
-    messageManager,
-    resolvedTarget.value.id,
-    resolvedCount.value,
-  );
+  const matchingMessages = await collectGuildMessagesForUser(context, resolvedTarget.value.id, {
+    maxMessages: resolvedCount.value,
+  });
 
   if (matchingMessages.length === 0) {
     return context.reply(
-      `I could not find any recent messages from ${formatUserLabel(resolvedTarget.value.id)} here.`,
+      `I could not find any recent messages from ${formatUserLabel(resolvedTarget.value.id)} in this server.`,
     );
   }
 
   const deletionResult = parsedInvocation.dryRun
     ? { deleted: matchingMessages.length, failed: 0 }
-    : await deleteMessagesIndividually(matchingMessages);
+    : await deleteCollectedGuildMessages(matchingMessages);
 
   await sendModerationLog({
     context,
@@ -87,7 +79,7 @@ export async function cleanMessages(
     details: [
       `User: ${formatUserLabel(resolvedTarget.value.id)}`,
       `Moderator: ${formatUserLabel(context.message.author.id)}`,
-      `Channel: <#${context.message.channelId}>`,
+      "Scope: server",
       `Deleted: ${deletionResult.deleted} message${deletionResult.deleted === 1 ? "" : "s"}`,
       `Failed: ${deletionResult.failed} message${deletionResult.failed === 1 ? "" : "s"}`,
     ],
@@ -118,6 +110,7 @@ export async function cleanMessages(
 interface FetchableMessage {
   id: string;
   author: { id: string };
+  createdTimestamp?: number;
   delete: () => Promise<unknown>;
 }
 
@@ -125,17 +118,174 @@ interface FetchableMessageManager {
   fetch: (options: { limit: number; before?: string }) => Promise<Map<string, FetchableMessage>>;
 }
 
-async function collectMessagesForUser(
-  manager: FetchableMessageManager,
+interface FetchableChannel {
+  id: string;
+  isTextBased?: () => boolean;
+  messages?: FetchableMessageManager;
+  bulkDelete?: (
+    messages: readonly FetchableMessage[],
+    filterOld?: boolean,
+  ) => Promise<{ size?: number } | void>;
+}
+
+interface CollectedGuildMessage {
+  message: FetchableMessage;
+  channel: FetchableChannel & { messages: FetchableMessageManager };
+}
+
+interface FetchableChannelCollection {
+  values: () => IterableIterator<FetchableChannel | null>;
+}
+
+interface FetchableGuildChannels {
+  cache?: FetchableChannelCollection;
+  fetch?: () => Promise<FetchableChannelCollection | null>;
+}
+
+const DISCORD_EPOCH_MS = 1_420_070_400_000n;
+
+export async function collectGuildMessagesForUser(
+  context: ActionContext,
   userId: string,
-  targetCount: number,
-): Promise<FetchableMessage[]> {
-  const matches: FetchableMessage[] = [];
+  options: { maxMessages?: number; sinceTimestampMs?: number } = {},
+): Promise<CollectedGuildMessage[]> {
+  const channels = await getFetchableGuildChannels(context);
+  const messages: CollectedGuildMessage[] = [];
+
+  for (const channel of channels) {
+    if (!channel || !isFetchableTextChannel(channel)) {
+      continue;
+    }
+
+    const channelMessages = await collectMessagesForUser(channel, userId, {
+      maxMessages: options.maxMessages,
+      sinceTimestampMs: options.sinceTimestampMs,
+    }).catch((error) => {
+      context.log
+        .withError(error)
+        .withMetadata({
+          guildId: context.message.guildId,
+          channelId: channel.id,
+          userId,
+        })
+        .info("Failed to fetch channel messages for clean.");
+      return [];
+    });
+
+    messages.push(...channelMessages);
+  }
+
+  return sortMessagesNewestFirst(messages).slice(0, options.maxMessages ?? messages.length);
+}
+
+export async function deleteCollectedGuildMessages(
+  collectedMessages: readonly CollectedGuildMessage[],
+): Promise<DeleteMessagesResult> {
+  let deleted = 0;
+  let failed = 0;
+  const messagesByChannel = groupMessagesByChannel(collectedMessages);
+
+  for (const [channel, messages] of messagesByChannel) {
+    const bulkEligibleMessages = messages.filter(isBulkDeleteEligible);
+    const individualMessages = messages.filter((message) => !isBulkDeleteEligible(message));
+
+    if (typeof channel.bulkDelete !== "function") {
+      const result = await deleteMessagesIndividually(messages);
+      deleted += result.deleted;
+      failed += result.failed;
+      continue;
+    }
+
+    for (const chunk of chunkMessages(bulkEligibleMessages, 100)) {
+      try {
+        const result = await channel.bulkDelete(chunk, true);
+        const bulkDeleted = result?.size ?? chunk.length;
+        deleted += bulkDeleted;
+        failed += chunk.length - bulkDeleted;
+      } catch {
+        const fallbackResult = await deleteMessagesIndividually(chunk);
+        deleted += fallbackResult.deleted;
+        failed += fallbackResult.failed;
+      }
+    }
+
+    const individualResult = await deleteMessagesIndividually(individualMessages);
+    deleted += individualResult.deleted;
+    failed += individualResult.failed;
+  }
+
+  return { deleted, failed };
+}
+
+function groupMessagesByChannel(
+  collectedMessages: readonly CollectedGuildMessage[],
+): Map<FetchableChannel & { messages: FetchableMessageManager }, FetchableMessage[]> {
+  const messagesByChannel = new Map<
+    FetchableChannel & { messages: FetchableMessageManager },
+    FetchableMessage[]
+  >();
+
+  for (const collectedMessage of collectedMessages) {
+    const channelMessages = messagesByChannel.get(collectedMessage.channel) ?? [];
+    channelMessages.push(collectedMessage.message);
+    messagesByChannel.set(collectedMessage.channel, channelMessages);
+  }
+
+  return messagesByChannel;
+}
+
+function chunkMessages<T>(messages: readonly T[], chunkSize: number): T[][] {
+  const chunks: T[][] = [];
+
+  for (let index = 0; index < messages.length; index += chunkSize) {
+    chunks.push(messages.slice(index, index + chunkSize));
+  }
+
+  return chunks;
+}
+
+function isBulkDeleteEligible(message: FetchableMessage): boolean {
+  const timestamp = getMessageTimestamp(message);
+  return timestamp === null || Date.now() - timestamp < 14 * 24 * 60 * 60 * 1_000;
+}
+
+async function getFetchableGuildChannels(context: ActionContext): Promise<FetchableChannel[]> {
+  const guildChannels = (context.message.guild as { channels?: FetchableGuildChannels } | null)
+    ?.channels;
+  const fetchedChannels = await guildChannels?.fetch?.().catch(() => null);
+  const channelCollection = fetchedChannels ?? guildChannels?.cache;
+
+  if (!channelCollection) {
+    return [];
+  }
+
+  return [...channelCollection.values()].filter((channel): channel is FetchableChannel =>
+    Boolean(channel),
+  );
+}
+
+function isFetchableTextChannel(
+  channel: FetchableChannel,
+): channel is FetchableChannel & { messages: FetchableMessageManager } {
+  if (typeof channel.isTextBased === "function" && !channel.isTextBased()) {
+    return false;
+  }
+
+  return typeof channel.messages?.fetch === "function";
+}
+
+async function collectMessagesForUser(
+  channel: FetchableChannel & { messages: FetchableMessageManager },
+  userId: string,
+  options: { maxMessages?: number; sinceTimestampMs?: number },
+): Promise<CollectedGuildMessage[]> {
+  const matches: CollectedGuildMessage[] = [];
   let before: string | undefined;
   let batchesScanned = 0;
+  const targetCount = options.maxMessages ?? Number.POSITIVE_INFINITY;
 
   while (matches.length < targetCount && batchesScanned < MAX_HISTORY_SCAN_BATCHES) {
-    const batch = await manager.fetch({ limit: 100, before });
+    const batch = await channel.messages.fetch({ limit: 100, before });
     batchesScanned += 1;
 
     if (batch.size === 0) {
@@ -143,8 +293,8 @@ async function collectMessagesForUser(
     }
 
     for (const message of batch.values()) {
-      if (message.author.id === userId) {
-        matches.push(message);
+      if (message.author.id === userId && isMessageNewEnough(message, options.sinceTimestampMs)) {
+        matches.push({ message, channel });
 
         if (matches.length >= targetCount) {
           break;
@@ -154,10 +304,52 @@ async function collectMessagesForUser(
 
     before = [...batch.values()].at(-1)?.id;
 
-    if (!before || batch.size < 100) {
+    if (!before || batch.size < 100 || isBatchOlderThanCutoff(batch, options.sinceTimestampMs)) {
       break;
     }
   }
 
   return matches.slice(0, targetCount);
+}
+
+function isMessageNewEnough(message: FetchableMessage, sinceTimestampMs?: number): boolean {
+  if (sinceTimestampMs === undefined) {
+    return true;
+  }
+
+  const createdTimestamp = getMessageTimestamp(message);
+  return createdTimestamp === null || createdTimestamp >= sinceTimestampMs;
+}
+
+function isBatchOlderThanCutoff(
+  batch: Map<string, FetchableMessage>,
+  sinceTimestampMs?: number,
+): boolean {
+  if (sinceTimestampMs === undefined) {
+    return false;
+  }
+
+  const oldestMessage = [...batch.values()].at(-1);
+  const oldestTimestamp = oldestMessage ? getMessageTimestamp(oldestMessage) : null;
+  return oldestTimestamp !== null && oldestTimestamp < sinceTimestampMs;
+}
+
+function sortMessagesNewestFirst(messages: CollectedGuildMessage[]): CollectedGuildMessage[] {
+  return messages.toSorted((left, right) => {
+    const leftTimestamp = getMessageTimestamp(left.message) ?? 0;
+    const rightTimestamp = getMessageTimestamp(right.message) ?? 0;
+    return rightTimestamp - leftTimestamp;
+  });
+}
+
+function getMessageTimestamp(message: FetchableMessage): number | null {
+  if (typeof message.createdTimestamp === "number") {
+    return message.createdTimestamp;
+  }
+
+  try {
+    return Number((BigInt(message.id) >> 22n) + DISCORD_EPOCH_MS);
+  } catch {
+    return null;
+  }
 }

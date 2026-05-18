@@ -148,22 +148,69 @@ describe("banMember", () => {
     }
   });
 
-  test("cleanban uses the requested delete-message day count", async () => {
+  test("cleanban deletes messages from the requested window across guild channels", async () => {
     const store = new GuildConfigStore(":memory:");
+    const deleted: string[] = [];
 
     try {
+      const recentMessage = {
+        id: "m1",
+        author: { id: targetUserId },
+        createdTimestamp: Date.now() - 6 * 24 * 60 * 60 * 1_000,
+        delete: async () => {
+          deleted.push("m1");
+        },
+      };
+      const oldMessage = {
+        id: "m2",
+        author: { id: targetUserId },
+        createdTimestamp: Date.now() - 8 * 24 * 60 * 60 * 1_000,
+        delete: async () => {
+          deleted.push("m2");
+        },
+      };
+      const otherChannelRecentMessage = {
+        id: "m3",
+        author: { id: targetUserId },
+        createdTimestamp: Date.now() - 1_000,
+        delete: async () => {
+          deleted.push("m3");
+        },
+      };
       const harness = createModerationHarness({
         actionName: "cleanban",
         args: ["7", `<@${targetUserId}>`, "spam"],
+        guildMessageBatches: {
+          "111111111111111111": [
+            new Map([
+              ["m1", recentMessage],
+              ["m2", oldMessage],
+            ]),
+          ],
+          "222222222222222223": [new Map([["m3", otherChannelRecentMessage]])],
+        },
       });
 
       await cleanbanMember(harness.context, { guildConfigStore: store });
 
+      expect(deleted).toEqual(["m3", "m1"]);
+      expect(harness.bulkDeleteCalls).toEqual([
+        {
+          channelId: "222222222222222223",
+          messageIds: ["m3"],
+          filterOld: true,
+        },
+        {
+          channelId: "111111111111111111",
+          messageIds: ["m1"],
+          filterOld: true,
+        },
+      ]);
       expect(harness.banCalls).toEqual([
         expect.objectContaining({
           id: targetUserId,
           options: expect.objectContaining({
-            deleteMessageSeconds: 604800,
+            deleteMessageSeconds: 0,
           }),
         }),
       ]);

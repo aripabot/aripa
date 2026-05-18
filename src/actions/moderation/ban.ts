@@ -14,6 +14,10 @@ import {
   sendModerationDm,
   sendModerationLog,
 } from "@/moderation/moderation-helpers.ts";
+import {
+  collectGuildMessagesForUser,
+  deleteCollectedGuildMessages,
+} from "@/actions/moderation/clean.ts";
 
 interface BanDependencies {
   guildConfigStore?: GuildConfigStore;
@@ -91,13 +95,23 @@ export async function banUserWithDeleteDays(
   const dmChannel = parsedInvocation.dryRun
     ? null
     : await prepareModerationDmChannel({ user: subject.user, context });
+  const messagesToDelete =
+    actionTitle === "Cleanban"
+      ? await collectGuildMessagesForUser(context, subject.user.id, {
+          sinceTimestampMs: Date.now() - deleteMessageDays * 24 * 60 * 60 * 1_000,
+        })
+      : [];
 
   if (!parsedInvocation.dryRun) {
     await context.message.guild.members.ban(subject.user.id, {
-      deleteMessageSeconds: deleteMessageDays * 24 * 60 * 60,
+      deleteMessageSeconds: 0,
       reason: buildAuditReason(context, actionTitle, reason),
     });
   }
+
+  const messageDeletionResult = parsedInvocation.dryRun
+    ? { deleted: messagesToDelete.length, failed: 0 }
+    : await deleteCollectedGuildMessages(messagesToDelete);
 
   const dmDelivered = parsedInvocation.dryRun
     ? false
@@ -124,7 +138,9 @@ export async function banUserWithDeleteDays(
     details.splice(
       2,
       0,
-      `Messages deleted: ${deleteMessageDays} day${deleteMessageDays === 1 ? "" : "s"}`,
+      `Message window: ${deleteMessageDays} day${deleteMessageDays === 1 ? "" : "s"}`,
+      `Deleted: ${messageDeletionResult.deleted} message${messageDeletionResult.deleted === 1 ? "" : "s"}`,
+      `Failed: ${messageDeletionResult.failed} message${messageDeletionResult.failed === 1 ? "" : "s"}`,
     );
   }
 
@@ -144,6 +160,8 @@ export async function banUserWithDeleteDays(
       reason,
       dmDelivered,
       deleteMessageDays,
+      deletedCount: messageDeletionResult.deleted,
+      failedCount: messageDeletionResult.failed,
       actionTitle,
       dryRun: parsedInvocation.dryRun,
     })
@@ -151,11 +169,15 @@ export async function banUserWithDeleteDays(
 
   const deletedSuffix =
     actionTitle === "Cleanban"
-      ? ` with ${deleteMessageDays} day${deleteMessageDays === 1 ? "" : "s"} of message deletion`
+      ? ` and deleted ${messageDeletionResult.deleted} message${messageDeletionResult.deleted === 1 ? "" : "s"} from the last ${deleteMessageDays} day${deleteMessageDays === 1 ? "" : "s"}`
+      : "";
+  const failureSuffix =
+    actionTitle === "Cleanban" && messageDeletionResult.failed > 0
+      ? ` ${messageDeletionResult.failed} message${messageDeletionResult.failed === 1 ? "" : "s"} could not be deleted.`
       : "";
   const prefix = parsedInvocation.dryRun ? "Dry run: would ban" : "Banned";
   return context.reply(
-    `${prefix} ${formatUserLabel(subject.user.id)}${deletedSuffix}.${reason ? ` Reason: ${reason}` : ""}`,
+    `${prefix} ${formatUserLabel(subject.user.id)}${deletedSuffix}.${failureSuffix}${reason ? ` Reason: ${reason}` : ""}`,
   );
 }
 

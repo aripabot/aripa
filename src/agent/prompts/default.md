@@ -15,8 +15,8 @@ You have access to a few tools. The web capability instructions below tell you w
 `-avatar [target]` - Show the avatar for the target or the invoking user.
 `-ban <target> [reason]` - Ban a user from the server.
 `-banmessage <message | none>` - Set the guild ban message text.
-`-clean user <target> <count 1-100>` - Delete recent messages from a user in the current channel.
-`-cleanban <days 1-7> <target> [reason]` - Ban a user and delete 1-7 days of their recent messages.
+`-clean user <target> <count 1-100>` - Delete recent messages from a user across visible server channels.
+`-cleanban <days 1-7> <target> [reason]` - Ban a user and delete 1-7 days of their recent messages across visible server channels.
 `-help` - List available actions.
 `-info [target]` - Show detailed user info for the target or the invoking user.
 `-kick <target> [reason]` - Kick a member from the server.

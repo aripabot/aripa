@@ -27,11 +27,14 @@ interface CreateHarnessOptions {
   banFails?: boolean;
   kickFails?: boolean;
   modLogSendFails?: boolean;
+  guildMessageBatches?: Record<string, Array<Map<string, FakeMessage>>>;
+  useBulkDelete?: boolean;
 }
 
 export interface FakeMessage {
   id: string;
   author: { id: string };
+  createdTimestamp?: number;
   delete: () => Promise<void>;
 }
 
@@ -53,6 +56,8 @@ export function createModerationHarness({
   banFails = false,
   kickFails = false,
   modLogSendFails = false,
+  guildMessageBatches,
+  useBulkDelete = true,
 }: CreateHarnessOptions) {
   const replies: string[] = [];
   const dmMessages: unknown[] = [];
@@ -64,7 +69,12 @@ export function createModerationHarness({
   const banCalls: unknown[] = [];
   const unbanCalls: unknown[] = [];
   const eventLog: string[] = [];
-  const messageFetchCalls: Array<{ limit: number; before?: string }> = [];
+  const messageFetchCalls: Array<{ channelId: string; limit: number; before?: string }> = [];
+  const bulkDeleteCalls: Array<{
+    channelId: string;
+    messageIds: string[];
+    filterOld?: boolean;
+  }> = [];
 
   const targetUser = {
     id: targetUserId,
@@ -171,12 +181,61 @@ export function createModerationHarness({
     },
   };
 
-  let nextMessageBatchIndex = 0;
+  const channelBatchIndexes = new Map<string, number>();
+  const guildMessageBatchEntries = Object.entries(
+    guildMessageBatches ?? { [channelId]: messageBatches },
+  );
+
+  const createMessageChannel = (
+    nextChannelId: string,
+    nextMessageBatches: Array<Map<string, FakeMessage>>,
+  ) => {
+    const channel = {
+      id: nextChannelId,
+      isTextBased: () => true,
+      messages: {
+        fetch: async (options: { limit: number; before?: string }) => {
+          messageFetchCalls.push({ channelId: nextChannelId, ...options });
+          const nextMessageBatchIndex = channelBatchIndexes.get(nextChannelId) ?? 0;
+          channelBatchIndexes.set(nextChannelId, nextMessageBatchIndex + 1);
+          return nextMessageBatches[nextMessageBatchIndex] ?? new Map<string, FakeMessage>();
+        },
+      },
+      bulkDelete: useBulkDelete
+        ? async (messages: FakeMessage[], filterOld?: boolean) => {
+            bulkDeleteCalls.push({
+              channelId: nextChannelId,
+              messageIds: messages.map((message) => message.id),
+              filterOld,
+            });
+
+            for (const message of messages) {
+              await message.delete();
+            }
+
+            return new Map(messages.map((message) => [message.id, message]));
+          }
+        : undefined,
+    };
+
+    return channel;
+  };
+
+  const guildChannels = new Map(
+    guildMessageBatchEntries.map(([nextChannelId, nextMessageBatches]) => [
+      nextChannelId,
+      createMessageChannel(nextChannelId, nextMessageBatches),
+    ]),
+  );
 
   const guild = {
     id: guildId,
     name: guildName,
     ownerId: targetIsOwner ? targetUserId : guildOwnerId,
+    channels: {
+      cache: guildChannels,
+      fetch: async () => guildChannels,
+    },
     roles: {
       cache: new Map(rolePresent ? [[roleId, muteRole]] : []),
       fetch: async (id: string) => (id === roleId && rolePresent ? muteRole : null),
@@ -230,14 +289,7 @@ export function createModerationHarness({
       guild,
       member: invokerMember,
       channelId,
-      channel: {
-        messages: {
-          fetch: async (options: { limit: number; before?: string }) => {
-            messageFetchCalls.push(options);
-            return messageBatches[nextMessageBatchIndex++] ?? new Map<string, FakeMessage>();
-          },
-        },
-      },
+      channel: guildChannels.get(channelId) ?? createMessageChannel(channelId, messageBatches),
       inGuild: () => true,
     } as never,
     args,
@@ -275,6 +327,7 @@ export function createModerationHarness({
     unbanCalls,
     eventLog,
     messageFetchCalls,
+    bulkDeleteCalls,
     targetMember,
     targetUser,
     muteRole,

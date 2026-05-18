@@ -10,7 +10,7 @@ import {
 } from "./_helpers.ts";
 
 describe("cleanMessages", () => {
-  test("deletes recent messages from the target user", async () => {
+  test("deletes recent messages from the target user across guild channels", async () => {
     const store = new GuildConfigStore(":memory:");
     const deleted: string[] = [];
 
@@ -18,12 +18,14 @@ describe("cleanMessages", () => {
       store.setLogChannel(guildId, logChannelId);
       store.setModLogEnabled(guildId, true);
 
-      const batch = new Map<string, FakeMessage>([
+      const now = Date.now();
+      const firstChannelBatch = new Map<string, FakeMessage>([
         [
           "m1",
           {
             id: "m1",
             author: { id: targetUserId },
+            createdTimestamp: now - 3_000,
             delete: async () => {
               deleted.push("m1");
             },
@@ -34,8 +36,22 @@ describe("cleanMessages", () => {
           {
             id: "m2",
             author: { id: targetUserId },
+            createdTimestamp: now - 1_000,
             delete: async () => {
               deleted.push("m2");
+            },
+          },
+        ],
+      ]);
+      const secondChannelBatch = new Map<string, FakeMessage>([
+        [
+          "m3",
+          {
+            id: "m3",
+            author: { id: targetUserId },
+            createdTimestamp: now - 2_000,
+            delete: async () => {
+              deleted.push("m3");
             },
           },
         ],
@@ -44,12 +60,27 @@ describe("cleanMessages", () => {
       const harness = createModerationHarness({
         actionName: "clean",
         args: ["user", `<@${targetUserId}>`, "2"],
-        messageBatches: [batch],
+        guildMessageBatches: {
+          "111111111111111111": [firstChannelBatch],
+          "222222222222222223": [secondChannelBatch],
+        },
       });
 
       await cleanMessages(harness.context, { guildConfigStore: store });
 
-      expect(deleted).toEqual(["m1", "m2"]);
+      expect(deleted).toEqual(["m2", "m3"]);
+      expect(harness.bulkDeleteCalls).toEqual([
+        {
+          channelId: "111111111111111111",
+          messageIds: ["m2"],
+          filterOld: true,
+        },
+        {
+          channelId: "222222222222222223",
+          messageIds: ["m3"],
+          filterOld: true,
+        },
+      ]);
       expect(harness.modLogMessages).toHaveLength(1);
     } finally {
       store.close();
@@ -126,6 +157,7 @@ describe("cleanMessages", () => {
         actionName: "clean",
         args: ["user", `<@${targetUserId}>`, "2"],
         messageBatches: [batch],
+        useBulkDelete: false,
       });
 
       await cleanMessages(harness.context, { guildConfigStore: store });
@@ -167,7 +199,7 @@ describe("cleanMessages", () => {
 
       expect(harness.messageFetchCalls).toHaveLength(10);
       expect(harness.replies).toEqual([
-        `I could not find any recent messages from <@${targetUserId}> (\`${targetUserId}\`) here.`,
+        `I could not find any recent messages from <@${targetUserId}> (\`${targetUserId}\`) in this server.`,
       ]);
     } finally {
       store.close();
