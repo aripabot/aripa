@@ -65,6 +65,7 @@ describe("buildAgentSystemPrompt", () => {
       },
       {
         botName: "Aripa",
+        botVersion: "0.1.0-alpha.3",
         currentDateTime: "2026-04-26T12:34:56.000Z",
       },
       {
@@ -78,12 +79,14 @@ describe("buildAgentSystemPrompt", () => {
     expect(system).toContain("match style");
     expect(system).toContain("metadata header");
     expect(system).toContain("- Bot name: Aripa");
+    expect(system).toContain("- Bot version: 0.1.0-alpha.3");
     expect(system).toContain("- Current date and time: 2026-04-26T12:34:56.000Z");
   });
 
   test("uses the configured bot name in injected metadata", () => {
     expect(createAgentMetadata(new Date("2026-04-26T12:34:56.000Z"), "Wingbot")).toEqual({
       botName: "Wingbot",
+      botVersion: "0.1.0-alpha.3",
       currentDateTime: "2026-04-26T12:34:56.000Z",
     });
   });
@@ -571,6 +574,7 @@ describe("createAgentMetadata", () => {
   test("injects the hardcoded bot name and current ISO timestamp", () => {
     expect(createAgentMetadata(new Date("2026-04-26T12:34:56.000Z"))).toEqual({
       botName: "Aripa",
+      botVersion: "0.1.0-alpha.3",
       currentDateTime: "2026-04-26T12:34:56.000Z",
     });
   });

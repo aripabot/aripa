@@ -22,6 +22,7 @@ import {
   type ContextMessageLike,
 } from "@/agent/tools/request-context.ts";
 import type { ResolvedTextModel } from "@/agent/models.ts";
+import packageJson from "../../package.json" with { type: "json" };
 
 const DEFAULT_BOT_NAME = "Aripa";
 const DEFAULT_STYLE_PROMPT_NAME = "match";
@@ -50,6 +51,7 @@ export interface AgentPromptParts {
 
 export interface AgentMetadata {
   botName: string;
+  botVersion: string;
   currentDateTime: string;
 }
 
@@ -302,6 +304,7 @@ export function extractMentionPrompt(content: string, botId: string | undefined)
 export function createAgentMetadata(now: Date, botName = DEFAULT_BOT_NAME): AgentMetadata {
   return {
     botName,
+    botVersion: packageJson.version,
     currentDateTime: now.toISOString(),
   };
 }
@@ -645,6 +648,7 @@ function normalizeStylePromptName(stylePromptName: string): string {
 function renderMetadata(metadata: AgentMetadata): string {
   return [
     `- Bot name: ${metadata.botName}`,
+    `- Bot version: ${metadata.botVersion}`,
     `- Current date and time: ${metadata.currentDateTime}`,
   ].join("\n");
 }
