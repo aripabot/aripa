@@ -20,7 +20,7 @@ describe("kickMember", () => {
 
       expect(harness.kickCalls).toHaveLength(1);
       expect(harness.dmMessages).toHaveLength(1);
-      expect(harness.eventLog).toEqual(["kick", "dm"]);
+      expect(harness.eventLog).toEqual(["dm", "kick"]);
       expect(harness.modLogMessages).toHaveLength(1);
     } finally {
       store.close();
@@ -52,7 +52,7 @@ describe("kickMember", () => {
     }
   });
 
-  test("does not DM the user when the kick fails", async () => {
+  test("sends the DM before attempting the kick", async () => {
     const store = new GuildConfigStore(":memory:");
 
     try {
@@ -65,8 +65,8 @@ describe("kickMember", () => {
       await expect(kickMember(harness.context, { guildConfigStore: store })).rejects.toThrow(
         "Kick failed",
       );
-      expect(harness.dmMessages).toHaveLength(0);
-      expect(harness.eventLog).toEqual(["kick"]);
+      expect(harness.dmMessages).toHaveLength(1);
+      expect(harness.eventLog).toEqual(["dm", "kick"]);
     } finally {
       store.close();
     }

@@ -22,7 +22,7 @@ describe("banMember", () => {
 
       expect(harness.banCalls).toHaveLength(1);
       expect(harness.dmMessages).toHaveLength(1);
-      expect(harness.eventLog).toEqual(["ban", "dm"]);
+      expect(harness.eventLog).toEqual(["dm", "ban"]);
       expect(harness.modLogMessages).toHaveLength(1);
     } finally {
       store.close();
@@ -82,7 +82,7 @@ describe("banMember", () => {
     }
   });
 
-  test("does not DM the user when the ban fails", async () => {
+  test("sends the DM before attempting the ban", async () => {
     const store = new GuildConfigStore(":memory:");
 
     try {
@@ -95,8 +95,8 @@ describe("banMember", () => {
       await expect(banMember(harness.context, { guildConfigStore: store })).rejects.toThrow(
         "Ban failed",
       );
-      expect(harness.dmMessages).toHaveLength(0);
-      expect(harness.eventLog).toEqual(["ban"]);
+      expect(harness.dmMessages).toHaveLength(1);
+      expect(harness.eventLog).toEqual(["dm", "ban"]);
     } finally {
       store.close();
     }

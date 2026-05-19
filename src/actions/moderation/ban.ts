@@ -102,17 +102,6 @@ export async function banUserWithDeleteDays(
         })
       : [];
 
-  if (!parsedInvocation.dryRun) {
-    await context.message.guild.members.ban(subject.user.id, {
-      deleteMessageSeconds: 0,
-      reason: buildAuditReason(context, actionTitle, reason),
-    });
-  }
-
-  const messageDeletionResult = parsedInvocation.dryRun
-    ? { deleted: messagesToDelete.length, failed: 0 }
-    : await deleteCollectedGuildMessages(messagesToDelete);
-
   const dmDelivered = parsedInvocation.dryRun
     ? false
     : await sendModerationDm({
@@ -126,6 +115,17 @@ export async function banUserWithDeleteDays(
           deleteMessageDays,
         }),
       });
+
+  if (!parsedInvocation.dryRun) {
+    await context.message.guild.members.ban(subject.user.id, {
+      deleteMessageSeconds: 0,
+      reason: buildAuditReason(context, actionTitle, reason),
+    });
+  }
+
+  const messageDeletionResult = parsedInvocation.dryRun
+    ? { deleted: messagesToDelete.length, failed: 0 }
+    : await deleteCollectedGuildMessages(messagesToDelete);
 
   const details = [
     `User: ${formatUserLabel(subject.user.id)}`,

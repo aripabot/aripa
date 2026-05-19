@@ -71,10 +71,6 @@ export async function kickMember(
     ? null
     : await prepareModerationDmChannel({ user: subject.user, context });
 
-  if (!parsedInvocation.dryRun) {
-    await subject.member.kick(buildAuditReason(context, "Kick", reason));
-  }
-
   const dmDelivered = parsedInvocation.dryRun
     ? false
     : await sendModerationDm({
@@ -86,6 +82,10 @@ export async function kickMember(
           `Reason: ${formatReason(reason)}`,
         ].join("\n"),
       });
+
+  if (!parsedInvocation.dryRun) {
+    await subject.member.kick(buildAuditReason(context, "Kick", reason));
+  }
 
   await sendModerationLog({
     context,
