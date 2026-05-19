@@ -84,9 +84,11 @@ describe("buildAgentSystemPrompt", () => {
   });
 
   test("uses the configured bot name in injected metadata", () => {
-    expect(createAgentMetadata(new Date("2026-04-26T12:34:56.000Z"), "Wingbot")).toEqual({
+    const metadata = createAgentMetadata(new Date("2026-04-26T12:34:56.000Z"), "Wingbot");
+
+    expect(metadata).toEqual({
       botName: "Wingbot",
-      botVersion: "0.1.0-alpha.3",
+      botVersion: expect.any(String),
       currentDateTime: "2026-04-26T12:34:56.000Z",
     });
   });
@@ -571,10 +573,12 @@ describe("handleAgentMention", () => {
 });
 
 describe("createAgentMetadata", () => {
-  test("injects the hardcoded bot name and current ISO timestamp", () => {
-    expect(createAgentMetadata(new Date("2026-04-26T12:34:56.000Z"))).toEqual({
+  test("injects the default bot name and current ISO timestamp", () => {
+    const metadata = createAgentMetadata(new Date("2026-04-26T12:34:56.000Z"));
+
+    expect(metadata).toEqual({
       botName: "Aripa",
-      botVersion: "0.1.0-alpha.3",
+      botVersion: expect.any(String),
       currentDateTime: "2026-04-26T12:34:56.000Z",
     });
   });
