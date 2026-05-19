@@ -30,6 +30,7 @@ interface CreateHarnessOptions {
   guildMessageBatches?: Record<string, Array<Map<string, FakeMessage>>>;
   useBulkDelete?: boolean;
   blockedCleanChannelIds?: string[];
+  isAgent?: boolean;
 }
 
 export interface FakeMessage {
@@ -60,6 +61,7 @@ export function createModerationHarness({
   guildMessageBatches,
   useBulkDelete = true,
   blockedCleanChannelIds = [],
+  isAgent = false,
 }: CreateHarnessOptions) {
   const replies: string[] = [];
   const dmMessages: unknown[] = [];
@@ -306,7 +308,7 @@ export function createModerationHarness({
     prefix: "-",
     actionName,
     actions: {} as never,
-    isAgent: false,
+    isAgent,
     agentReplies: [],
     invoker: {
       user: { id: moderatorId } as never,

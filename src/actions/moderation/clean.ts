@@ -24,6 +24,7 @@ export default cleanAction;
 
 const MAX_HISTORY_SCAN_BATCHES = 10;
 const CHANNEL_SCAN_CONCURRENCY = 8;
+const SCANNING_ACKNOWLEDGEMENT = "Scanning for messages. This may take some time.";
 
 export async function cleanMessages(
   context: ActionContext,
@@ -151,6 +152,10 @@ export async function collectGuildMessagesForUser(
   userId: string,
   options: { maxMessages?: number; sinceTimestampMs?: number } = {},
 ): Promise<CollectedGuildMessage[]> {
+  if (!context.isAgent) {
+    await context.reply(SCANNING_ACKNOWLEDGEMENT);
+  }
+
   const channels = await getFetchableGuildChannels(context);
   const botMember = (context.message.guild as { members?: { me?: unknown } } | null)?.members?.me;
   const cleanableChannels = channels.filter(

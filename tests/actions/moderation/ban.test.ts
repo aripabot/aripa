@@ -228,6 +228,10 @@ describe("banMember", () => {
           },
         },
       ]);
+      expect(harness.replies).toEqual([
+        "Scanning for messages. This may take some time.",
+        `Banned <@${targetUserId}> (\`${targetUserId}\`) and deleted 2 messages from the last 7 days. Reason: spam`,
+      ]);
     } finally {
       store.close();
     }

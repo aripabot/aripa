@@ -10,6 +10,8 @@ import {
 } from "./_helpers.ts";
 
 describe("cleanMessages", () => {
+  const scanningAcknowledgement = "Scanning for messages. This may take some time.";
+
   test("deletes recent messages from the target user across guild channels", async () => {
     const store = new GuildConfigStore(":memory:");
     const deleted: string[] = [];
@@ -82,6 +84,10 @@ describe("cleanMessages", () => {
         },
       ]);
       expect(harness.modLogMessages).toHaveLength(1);
+      expect(harness.replies).toEqual([
+        scanningAcknowledgement,
+        `Deleted 2 messages from <@${targetUserId}> (\`${targetUserId}\`).`,
+      ]);
     } finally {
       store.close();
     }
@@ -115,6 +121,7 @@ describe("cleanMessages", () => {
 
       expect(deleted).toEqual([]);
       expect(harness.replies).toEqual([
+        scanningAcknowledgement,
         `Dry run: would delete 1 message from <@${targetUserId}> (\`${targetUserId}\`).`,
       ]);
     } finally {
@@ -165,6 +172,7 @@ describe("cleanMessages", () => {
       expect(deleted).toEqual(["m1"]);
       expect(harness.modLogMessages).toHaveLength(1);
       expect(harness.replies).toEqual([
+        scanningAcknowledgement,
         `Deleted 1 message from <@${targetUserId}> (\`${targetUserId}\`). 1 message could not be deleted.`,
       ]);
     } finally {
@@ -199,6 +207,7 @@ describe("cleanMessages", () => {
 
       expect(harness.messageFetchCalls).toHaveLength(10);
       expect(harness.replies).toEqual([
+        scanningAcknowledgement,
         `I could not find any recent messages from <@${targetUserId}> (\`${targetUserId}\`) in this server.`,
       ]);
     } finally {
@@ -256,6 +265,39 @@ describe("cleanMessages", () => {
           channelId: "111111111111111111",
           limit: 100,
         },
+      ]);
+    } finally {
+      store.close();
+    }
+  });
+
+  test("does not send the scanning acknowledgement for agent calls", async () => {
+    const store = new GuildConfigStore(":memory:");
+
+    try {
+      const batch = new Map<string, FakeMessage>([
+        [
+          "m1",
+          {
+            id: "m1",
+            author: { id: targetUserId },
+            createdTimestamp: Date.now(),
+            delete: async () => {},
+          },
+        ],
+      ]);
+
+      const harness = createModerationHarness({
+        actionName: "clean",
+        args: ["user", `<@${targetUserId}>`, "1"],
+        messageBatches: [batch],
+        isAgent: true,
+      });
+
+      await cleanMessages(harness.context, { guildConfigStore: store });
+
+      expect(harness.replies).toEqual([
+        `Deleted 1 message from <@${targetUserId}> (\`${targetUserId}\`).`,
       ]);
     } finally {
       store.close();
