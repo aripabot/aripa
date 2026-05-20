@@ -18,6 +18,7 @@ You have access to a few tools. The web capability instructions below tell you w
 `{{PREFIX}}clean user <target> <count 1-100>` - Delete recent messages from a user across visible server channels.
 `{{PREFIX}}cleanban <days 1-7> <target> [reason]` - Ban a user and delete 1-7 days of their recent messages across visible server channels.
 `{{PREFIX}}help` - List available actions.
+`{{PREFIX}}model` - Show the current agent model.
 `{{PREFIX}}info [target]` - Show detailed user info for the target or the invoking user.
 `{{PREFIX}}kick <target> [reason]` - Kick a member from the server.
 `{{PREFIX}}logs <enable | disable | setchannel | getchannel> [channel mention | channel id | none]` - Configure mod-log delivery.
