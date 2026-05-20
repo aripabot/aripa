@@ -27,6 +27,9 @@ import type { MinimalKeyEvent } from "@/onboarding-wizard/types.ts";
 
 type View = "loading" | "select" | "confirm" | "updating" | "done" | "error";
 
+const dockerContainerName = "aripabot-docker";
+const spinnerFrames = ["-", "\\", "|", "/"];
+
 const packageJson = (await Bun.file(new URL("../package.json", import.meta.url)).json()) as {
   version?: string;
 };
@@ -40,12 +43,14 @@ const updateConfig = {
     DEFAULT_GITHUB_REPO,
 };
 const isOfficialUpdateRepo = updateConfig.githubRepo === DEFAULT_GITHUB_REPO;
+const dryRunUpdates = Bun.env.DRY_RUN_UPDATES?.trim() === "true";
 
 let renderer: Awaited<ReturnType<typeof createCliRenderer>> | null = null;
 let currentSelect: SelectRenderable | null = null;
 let currentSelectHandler: ((option: SelectOption) => void) | null = null;
 let focusCurrentControl: (() => void) | null = null;
 let rawExitHandler: ((chunk: Buffer | string) => void) | null = null;
+let spinnerTimer: ReturnType<typeof setInterval> | null = null;
 let finished = false;
 
 let view: View = "loading";
@@ -53,6 +58,8 @@ let releases: GitHubRelease[] = [];
 let selectedRelease: GitHubRelease | null = null;
 let message = "Scanning GitHub releases...";
 let errorMessage: string | null = null;
+let detectedDefaultDockerContainer = false;
+let spinnerIndex = 0;
 
 try {
   renderer = await createCliRenderer({
@@ -71,6 +78,7 @@ try {
   rawExitHandler = handleRawExitInput;
   renderer.stdin.prependListener("data", rawExitHandler);
   render();
+  void detectDefaultDockerContainer();
   void loadReleases();
 } catch (error) {
   renderer?.destroy();
@@ -229,7 +237,7 @@ function viewContent(): Renderable[] {
           fg: colors.text,
           attributes: 1,
         }),
-        Text({ content: message, fg: colors.muted }),
+        Text({ content: `${spinner()} ${message}`, fg: colors.muted }),
         Text({
           content: "Do not stop this process while files are being replaced.",
           fg: colors.warning,
@@ -271,19 +279,7 @@ function confirmContent(release: GitHubRelease): Renderable[] {
       content: "Local config, env files, SQLite databases, node_modules, and .git are preserved.",
       fg: colors.muted,
     }),
-    selectControl(
-      [
-        {
-          name: "Apply update",
-          description: "Download the release source, replace source files, then run bun install.",
-          value: "apply",
-        },
-        { name: "Back", description: "Return to the release list.", value: "back" },
-        { name: "Exit", description: "Leave this instance unchanged.", value: "exit" },
-      ],
-      handleConfirmSelection,
-      6,
-    ),
+    selectControl(confirmOptions(), handleConfirmSelection, 7),
   ];
 }
 
@@ -339,6 +335,28 @@ function releaseOptions(): SelectOption[] {
       value: release,
     })),
     { name: "Refresh releases", description: "Scan GitHub again.", value: "refresh" },
+    { name: "Exit", description: "Leave this instance unchanged.", value: "exit" },
+  ];
+}
+
+function confirmOptions(): SelectOption[] {
+  const applyOption = {
+    name: "Apply update",
+    description: "Download the release source, replace source files, then run bun install.",
+    value: "apply",
+  };
+  const dockerOption = {
+    name: "Apply update and redeploy Docker",
+    description: "Update files, run bun install, then run the Docker deployment script.",
+    value: "apply-docker",
+  };
+  const actionOptions = detectedDefaultDockerContainer
+    ? [dockerOption, applyOption]
+    : [applyOption, dockerOption];
+
+  return [
+    ...actionOptions,
+    { name: "Back", description: "Return to the release list.", value: "back" },
     { name: "Exit", description: "Leave this instance unchanged.", value: "exit" },
   ];
 }
@@ -404,17 +422,26 @@ function handleConfirmSelection(option: SelectOption): void {
     return;
   }
 
-  if (option.value === "apply" && selectedRelease) {
-    void applySelectedRelease(selectedRelease);
+  if ((option.value === "apply" || option.value === "apply-docker") && selectedRelease) {
+    void applySelectedRelease(selectedRelease, option.value === "apply-docker");
   }
 }
 
-async function applySelectedRelease(release: GitHubRelease): Promise<void> {
+async function applySelectedRelease(
+  release: GitHubRelease,
+  redeployDocker: boolean,
+): Promise<void> {
   view = "updating";
   message = "Starting update...";
+  startSpinner();
   render();
 
   try {
+    if (dryRunUpdates) {
+      await simulateDryRunUpdate({ release, redeployDocker });
+      return;
+    }
+
     const result = await applyReleaseUpdate({
       release,
       token: Bun.env.GITHUB_TOKEN?.trim() || null,
@@ -429,14 +456,141 @@ async function applySelectedRelease(release: GitHubRelease): Promise<void> {
       },
     });
 
+    if (redeployDocker) {
+      message = "Redeploying Docker container...";
+      render();
+      await redeployDockerContainer(result.updatedPath);
+    }
+
+    stopSpinner();
     view = "done";
-    message = `Updated ${result.updatedPath} to ${formatReleaseName(result.release)}.`;
+    message = updateSuccessMessage({
+      release: result.release,
+      redeployDocker,
+      updatedPath: result.updatedPath,
+    });
   } catch (error) {
+    stopSpinner();
     view = "error";
     errorMessage = error instanceof Error ? error.message : String(error);
   }
 
   render();
+}
+
+async function simulateDryRunUpdate(options: {
+  release: GitHubRelease;
+  redeployDocker: boolean;
+}): Promise<void> {
+  message = "Preparing release update...";
+  render();
+  await sleep(400);
+
+  message = "Installing dependencies...";
+  render();
+  await sleep(400);
+
+  if (options.redeployDocker) {
+    message = "Redeploying Docker container...";
+    render();
+    await sleep(600);
+  }
+
+  stopSpinner();
+  view = "done";
+  message = updateSuccessMessage({
+    release: options.release,
+    redeployDocker: options.redeployDocker,
+    updatedPath: process.cwd(),
+  });
+  render();
+}
+
+function updateSuccessMessage(options: {
+  release: GitHubRelease;
+  redeployDocker: boolean;
+  updatedPath: string;
+}): string {
+  return options.redeployDocker
+    ? `Updated ${options.updatedPath} to ${formatReleaseName(options.release)} and redeployed Docker.`
+    : `Updated ${options.updatedPath} to ${formatReleaseName(options.release)}.`;
+}
+
+async function detectDefaultDockerContainer(): Promise<void> {
+  try {
+    const subprocess = Bun.spawn(
+      [
+        "docker",
+        "ps",
+        "--filter",
+        `name=^/${dockerContainerName}$`,
+        "--filter",
+        "status=running",
+        "--format",
+        "{{.Names}}",
+      ],
+      {
+        stdout: "pipe",
+        stderr: "ignore",
+      },
+    );
+    const [exitCode, stdout] = await Promise.all([
+      subprocess.exited,
+      new Response(subprocess.stdout).text(),
+    ]);
+
+    detectedDefaultDockerContainer =
+      exitCode === 0 && stdout.split(/\r?\n/).some((name) => name.trim() === dockerContainerName);
+    if (view === "confirm") {
+      render();
+    }
+  } catch {
+    detectedDefaultDockerContainer = false;
+  }
+}
+
+async function redeployDockerContainer(cwd: string): Promise<void> {
+  const subprocess = Bun.spawn(["bash", "scripts/docker/deploy_docker.sh"], {
+    cwd,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [exitCode, stdout, stderr] = await Promise.all([
+    subprocess.exited,
+    new Response(subprocess.stdout).text(),
+    new Response(subprocess.stderr).text(),
+  ]);
+
+  if (exitCode !== 0) {
+    const output = [stderr.trim(), stdout.trim()].filter(Boolean).join("\n");
+    throw new Error(output || `Docker redeploy failed with exit code ${exitCode}.`);
+  }
+}
+
+function startSpinner(): void {
+  stopSpinner();
+  spinnerIndex = 0;
+  spinnerTimer = setInterval(() => {
+    spinnerIndex += 1;
+    render();
+  }, 120);
+}
+
+function stopSpinner(): void {
+  if (!spinnerTimer) {
+    return;
+  }
+
+  clearInterval(spinnerTimer);
+  spinnerTimer = null;
+}
+
+function spinner(): string {
+  return spinnerFrames[spinnerIndex % spinnerFrames.length] ?? "-";
+}
+
+function sleep(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 function handleKeyPress(key: MinimalKeyEvent): boolean {
@@ -491,6 +645,7 @@ function finish(output: string): void {
   }
 
   finished = true;
+  stopSpinner();
   if (rawExitHandler) {
     renderer?.stdin.off("data", rawExitHandler);
     rawExitHandler = null;
