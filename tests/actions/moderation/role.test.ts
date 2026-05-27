@@ -10,6 +10,79 @@ import {
 } from "./_helpers.ts";
 
 describe("updateMemberRole", () => {
+  test("searches candidate roles by name", async () => {
+    const store = new GuildConfigStore(":memory:");
+
+    try {
+      const harness = createModerationHarness({
+        actionName: "role",
+        args: ["search", "mod"],
+      });
+      const rolesCache = getRolesCache(harness.context);
+
+      rolesCache.set("111111111111111112", createSearchRole("111111111111111112", "Mods", 12));
+      rolesCache.set("111111111111111113", createSearchRole("111111111111111113", "Helper Mod", 8));
+      rolesCache.set("111111111111111114", createSearchRole("111111111111111114", "Artists", 20));
+
+      await updateMemberRole(harness.context, { guildConfigStore: store });
+
+      expect(harness.replies).toEqual([
+        [
+          'Roles matching "mod":',
+          "- Mods | ID: `111111111111111112` | Mention: <@&111111111111111112>",
+          "- Helper Mod | ID: `111111111111111113` | Mention: <@&111111111111111113>",
+        ].join("\n"),
+      ]);
+    } finally {
+      store.close();
+    }
+  });
+
+  test("searches multi-word role names", async () => {
+    const store = new GuildConfigStore(":memory:");
+
+    try {
+      const harness = createModerationHarness({
+        actionName: "role",
+        args: ["search", "event", "team"],
+      });
+      const rolesCache = getRolesCache(harness.context);
+
+      rolesCache.set(
+        "111111111111111115",
+        createSearchRole("111111111111111115", "Event Team", 10),
+      );
+
+      await updateMemberRole(harness.context, { guildConfigStore: store });
+
+      expect(harness.replies).toEqual([
+        [
+          'Roles matching "event team":',
+          "- Event Team | ID: `111111111111111115` | Mention: <@&111111111111111115>",
+        ].join("\n"),
+      ]);
+    } finally {
+      store.close();
+    }
+  });
+
+  test("reports when role search has no matches", async () => {
+    const store = new GuildConfigStore(":memory:");
+
+    try {
+      const harness = createModerationHarness({
+        actionName: "role",
+        args: ["search", "missing"],
+      });
+
+      await updateMemberRole(harness.context, { guildConfigStore: store });
+
+      expect(harness.replies).toEqual(['No roles matched "missing".']);
+    } finally {
+      store.close();
+    }
+  });
+
   test("adds a role to a member", async () => {
     const store = new GuildConfigStore(":memory:");
 
@@ -91,3 +164,18 @@ describe("updateMemberRole", () => {
     }
   });
 });
+
+function getRolesCache(context: ReturnType<typeof createModerationHarness>["context"]) {
+  return context.message.guild?.roles.cache as Map<
+    string,
+    { id: string; name: string; position: number }
+  >;
+}
+
+function createSearchRole(id: string, name: string, position: number) {
+  return {
+    id,
+    name,
+    position,
+  };
+}
