@@ -24,6 +24,7 @@ import {
   validateGitHubRepo,
   validateAgentRateLimitMessagesPerMinute,
   validateAllowlistedServerIds,
+  validateOperatorUserId,
   writeRuntimeConfig,
 } from "@/config/onboarding.ts";
 import { DEFAULT_RUNTIME_CONFIG } from "@/config/config.ts";
@@ -209,6 +210,7 @@ function body() {
 function stepRail() {
   const steps: Array<[Step, string]> = [
     ["name", "Name"],
+    ["operator", "Operator"],
     ["style", "Style"],
     ["servers", "Servers"],
     ["rate-limit", "Rate limit"],
@@ -286,6 +288,38 @@ function stepContent() {
         }),
         inputControl(state.name, "Aripa", (value) => {
           state.name = value.trim() || "Aripa";
+          state.error = null;
+          step = "operator";
+          render();
+        }),
+        ...errorLine,
+      ];
+    case "operator":
+      return [
+        Text({
+          content: "Set the operator Discord user ID",
+          fg: colors.text,
+          attributes: 1,
+        }),
+        Text({
+          content:
+            "This identifies the person responsible for this bot instance and does not grant server permissions.",
+          fg: colors.muted,
+        }),
+        Text({
+          content: "Leave blank if this instance has no operator yet.",
+          fg: colors.muted,
+        }),
+        inputControl(state.operatorUserId ?? "", "123456789012345678", (value) => {
+          const operatorUserId = value.trim() || null;
+          const validationError = validateOperatorUserId(operatorUserId);
+          if (validationError) {
+            state.error = validationError;
+            render();
+            return;
+          }
+
+          state.operatorUserId = operatorUserId;
           state.error = null;
           step = "style";
           render();

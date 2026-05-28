@@ -8,6 +8,7 @@ import {
 
 export interface RuntimeOnboardingInput {
   name?: string;
+  operatorUserId?: string | null;
   stylePrompt?: string;
   allowlistedServerIds: string[];
   agentRateLimitMessagesPerMinute?: number | null;
@@ -31,6 +32,7 @@ export interface WriteRuntimeConfigResult {
 
 const DEFAULT_ONBOARDING_CONFIG = {
   name: DEFAULT_RUNTIME_CONFIG.name,
+  operatorUserId: DEFAULT_RUNTIME_CONFIG.operatorUserId,
   stylePrompt: DEFAULT_RUNTIME_CONFIG.stylePrompt,
   agentRateLimitMessagesPerMinute: DEFAULT_RUNTIME_CONFIG.agentRateLimitMessagesPerMinute,
   logPrivacy: DEFAULT_RUNTIME_CONFIG.logPrivacy,
@@ -56,6 +58,18 @@ export function validateAllowlistedServerIds(ids: readonly string[]): string | n
   const invalidId = ids.find((id) => !DISCORD_SNOWFLAKE_PATTERN.test(id));
   if (invalidId) {
     return `Server ID "${invalidId}" should be a Discord snowflake with 17-20 digits.`;
+  }
+
+  return null;
+}
+
+export function validateOperatorUserId(operatorUserId: string | null): string | null {
+  if (operatorUserId === null) {
+    return null;
+  }
+
+  if (!DISCORD_SNOWFLAKE_PATTERN.test(operatorUserId)) {
+    return "Operator user ID should be a Discord snowflake with 17-20 digits, or blank.";
   }
 
   return null;
@@ -106,6 +120,7 @@ export function buildRuntimeConfig(
   baseConfig: Record<string, unknown> = {},
 ): Record<string, unknown> {
   const name = input.name?.trim() || DEFAULT_ONBOARDING_CONFIG.name;
+  const operatorUserId = input.operatorUserId?.trim() || null;
   const stylePrompt = input.stylePrompt?.trim() || DEFAULT_ONBOARDING_CONFIG.stylePrompt;
   const allowlistedServerIds = [
     ...new Set(input.allowlistedServerIds.map((entry) => entry.trim()).filter(Boolean)),
@@ -139,6 +154,11 @@ export function buildRuntimeConfig(
     throw new Error(validationError);
   }
 
+  const operatorValidationError = validateOperatorUserId(operatorUserId);
+  if (operatorValidationError) {
+    throw new Error(operatorValidationError);
+  }
+
   const rateLimitValidationError = validateAgentRateLimitMessagesPerMinute(
     agentRateLimitMessagesPerMinute,
   );
@@ -154,6 +174,7 @@ export function buildRuntimeConfig(
   return {
     ...baseConfig,
     name,
+    operatorUserId,
     stylePrompt,
     allowlistedServerIds,
     agentRateLimitMessagesPerMinute,

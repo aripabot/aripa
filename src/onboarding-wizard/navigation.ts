@@ -5,8 +5,10 @@ export function previousStepFor(
   options: { webEnabled: boolean; updateKeyRequired: boolean; updatesEnabled: boolean },
 ): Step | null {
   switch (step) {
-    case "style":
+    case "operator":
       return "name";
+    case "style":
+      return "operator";
     case "servers":
       return "style";
     case "rate-limit":
@@ -74,6 +76,7 @@ export function stepIndex(candidate: Step): number {
   return [
     "existing-config",
     "name",
+    "operator",
     "style",
     "servers",
     "rate-limit",

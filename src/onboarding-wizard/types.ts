@@ -3,6 +3,7 @@ import type { ConfigurableRuntimeModelProvider, RuntimeJsonConfig } from "@/conf
 export type Step =
   | "existing-config"
   | "name"
+  | "operator"
   | "style"
   | "servers"
   | "rate-limit"

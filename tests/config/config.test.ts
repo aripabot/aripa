@@ -6,10 +6,11 @@ describe("parseRuntimeJsonConfig", () => {
     expect(parseRuntimeJsonConfig({})).toEqual(DEFAULT_RUNTIME_CONFIG);
   });
 
-  test("normalizes configured name, style prompt, allowlisted server ids, and agent rate limit", () => {
+  test("normalizes configured name, operator user id, style prompt, allowlisted server ids, and agent rate limit", () => {
     expect(
       parseRuntimeJsonConfig({
         name: "  Wingbot  ",
+        operatorUserId: "  123456789012345678  ",
         stylePrompt: "  friendly  ",
         allowlistedServerIds: [" guild-1 ", "", "guild-2", "guild-1", 123],
         agentRateLimitMessagesPerMinute: 20,
@@ -51,6 +52,7 @@ describe("parseRuntimeJsonConfig", () => {
       }),
     ).toEqual({
       name: "Wingbot",
+      operatorUserId: "123456789012345678",
       stylePrompt: "friendly",
       allowlistedServerIds: ["guild-1", "guild-2"],
       agentRateLimitMessagesPerMinute: 20,
@@ -99,6 +101,10 @@ describe("parseRuntimeJsonConfig", () => {
         agentRateLimitMessagesPerMinute: null,
       }).agentRateLimitMessagesPerMinute,
     ).toBeNull();
+  });
+
+  test("falls back to no operator when the configured operator user id is invalid", () => {
+    expect(parseRuntimeJsonConfig({ operatorUserId: "not-a-snowflake" }).operatorUserId).toBeNull();
   });
 
   test("falls back to safe agent timeout and concurrency defaults", () => {

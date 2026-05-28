@@ -29,6 +29,7 @@ export type RuntimeReasoningEffort = (typeof REASONING_EFFORTS)[number];
 
 export interface RuntimeJsonConfig {
   name: string;
+  operatorUserId: string | null;
   stylePrompt: string;
   allowlistedServerIds: string[];
   agentRateLimitMessagesPerMinute: number | null;
@@ -100,6 +101,7 @@ export const DEFAULT_MODEL_CONFIG: RuntimeModelConfig = {
 
 export const DEFAULT_RUNTIME_CONFIG: RuntimeJsonConfig = {
   name: "Aripa",
+  operatorUserId: null,
   stylePrompt: "match",
   allowlistedServerIds: [],
   agentRateLimitMessagesPerMinute: 10,
@@ -123,6 +125,16 @@ export const DEFAULT_RUNTIME_CONFIG: RuntimeJsonConfig = {
 const runtimeModelProviderSchema = z.enum(RUNTIME_MODEL_PROVIDERS);
 const reasoningEffortSchema = z.enum(REASONING_EFFORTS);
 const trimmedNonEmptyStringSchema = z.string().trim().min(1);
+const discordSnowflakeSchema = z
+  .string()
+  .trim()
+  .regex(/^\d{17,20}$/);
+const optionalDiscordSnowflakeSchema = z
+  .preprocess(
+    (value) => (typeof value === "string" && value.trim().length === 0 ? null : value),
+    z.union([discordSnowflakeSchema, z.null()]),
+  )
+  .catch(null);
 const trimmedOptionalStringSchema = z.preprocess(
   (value) => (typeof value === "string" && value.trim() ? value.trim() : undefined),
   z.string().optional(),
@@ -191,6 +203,7 @@ const runtimeConfigSchema = z
     (value) => (isPlainObject(value) ? value : {}),
     z.object({
       name: trimmedNonEmptyStringSchema.catch(DEFAULT_RUNTIME_CONFIG.name),
+      operatorUserId: optionalDiscordSnowflakeSchema,
       stylePrompt: trimmedNonEmptyStringSchema.catch(DEFAULT_RUNTIME_CONFIG.stylePrompt),
       allowlistedServerIds: allowlistedServerIdsSchema,
       agentRateLimitMessagesPerMinute: agentRateLimitSchema,

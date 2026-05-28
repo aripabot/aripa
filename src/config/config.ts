@@ -39,6 +39,7 @@ export const config = {
   logLevel: Bun.env.LOG_LEVEL || "info",
   databasePath: Bun.env.DATABASE_PATH?.trim() || "aripa.sqlite",
   name: runtimeConfig.name,
+  operatorUserId: runtimeConfig.operatorUserId,
   stylePrompt: runtimeConfig.stylePrompt,
   allowlistedServerIds: runtimeConfig.allowlistedServerIds,
   agentRateLimitMessagesPerMinute: runtimeConfig.agentRateLimitMessagesPerMinute,

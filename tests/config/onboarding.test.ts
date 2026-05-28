@@ -7,6 +7,7 @@ import {
   validateGitHubRepo,
   validateAgentRateLimitMessagesPerMinute,
   validateAllowlistedServerIds,
+  validateOperatorUserId,
   writeRuntimeConfig,
 } from "@/config/onboarding.ts";
 
@@ -48,6 +49,16 @@ describe("validateAllowlistedServerIds", () => {
   });
 });
 
+describe("validateOperatorUserId", () => {
+  test("accepts a single optional Discord snowflake", () => {
+    expect(validateOperatorUserId(null)).toBeNull();
+    expect(validateOperatorUserId("123456789012345678")).toBeNull();
+    expect(validateOperatorUserId("not-a-snowflake")).toBe(
+      "Operator user ID should be a Discord snowflake with 17-20 digits, or blank.",
+    );
+  });
+});
+
 describe("validateGitHubRepo", () => {
   test("requires owner/repo format", () => {
     expect(validateGitHubRepo("aripabot/aripa")).toBeNull();
@@ -63,6 +74,7 @@ describe("buildRuntimeConfig", () => {
       buildRuntimeConfig(
         {
           name: " ",
+          operatorUserId: " 123456789012345678 ",
           stylePrompt: "",
           allowlistedServerIds: ["123456789012345678", "123456789012345678"],
           agentRateLimitMessagesPerMinute: null,
@@ -75,6 +87,7 @@ describe("buildRuntimeConfig", () => {
     ).toEqual({
       futureFeature: true,
       name: "Aripa",
+      operatorUserId: "123456789012345678",
       stylePrompt: "match",
       allowlistedServerIds: ["123456789012345678"],
       agentRateLimitMessagesPerMinute: null,
@@ -150,6 +163,7 @@ describe("writeRuntimeConfig", () => {
       pathOrUrl: path,
       input: {
         name: "Test Aripa",
+        operatorUserId: "123456789012345678",
         stylePrompt: "friendly",
         allowlistedServerIds: ["123456789012345678"],
         agentRateLimitMessagesPerMinute: 20,
@@ -182,6 +196,7 @@ describe("writeRuntimeConfig", () => {
     expect(updated.existed).toBe(true);
     expect(await Bun.file(path).json()).toEqual({
       name: "Aripa",
+      operatorUserId: null,
       stylePrompt: "match",
       allowlistedServerIds: ["234567890123456789"],
       agentRateLimitMessagesPerMinute: 5,
@@ -228,6 +243,7 @@ describe("writeRuntimeConfig", () => {
           enabled: true,
         },
         name: "Old",
+        operatorUserId: "111111111111111111",
         stylePrompt: "formal",
         agentRateLimitMessagesPerMinute: 10,
         logPrivacy: true,
@@ -239,6 +255,7 @@ describe("writeRuntimeConfig", () => {
       pathOrUrl: path,
       input: {
         name: "New",
+        operatorUserId: null,
         stylePrompt: "playful",
         agentRateLimitMessagesPerMinute: 3,
         logPrivacy: false,
@@ -252,6 +269,7 @@ describe("writeRuntimeConfig", () => {
         enabled: true,
       },
       name: "New",
+      operatorUserId: null,
       stylePrompt: "playful",
       agentRateLimitMessagesPerMinute: 3,
       agentTimeoutMs: 60_000,
