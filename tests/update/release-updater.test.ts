@@ -6,8 +6,10 @@ import { describe, expect, test } from "vitest";
 
 import {
   applyReleaseUpdate,
+  compareCurrentPackageVersionWithLatestReleaseVersion,
   fetchGitHubReleases,
   formatReleaseName,
+  getVersionByTagName,
   shouldPreserveUpdatePath,
   syncSourceTree,
   type GitHubRelease,
@@ -78,6 +80,128 @@ describe("fetchGitHubReleases", () => {
     ]);
   });
 });
+
+describe("release version comparison", () => {
+  test("reports the current package version as latest when release ids match", async () => {
+    const root = await mkdtemp(join(tmpdir(), "aripa-version-current-test-"));
+
+    try {
+      await Bun.write(join(root, "package.json"), '{"version":"v2.0.0"}\n');
+
+      const result = await compareCurrentPackageVersionWithLatestReleaseVersion({
+        cwd: root,
+        repo: "Owner/repo",
+        fetchImpl: createVersionFetch({
+          currentTagName: "v2.0.0",
+          latestTagName: "v2.0.0",
+        }),
+      });
+
+      expect(result).toEqual({
+        isLatest: true,
+        latestVersion: "v2.0.0",
+        currentVersion: "v2.0.0",
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("reports the current package version as behind when a newer release exists", async () => {
+    const root = await mkdtemp(join(tmpdir(), "aripa-version-behind-test-"));
+
+    try {
+      await Bun.write(join(root, "package.json"), '{"version":"v1.0.0"}\n');
+
+      const result = await compareCurrentPackageVersionWithLatestReleaseVersion({
+        cwd: root,
+        repo: "Owner/repo",
+        fetchImpl: createVersionFetch({
+          currentTagName: "v1.0.0",
+          latestTagName: "v2.0.0",
+        }),
+      });
+
+      expect(result).toEqual({
+        isLatest: false,
+        latestVersion: "v2.0.0",
+        currentVersion: "v1.0.0",
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("fetches a release version by tag name", async () => {
+    await expect(
+      getVersionByTagName("v1.0.0", {
+        repo: "Owner/repo",
+        fetchImpl: createVersionFetch({
+          currentTagName: "v1.0.0",
+          latestTagName: "v2.0.0",
+        }),
+      }),
+    ).resolves.toBe("v1.0.0");
+  });
+});
+
+function createVersionFetch(options: {
+  currentTagName: string;
+  latestTagName: string;
+}): (url: string | URL | Request) => Promise<Response> {
+  return async (url) => {
+    const urlText = String(url);
+
+    if (urlText === "https://api.github.com/repos/Owner/repo/releases?per_page=100") {
+      return Response.json([
+        githubReleaseResponse({
+          id: 2,
+          tagName: options.latestTagName,
+          publishedAt: "2026-02-01T00:00:00Z",
+        }),
+        githubReleaseResponse({
+          id: options.currentTagName === options.latestTagName ? 2 : 1,
+          tagName: options.currentTagName,
+          publishedAt: "2026-01-01T00:00:00Z",
+        }),
+      ]);
+    }
+
+    const tagName = decodeURIComponent(urlText.split("/").at(-1) ?? "");
+    if (urlText.startsWith("https://api.github.com/repos/Owner/repo/releases/tags/")) {
+      return Response.json(
+        githubReleaseResponse({
+          id: tagName === options.latestTagName ? 2 : 1,
+          tagName,
+          publishedAt:
+            tagName === options.latestTagName ? "2026-02-01T00:00:00Z" : "2026-01-01T00:00:00Z",
+        }),
+      );
+    }
+
+    return new Response("not found", { status: 404, statusText: "Not Found" });
+  };
+}
+
+function githubReleaseResponse(options: {
+  id: number;
+  tagName: string;
+  publishedAt: string;
+}): Record<string, unknown> {
+  return {
+    id: options.id,
+    tag_name: options.tagName,
+    name: options.tagName,
+    prerelease: false,
+    draft: false,
+    published_at: options.publishedAt,
+    created_at: options.publishedAt,
+    tarball_url: `https://example.com/${options.tagName}.tar.gz`,
+    zipball_url: `https://example.com/${options.tagName}.zip`,
+    html_url: `https://example.com/${options.tagName}`,
+    assets: [],
+  };
+}
 
 describe("syncSourceTree", () => {
   test("mirrors release source directories and preserves local runtime files", async () => {

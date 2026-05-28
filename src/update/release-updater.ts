@@ -67,6 +67,10 @@ export interface FetchReleasesOptions {
   token?: string | null;
 }
 
+export interface CompareCurrentVersionOptions extends FetchReleasesOptions {
+  cwd?: string;
+}
+
 export interface ApplyReleaseOptions {
   cwd?: string;
   release: GitHubRelease;
@@ -82,6 +86,40 @@ export interface ApplyReleaseResult {
   release: GitHubRelease;
   updatedPath: string;
   installedDependencies: boolean;
+}
+
+export async function getVersionByTagName(
+  tagName: string,
+  options: FetchReleasesOptions = {},
+): Promise<string> {
+  const release = await fetchGitHubReleaseByTagName(tagName, options);
+  return release.tagName;
+}
+
+export async function compareCurrentPackageVersionWithLatestReleaseVersion(
+  options: CompareCurrentVersionOptions = {},
+): Promise<{
+  isLatest: boolean;
+  latestVersion: string;
+  currentVersion: string;
+}> {
+  const cwd = options.cwd ?? process.cwd();
+  const currentVersion = await readCurrentPackageVersion(cwd);
+  const [currentRelease, releases] = await Promise.all([
+    fetchGitHubReleaseByTagName(currentVersion, options),
+    fetchGitHubReleases(options),
+  ]);
+  const latestRelease = releases[0];
+
+  if (!latestRelease) {
+    throw new Error("No published releases were found.");
+  }
+
+  return {
+    isLatest: currentRelease.id === latestRelease.id,
+    latestVersion: latestRelease.tagName,
+    currentVersion,
+  };
 }
 
 export async function fetchGitHubReleases(
@@ -100,22 +138,57 @@ export async function fetchGitHubReleases(
   const payload = (await response.json()) as GitHubReleaseResponse[];
   return payload
     .filter((release) => !release.draft)
-    .map((release) => ({
-      id: release.id,
-      tagName: release.tag_name,
-      name: release.name?.trim() || release.tag_name,
-      prerelease: release.prerelease,
-      draft: release.draft,
-      publishedAt: release.published_at ?? release.created_at,
-      tarballUrl: release.tarball_url,
-      zipballUrl: release.zipball_url,
-      htmlUrl: release.html_url,
-      assets: (release.assets ?? []).map((asset) => ({
-        name: asset.name,
-        downloadUrl: asset.browser_download_url,
-      })),
-    }))
+    .map(toGitHubRelease)
     .sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt));
+}
+
+async function fetchGitHubReleaseByTagName(
+  tagName: string,
+  options: FetchReleasesOptions = {},
+): Promise<GitHubRelease> {
+  const repo = options.repo ?? DEFAULT_GITHUB_REPO;
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const response = await fetchImpl(
+    `https://api.github.com/repos/${repo}/releases/tags/${encodeURIComponent(tagName)}`,
+    {
+      headers: githubHeaders(options.token),
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `GitHub release ${tagName} request failed: ${response.status} ${response.statusText}`,
+    );
+  }
+
+  return toGitHubRelease((await response.json()) as GitHubReleaseResponse);
+}
+
+async function readCurrentPackageVersion(cwd: string): Promise<string> {
+  const packageJson = (await Bun.file(join(cwd, "package.json")).json()) as { version?: unknown };
+  if (typeof packageJson.version !== "string" || packageJson.version.trim().length === 0) {
+    throw new Error("package.json must contain a non-empty version string.");
+  }
+
+  return packageJson.version.trim();
+}
+
+function toGitHubRelease(release: GitHubReleaseResponse): GitHubRelease {
+  return {
+    id: release.id,
+    tagName: release.tag_name,
+    name: release.name?.trim() || release.tag_name,
+    prerelease: release.prerelease,
+    draft: release.draft,
+    publishedAt: release.published_at ?? release.created_at,
+    tarballUrl: release.tarball_url,
+    zipballUrl: release.zipball_url,
+    htmlUrl: release.html_url,
+    assets: (release.assets ?? []).map((asset) => ({
+      name: asset.name,
+      downloadUrl: asset.browser_download_url,
+    })),
+  };
 }
 
 export function formatReleaseDate(input: string): string {
