@@ -120,6 +120,12 @@ export function buildRuntimeConfig(
   const updateConfig: RuntimeUpdateConfig = {
     enabled: updates.enabled,
     githubRepo,
+    autoInstall: updates.enabled
+      ? { ...updates.autoInstall }
+      : {
+          ...DEFAULT_RUNTIME_CONFIG.updates.autoInstall,
+          enabled: false,
+        },
     ...(updates.releasePublicKeyPem?.trim()
       ? { releasePublicKeyPem: updates.releasePublicKeyPem.trim() }
       : {}),

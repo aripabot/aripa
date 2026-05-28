@@ -1,6 +1,6 @@
 import { cp, mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { createHash, createPublicKey, verify as verifySignature } from "node:crypto";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, resolve, join } from "node:path";
 import { tmpdir } from "node:os";
 
 export const DEFAULT_GITHUB_REPO = "aripabot/aripa";
@@ -10,6 +10,29 @@ export const RELEASE_MANIFEST_ASSET_NAME = "aripa-release.json";
 export const RELEASE_MANIFEST_SIGNATURE_ASSET_NAME = "aripa-release.json.sig";
 export const RELEASE_PUBLIC_KEY_ENV = "ARIPA_RELEASE_PUBLIC_KEY_PEM";
 export const RELEASE_PUBLIC_KEY_BASE64_ENV = "ARIPA_RELEASE_PUBLIC_KEY_PEM_B64";
+export const AUTO_UPDATE_CRON_PRESETS = [
+  {
+    id: "daily-4am",
+    name: "Daily at 04:00",
+    description: "Install the latest release every morning.",
+    cronExpression: "0 4 * * *",
+  },
+  {
+    id: "weekly-sunday-4am",
+    name: "Weekly on Sunday at 04:00",
+    description: "Install the latest release during a quiet weekly window.",
+    cronExpression: "0 4 * * 0",
+  },
+  {
+    id: "monthly-first-4am",
+    name: "Monthly on the 1st at 04:00",
+    description: "Install the latest release once per month.",
+    cronExpression: "0 4 1 * *",
+  },
+] as const;
+
+export type AutoUpdateCronPresetId = (typeof AUTO_UPDATE_CRON_PRESETS)[number]["id"];
+export type AutoUpdateCronExpression = (typeof AUTO_UPDATE_CRON_PRESETS)[number]["cronExpression"];
 
 export interface GitHubReleaseAsset {
   name: string;
@@ -80,6 +103,24 @@ export interface ApplyReleaseOptions {
   releasePublicKeyPem?: string;
   releasePublicKeyPemBase64?: string;
   onProgress?: (message: string) => void;
+}
+
+export interface ApplyLatestReleaseUpdateOptions
+  extends Omit<ApplyReleaseOptions, "release">, FetchReleasesOptions {}
+
+export interface AutoUpdateCronInstallOptions {
+  cwd?: string;
+  configPath?: string | URL;
+  cronExpression: string;
+  bunExecutable?: string;
+  logPath?: string;
+  crontabRead?: () => Promise<string>;
+  crontabWrite?: (content: string) => Promise<void>;
+}
+
+export interface AutoUpdateCronRemoveOptions {
+  crontabRead?: () => Promise<string>;
+  crontabWrite?: (content: string) => Promise<void>;
 }
 
 export interface ApplyReleaseResult {
@@ -251,6 +292,76 @@ export async function applyReleaseUpdate(
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
+}
+
+export async function applyLatestReleaseUpdate(
+  options: ApplyLatestReleaseUpdateOptions = {},
+): Promise<ApplyReleaseResult> {
+  const releases = await fetchGitHubReleases(options);
+  const latestRelease = releases[0];
+  if (!latestRelease) {
+    throw new Error("No published releases were found.");
+  }
+
+  return applyReleaseUpdate({
+    ...options,
+    release: latestRelease,
+  });
+}
+
+export function findAutoUpdateCronPreset(
+  presetId: string | undefined,
+): (typeof AUTO_UPDATE_CRON_PRESETS)[number] | null {
+  return AUTO_UPDATE_CRON_PRESETS.find((preset) => preset.id === presetId) ?? null;
+}
+
+export async function installAutoUpdateCron(options: AutoUpdateCronInstallOptions): Promise<void> {
+  const read = options.crontabRead ?? readUserCrontab;
+  const write = options.crontabWrite ?? writeUserCrontab;
+  const existingCrontab = await read();
+  const cronEntry = buildAutoUpdateCronEntry(options);
+  await write(updateManagedAutoUpdateCronContent(existingCrontab, cronEntry));
+}
+
+export async function removeAutoUpdateCron(
+  options: AutoUpdateCronRemoveOptions = {},
+): Promise<void> {
+  const read = options.crontabRead ?? readUserCrontab;
+  const write = options.crontabWrite ?? writeUserCrontab;
+  const existingCrontab = await read();
+  await write(removeManagedAutoUpdateCronContent(existingCrontab));
+}
+
+export function buildAutoUpdateCronEntry(options: AutoUpdateCronInstallOptions): string {
+  const cwd = resolve(options.cwd ?? process.cwd());
+  const configPath = formatCronPath(options.configPath ?? join(cwd, "config.json"));
+  const bunExecutable = options.bunExecutable ?? process.execPath;
+  const logPath = options.logPath ?? join(cwd, "aripa-update.log");
+  const command = [
+    `cd ${shellQuote(cwd)}`,
+    `CONFIG_PATH=${shellQuote(configPath)} ${shellQuote(bunExecutable)} run update --latest >> ${shellQuote(logPath)} 2>&1`,
+  ].join(" && ");
+
+  return `${options.cronExpression} ${command}`;
+}
+
+export function updateManagedAutoUpdateCronContent(
+  existingCrontab: string,
+  cronEntry: string,
+): string {
+  const unmanagedCrontab = removeManagedAutoUpdateCronContent(existingCrontab).trimEnd();
+  const managedBlock = `${AUTO_UPDATE_CRON_BEGIN}\n${cronEntry}\n${AUTO_UPDATE_CRON_END}`;
+
+  return `${unmanagedCrontab ? `${unmanagedCrontab}\n\n` : ""}${managedBlock}\n`;
+}
+
+export function removeManagedAutoUpdateCronContent(existingCrontab: string): string {
+  const withoutManagedBlock = existingCrontab
+    .replace(AUTO_UPDATE_CRON_BLOCK_PATTERN, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trimEnd();
+
+  return withoutManagedBlock ? `${withoutManagedBlock}\n` : "";
 }
 
 export async function syncSourceTree(sourceRoot: string, destinationRoot: string): Promise<void> {
@@ -522,6 +633,71 @@ async function syncDirectory(
     await mkdir(dirname(destinationPath), { recursive: true });
     await cp(sourcePath, destinationPath, { force: true, recursive: true });
   }
+}
+
+const AUTO_UPDATE_CRON_BEGIN = "# BEGIN ARIPA AUTO UPDATE";
+const AUTO_UPDATE_CRON_END = "# END ARIPA AUTO UPDATE";
+const AUTO_UPDATE_CRON_BLOCK_PATTERN = new RegExp(
+  `${escapeRegExp(AUTO_UPDATE_CRON_BEGIN)}\\n[\\s\\S]*?\\n${escapeRegExp(AUTO_UPDATE_CRON_END)}\\n?`,
+  "g",
+);
+
+async function readUserCrontab(): Promise<string> {
+  const subprocess = Bun.spawn(["crontab", "-l"], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [exitCode, stdout, stderr] = await Promise.all([
+    subprocess.exited,
+    new Response(subprocess.stdout).text(),
+    new Response(subprocess.stderr).text(),
+  ]);
+
+  if (exitCode === 0) {
+    return stdout;
+  }
+
+  if (/no crontab/i.test(stderr)) {
+    return "";
+  }
+
+  throw new Error(stderr.trim() || `crontab -l failed with exit code ${exitCode}.`);
+}
+
+async function writeUserCrontab(content: string): Promise<void> {
+  const subprocess = Bun.spawn(["crontab", "-"], {
+    stdin: "pipe",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  subprocess.stdin.write(content);
+  subprocess.stdin.end();
+  const [exitCode, stdout, stderr] = await Promise.all([
+    subprocess.exited,
+    new Response(subprocess.stdout).text(),
+    new Response(subprocess.stderr).text(),
+  ]);
+
+  if (exitCode !== 0) {
+    const output = [stderr.trim(), stdout.trim()].filter(Boolean).join("\n");
+    throw new Error(output || `crontab update failed with exit code ${exitCode}.`);
+  }
+}
+
+function formatCronPath(pathOrUrl: string | URL): string {
+  if (pathOrUrl instanceof URL) {
+    return pathOrUrl.pathname;
+  }
+
+  return resolve(pathOrUrl);
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function githubHeaders(

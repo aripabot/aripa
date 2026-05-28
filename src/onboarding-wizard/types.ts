@@ -20,6 +20,7 @@ export type Step =
   | "update-key"
   | "update-key-paste"
   | "update-key-generated"
+  | "update-schedule"
   | "review"
   | "done";
 

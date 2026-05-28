@@ -27,6 +27,11 @@ import {
   writeRuntimeConfig,
 } from "@/config/onboarding.ts";
 import { DEFAULT_RUNTIME_CONFIG } from "@/config/config.ts";
+import {
+  AUTO_UPDATE_CRON_PRESETS,
+  installAutoUpdateCron,
+  removeAutoUpdateCron,
+} from "@/update/release-updater.ts";
 import type { OnboardingModelRole } from "@/onboarding-models.ts";
 import { createInitialOnboardingState, initialStepForState } from "@/onboarding-wizard/state.ts";
 import {
@@ -660,6 +665,7 @@ function stepContent() {
 
             if (value === "disabled") {
               state.updates.enabled = false;
+              state.updates.autoInstall.enabled = false;
               state.error = null;
               step = "review";
               render();
@@ -674,7 +680,7 @@ function stepContent() {
               generatedPrivateKeySecret = null;
               generatedKeyMessage = null;
               state.error = null;
-              step = "review";
+              step = "update-schedule";
               render();
               return;
             }
@@ -769,7 +775,7 @@ function stepContent() {
             generatedPrivateKeySecret = null;
             generatedKeyMessage = null;
             state.error = null;
-            step = "review";
+            step = "update-schedule";
             render();
           },
           7,
@@ -803,7 +809,7 @@ function stepContent() {
             }
 
             state.error = null;
-            step = "review";
+            step = "update-schedule";
             render();
           },
         ),
@@ -851,7 +857,7 @@ function stepContent() {
             },
             {
               name: "Continue",
-              description: "Review config.json before writing.",
+              description: "Choose automatic update behavior.",
               value: "continue",
             },
             {
@@ -864,6 +870,58 @@ function stepContent() {
             void handleGeneratedKeySelection(String(option.value));
           },
           7,
+        ),
+        ...errorLine,
+      ];
+    case "update-schedule":
+      return [
+        Text({ content: "Choose automatic update installation", fg: colors.text, attributes: 1 }),
+        Text({
+          content: "These presets are for a cron job that runs bun run update --latest.",
+          fg: colors.muted,
+        }),
+        selectControl(
+          [
+            {
+              name: "Disabled",
+              description: "Only install updates when bun run update is run manually.",
+              value: "disabled",
+            },
+            ...AUTO_UPDATE_CRON_PRESETS.map((preset) => ({
+              name: preset.name,
+              description: `${preset.cronExpression} - ${preset.description}`,
+              value: preset.id,
+            })),
+          ],
+          (option) => {
+            const value = String(option.value);
+
+            if (value === "disabled") {
+              state.updates.autoInstall.enabled = false;
+              state.error = null;
+              step = "review";
+              render();
+              return;
+            }
+
+            const preset = AUTO_UPDATE_CRON_PRESETS.find((candidate) => candidate.id === value);
+            if (!preset) {
+              state.error = "Choose a valid automatic update schedule.";
+              render();
+              return;
+            }
+
+            state.updates.autoInstall = {
+              enabled: true,
+              preset: preset.id,
+              cronExpression: preset.cronExpression,
+            };
+            state.error = null;
+            step = "review";
+            render();
+          },
+          8,
+          autoUpdateScheduleIndex(),
         ),
         ...errorLine,
       ];
@@ -895,7 +953,7 @@ function stepContent() {
             },
             {
               name: "Back to updates",
-              description: "Change update source configuration before writing.",
+              description: "Change update source or automatic schedule before writing.",
               value: "back",
             },
             { name: "Exit", description: "Leave without writing.", value: "exit" },
@@ -1000,7 +1058,7 @@ async function handleGeneratedKeySelection(value: string): Promise<void> {
   if (value === "continue") {
     generatedKeyMessage = null;
     state.error = null;
-    step = "review";
+    step = "update-schedule";
     render();
     return;
   }
@@ -1034,7 +1092,7 @@ async function handleGeneratedKeySelection(value: string): Promise<void> {
 
 async function handleReviewSelection(value: string): Promise<void> {
   if (value === "back") {
-    step = "update-source";
+    step = state.updates.enabled ? "update-schedule" : "update-source";
     state.error = null;
     render();
     return;
@@ -1051,11 +1109,26 @@ async function handleReviewSelection(value: string): Promise<void> {
       input: state,
       overwrite: state.shouldWriteExistingConfig || state.existingConfig === null,
     });
-    finish(`${result.existed ? "Updated" : "Created"} ${result.path}.`);
+    const cronMessage = await syncAutoUpdateCron();
+    finish(`${result.existed ? "Updated" : "Created"} ${result.path}.${cronMessage}`);
   } catch (error) {
     state.error = error instanceof Error ? error.message : String(error);
     render();
   }
+}
+
+async function syncAutoUpdateCron(): Promise<string> {
+  if (!state.updates.enabled || !state.updates.autoInstall.enabled) {
+    await removeAutoUpdateCron();
+    return " Automatic update cron is disabled.";
+  }
+
+  await installAutoUpdateCron({
+    cwd: process.cwd(),
+    configPath: state.configPath,
+    cronExpression: state.updates.autoInstall.cronExpression,
+  });
+  return ` Automatic update cron installed for ${state.updates.autoInstall.cronExpression}.`;
 }
 
 function handleKeyPress(key: MinimalKeyEvent): boolean {
@@ -1102,6 +1175,7 @@ function goBack(): void {
   const previousStep = previousStepFor(step, {
     webEnabled: state.models.web.enabled,
     updateKeyRequired: isUpdateKeyRequired(),
+    updatesEnabled: state.updates.enabled,
   });
 
   if (!previousStep) {
@@ -1244,6 +1318,17 @@ function updateSourceIndex(): number {
   }
 
   return state.updates.githubRepo === DEFAULT_RUNTIME_CONFIG.updates.githubRepo ? 0 : 1;
+}
+
+function autoUpdateScheduleIndex(): number {
+  if (!state.updates.autoInstall.enabled) {
+    return 0;
+  }
+
+  const presetIndex = AUTO_UPDATE_CRON_PRESETS.findIndex(
+    (preset) => preset.id === state.updates.autoInstall.preset,
+  );
+  return presetIndex === -1 ? 0 : presetIndex + 1;
 }
 
 function isUpdateKeyRequired(): boolean {

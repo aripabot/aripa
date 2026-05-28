@@ -2,7 +2,7 @@ import type { Step } from "@/onboarding-wizard/types.ts";
 
 export function previousStepFor(
   step: Step,
-  options: { webEnabled: boolean; updateKeyRequired: boolean },
+  options: { webEnabled: boolean; updateKeyRequired: boolean; updatesEnabled: boolean },
 ): Step | null {
   switch (step) {
     case "style":
@@ -39,8 +39,10 @@ export function previousStepFor(
       return "update-key";
     case "update-key-generated":
       return "update-key";
-    case "review":
+    case "update-schedule":
       return options.updateKeyRequired ? "update-key" : "update-source";
+    case "review":
+      return options.updatesEnabled ? "update-schedule" : "update-source";
     default:
       return null;
   }
@@ -65,6 +67,7 @@ export function stepIndex(candidate: Step): number {
               "update-key",
               "update-key-paste",
               "update-key-generated",
+              "update-schedule",
             ].includes(candidate)
           ? "updates"
           : candidate;

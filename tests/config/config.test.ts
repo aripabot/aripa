@@ -42,6 +42,11 @@ describe("parseRuntimeJsonConfig", () => {
           enabled: true,
           githubRepo: " Owner/repo ",
           releasePublicKeyPemBase64: " abc123 ",
+          autoInstall: {
+            enabled: true,
+            preset: "daily-4am",
+            cronExpression: "0 4 * * *",
+          },
         },
       }),
     ).toEqual({
@@ -79,6 +84,11 @@ describe("parseRuntimeJsonConfig", () => {
         enabled: true,
         githubRepo: "Owner/repo",
         releasePublicKeyPemBase64: "abc123",
+        autoInstall: {
+          enabled: true,
+          preset: "daily-4am",
+          cronExpression: "0 4 * * *",
+        },
       },
     });
   });

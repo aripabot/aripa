@@ -48,7 +48,11 @@ TOKEN="your-discord-bot-token" bun run dev
 
 ## Configuration
 
-`bun run onboard` opens the setup wizard for `config.json`. It configures the bot name, style prompt, allowlisted Discord servers, AI model providers, web search, and agent rate limits.
+`bun run onboard` opens the setup wizard for `config.json`. It configures the bot name, style prompt, allowlisted Discord servers, AI model providers, web search, agent rate limits, update source, and automatic update schedule.
+
+## Updates
+
+Run `bun run update` to open the interactive updater. Onboarding installs or removes a managed crontab entry for automatic updates when a schedule is selected. The cron entry runs `bun run update --latest`, which installs the latest configured GitHub release without opening the TUI and redeploys the default Docker container when it is running.
 
 Common environment variables:
 

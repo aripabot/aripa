@@ -6,12 +6,16 @@ import { describe, expect, test } from "vitest";
 
 import {
   applyReleaseUpdate,
+  applyLatestReleaseUpdate,
+  buildAutoUpdateCronEntry,
   compareCurrentPackageVersionWithLatestReleaseVersion,
   fetchGitHubReleases,
   formatReleaseName,
+  removeManagedAutoUpdateCronContent,
   getVersionByTagName,
   shouldPreserveUpdatePath,
   syncSourceTree,
+  updateManagedAutoUpdateCronContent,
   type GitHubRelease,
 } from "@/update/release-updater.ts";
 
@@ -474,5 +478,117 @@ describe("applyReleaseUpdate", () => {
     } finally {
       await rm(root, { recursive: true, force: true });
     }
+  });
+});
+
+describe("applyLatestReleaseUpdate", () => {
+  test("fetches releases and applies the newest published release", async () => {
+    const root = await mkdtemp(join(tmpdir(), "aripa-update-latest-test-"));
+    const source = join(root, "source");
+
+    try {
+      await mkdir(join(source, "repo"), { recursive: true });
+      await Bun.write(join(source, "repo", "package.json"), '{"version":"v2.0.0"}\n');
+      const fixture = await createSignedReleaseFixture({
+        root,
+        sourceDirectory: source,
+        tagName: "v2.0.0",
+      });
+      const destination = join(root, "destination");
+
+      const result = await applyLatestReleaseUpdate({
+        cwd: destination,
+        repo: "Owner/repo",
+        installDependencies: false,
+        fetchImpl: async (url, init) => {
+          if (String(url) === "https://api.github.com/repos/Owner/repo/releases?per_page=100") {
+            return Response.json([
+              githubReleaseResponse({
+                id: 1,
+                tagName: "v1.0.0",
+                publishedAt: "2025-01-01T00:00:00Z",
+              }),
+              {
+                id: fixture.release.id,
+                tag_name: fixture.release.tagName,
+                name: fixture.release.name,
+                prerelease: fixture.release.prerelease,
+                draft: fixture.release.draft,
+                published_at: fixture.release.publishedAt,
+                created_at: fixture.release.publishedAt,
+                tarball_url: fixture.release.tarballUrl,
+                zipball_url: fixture.release.zipballUrl,
+                html_url: fixture.release.htmlUrl,
+                assets: fixture.release.assets.map((asset) => ({
+                  name: asset.name,
+                  browser_download_url: asset.downloadUrl,
+                })),
+              },
+            ]);
+          }
+
+          return fixture.fetchImpl(url, init);
+        },
+        releasePublicKeyPem: fixture.publicKeyPem,
+      });
+
+      expect(result.release.tagName).toBe("v2.0.0");
+      await expect(Bun.file(join(destination, "package.json")).text()).resolves.toBe(
+        '{"version":"v2.0.0"}\n',
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("auto-update cron helpers", () => {
+  test("builds a managed cron entry for the latest updater", () => {
+    expect(
+      buildAutoUpdateCronEntry({
+        cwd: "/opt/aripa",
+        configPath: "/opt/aripa/config.json",
+        cronExpression: "0 4 * * 0",
+        bunExecutable: "/usr/local/bin/bun",
+        logPath: "/opt/aripa/aripa-update.log",
+      }),
+    ).toBe(
+      "0 4 * * 0 cd '/opt/aripa' && CONFIG_PATH='/opt/aripa/config.json' '/usr/local/bin/bun' run update --latest >> '/opt/aripa/aripa-update.log' 2>&1",
+    );
+  });
+
+  test("replaces an existing managed cron block without touching other jobs", () => {
+    const existing = [
+      "15 2 * * * /usr/bin/true",
+      "",
+      "# BEGIN ARIPA AUTO UPDATE",
+      "0 4 * * * old command",
+      "# END ARIPA AUTO UPDATE",
+      "",
+    ].join("\n");
+
+    expect(updateManagedAutoUpdateCronContent(existing, "0 4 * * 0 new command")).toBe(
+      [
+        "15 2 * * * /usr/bin/true",
+        "",
+        "# BEGIN ARIPA AUTO UPDATE",
+        "0 4 * * 0 new command",
+        "# END ARIPA AUTO UPDATE",
+        "",
+      ].join("\n"),
+    );
+  });
+
+  test("removes only the managed cron block", () => {
+    const existing = [
+      "15 2 * * * /usr/bin/true",
+      "",
+      "# BEGIN ARIPA AUTO UPDATE",
+      "0 4 * * * old command",
+      "# END ARIPA AUTO UPDATE",
+      "",
+    ].join("\n");
+
+    expect(removeManagedAutoUpdateCronContent(existing)).toBe("15 2 * * * /usr/bin/true\n");
   });
 });

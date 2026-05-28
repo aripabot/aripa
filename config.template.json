@@ -26,7 +26,12 @@
   "providers": {},
   "updates": {
     "enabled": true,
-    "githubRepo": "aripabot/aripa"
+    "githubRepo": "aripabot/aripa",
+    "autoInstall": {
+      "enabled": false,
+      "preset": "weekly-sunday-4am",
+      "cronExpression": "0 4 * * 0"
+    }
   },
   "allowlistedServerIds": ["AT_LEAST_ONE_DISCORD_GUILD_ID"]
 }

@@ -17,6 +17,7 @@ import { loadRuntimeJsonConfig } from "@/config/config.ts";
 import {
   DEFAULT_GITHUB_REPO,
   DEFAULT_RELEASE_PUBLIC_KEY_PEM_B64,
+  applyLatestReleaseUpdate,
   applyReleaseUpdate,
   fetchGitHubReleases,
   formatReleaseDate,
@@ -44,6 +45,7 @@ const updateConfig = {
 };
 const isOfficialUpdateRepo = updateConfig.githubRepo === DEFAULT_GITHUB_REPO;
 const dryRunUpdates = Bun.env.DRY_RUN_UPDATES?.trim() === "true";
+const updateLatest = Bun.argv.slice(2).includes("--latest");
 
 let renderer: Awaited<ReturnType<typeof createCliRenderer>> | null = null;
 let currentSelect: SelectRenderable | null = null;
@@ -60,6 +62,11 @@ let message = "Scanning GitHub releases...";
 let errorMessage: string | null = null;
 let detectedDefaultDockerContainer = false;
 let spinnerIndex = 0;
+
+if (updateLatest) {
+  await runLatestUpdate();
+  process.exit(0);
+}
 
 try {
   renderer = await createCliRenderer({
@@ -83,6 +90,53 @@ try {
 } catch (error) {
   renderer?.destroy();
   throw error;
+}
+
+async function runLatestUpdate(): Promise<void> {
+  try {
+    if (!updateConfig.enabled) {
+      throw new Error("Updates are disabled in config.json.");
+    }
+
+    if (dryRunUpdates) {
+      const wouldRedeployDocker = await isDefaultDockerContainerRunning();
+      console.log(
+        wouldRedeployDocker
+          ? "Dry run: would fetch and install the latest release, then redeploy Docker."
+          : "Dry run: would fetch and install the latest release.",
+      );
+      return;
+    }
+
+    const result = await applyLatestReleaseUpdate({
+      repo: updateConfig.githubRepo,
+      token: Bun.env.GITHUB_TOKEN?.trim() || null,
+      installDependencies: true,
+      releasePublicKeyPem: updateConfig.releasePublicKeyPem,
+      releasePublicKeyPemBase64:
+        updateConfig.releasePublicKeyPemBase64 ||
+        (isOfficialUpdateRepo ? DEFAULT_RELEASE_PUBLIC_KEY_PEM_B64 : undefined),
+      onProgress: (progress) => {
+        console.log(progress);
+      },
+    });
+    const redeployDocker = await isDefaultDockerContainerRunning();
+    if (redeployDocker) {
+      console.log("Redeploying Docker container...");
+      await redeployDockerContainer(result.updatedPath);
+    }
+
+    console.log(
+      updateSuccessMessage({
+        release: result.release,
+        redeployDocker,
+        updatedPath: result.updatedPath,
+      }),
+    );
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
 }
 
 async function loadReleases(): Promise<void> {
@@ -517,6 +571,13 @@ function updateSuccessMessage(options: {
 }
 
 async function detectDefaultDockerContainer(): Promise<void> {
+  detectedDefaultDockerContainer = await isDefaultDockerContainerRunning();
+  if (view === "confirm") {
+    render();
+  }
+}
+
+async function isDefaultDockerContainerRunning(): Promise<boolean> {
   try {
     const subprocess = Bun.spawn(
       [
@@ -539,13 +600,11 @@ async function detectDefaultDockerContainer(): Promise<void> {
       new Response(subprocess.stdout).text(),
     ]);
 
-    detectedDefaultDockerContainer =
-      exitCode === 0 && stdout.split(/\r?\n/).some((name) => name.trim() === dockerContainerName);
-    if (view === "confirm") {
-      render();
-    }
+    return (
+      exitCode === 0 && stdout.split(/\r?\n/).some((name) => name.trim() === dockerContainerName)
+    );
   } catch {
-    detectedDefaultDockerContainer = false;
+    return false;
   }
 }
 

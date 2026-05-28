@@ -103,6 +103,11 @@ describe("buildRuntimeConfig", () => {
       updates: {
         enabled: true,
         githubRepo: "aripabot/aripa",
+        autoInstall: {
+          enabled: false,
+          preset: "weekly-sunday-4am",
+          cronExpression: "0 4 * * 0",
+        },
       },
     });
   });
@@ -115,6 +120,11 @@ describe("buildRuntimeConfig", () => {
           enabled: true,
           githubRepo: " fork-owner/aripa-fork ",
           releasePublicKeyPemBase64: " public-key ",
+          autoInstall: {
+            enabled: true,
+            preset: "daily-4am",
+            cronExpression: "0 4 * * *",
+          },
         },
       }),
     ).toMatchObject({
@@ -122,6 +132,11 @@ describe("buildRuntimeConfig", () => {
         enabled: true,
         githubRepo: "fork-owner/aripa-fork",
         releasePublicKeyPemBase64: "public-key",
+        autoInstall: {
+          enabled: true,
+          preset: "daily-4am",
+          cronExpression: "0 4 * * *",
+        },
       },
     });
   });
@@ -195,6 +210,11 @@ describe("writeRuntimeConfig", () => {
       updates: {
         enabled: true,
         githubRepo: "aripabot/aripa",
+        autoInstall: {
+          enabled: false,
+          preset: "weekly-sunday-4am",
+          cronExpression: "0 4 * * 0",
+        },
       },
     });
   });
@@ -260,6 +280,11 @@ describe("writeRuntimeConfig", () => {
       updates: {
         enabled: true,
         githubRepo: "aripabot/aripa",
+        autoInstall: {
+          enabled: false,
+          preset: "weekly-sunday-4am",
+          cronExpression: "0 4 * * 0",
+        },
       },
     });
   });

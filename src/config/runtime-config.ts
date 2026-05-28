@@ -1,5 +1,11 @@
 import * as z from "zod";
 
+import {
+  AUTO_UPDATE_CRON_PRESETS,
+  type AutoUpdateCronExpression,
+  type AutoUpdateCronPresetId,
+} from "@/update/release-updater.ts";
+
 export const RUNTIME_MODEL_PROVIDERS = [
   "openai",
   "openrouter",
@@ -65,6 +71,13 @@ export interface RuntimeUpdateConfig {
   githubRepo: string;
   releasePublicKeyPem?: string;
   releasePublicKeyPemBase64?: string;
+  autoInstall: RuntimeAutoUpdateConfig;
+}
+
+export interface RuntimeAutoUpdateConfig {
+  enabled: boolean;
+  preset: AutoUpdateCronPresetId;
+  cronExpression: AutoUpdateCronExpression;
 }
 
 export const DEFAULT_MODEL_CONFIG: RuntimeModelConfig = {
@@ -99,6 +112,11 @@ export const DEFAULT_RUNTIME_CONFIG: RuntimeJsonConfig = {
   updates: {
     enabled: true,
     githubRepo: "aripabot/aripa",
+    autoInstall: {
+      enabled: false,
+      preset: "weekly-sunday-4am",
+      cronExpression: "0 4 * * 0",
+    },
   },
 };
 
@@ -115,6 +133,12 @@ const githubRepoSchema = z
   .trim()
   .regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/)
   .catch(DEFAULT_RUNTIME_CONFIG.updates.githubRepo);
+const autoUpdateCronPresetSchema = z
+  .enum(AUTO_UPDATE_CRON_PRESETS.map((preset) => preset.id))
+  .catch(DEFAULT_RUNTIME_CONFIG.updates.autoInstall.preset);
+const autoUpdateCronExpressionSchema = z
+  .enum(AUTO_UPDATE_CRON_PRESETS.map((preset) => preset.cronExpression))
+  .catch(DEFAULT_RUNTIME_CONFIG.updates.autoInstall.cronExpression);
 
 const runtimeProviderSettingsSchema = z.preprocess(
   (value) => (isPlainObject(value) ? value : {}),
@@ -188,7 +212,7 @@ const runtimeConfigSchema = z
       ...config,
       models: cloneRuntimeModelConfig(config.models),
       providers: { ...config.providers },
-      updates: { ...config.updates },
+      updates: { ...config.updates, autoInstall: { ...config.updates.autoInstall } },
     }),
   );
 
@@ -202,7 +226,10 @@ export function cloneDefaultRuntimeConfig(): RuntimeJsonConfig {
     allowlistedServerIds: [...DEFAULT_RUNTIME_CONFIG.allowlistedServerIds],
     models: cloneRuntimeModelConfig(DEFAULT_RUNTIME_CONFIG.models),
     providers: { ...DEFAULT_RUNTIME_CONFIG.providers },
-    updates: { ...DEFAULT_RUNTIME_CONFIG.updates },
+    updates: {
+      ...DEFAULT_RUNTIME_CONFIG.updates,
+      autoInstall: { ...DEFAULT_RUNTIME_CONFIG.updates.autoInstall },
+    },
   };
 }
 
@@ -300,6 +327,16 @@ function createRuntimeUpdateConfigSchema() {
       githubRepo: githubRepoSchema,
       releasePublicKeyPem: trimmedOptionalStringSchema,
       releasePublicKeyPemBase64: trimmedOptionalStringSchema,
+      autoInstall: z
+        .preprocess(
+          (value) => (isPlainObject(value) ? value : {}),
+          z.object({
+            enabled: z.boolean().catch(DEFAULT_RUNTIME_CONFIG.updates.autoInstall.enabled),
+            preset: autoUpdateCronPresetSchema,
+            cronExpression: autoUpdateCronExpressionSchema,
+          }),
+        )
+        .catch(DEFAULT_RUNTIME_CONFIG.updates.autoInstall),
     }),
   );
 }
