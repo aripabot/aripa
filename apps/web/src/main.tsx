@@ -151,7 +151,7 @@ function App() {
               </picture>
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold">Aripa</p>
-                <p className="text-xs text-muted-foreground">Local dashboard</p>
+                <p className="text-xs text-muted-foreground">Local dashboard (Experimental)</p>
               </div>
             </div>
 
@@ -171,9 +171,9 @@ function App() {
                     style={
                       active
                         ? {
-                            backgroundColor: "hsl(var(--foreground))",
-                            color: "hsl(var(--background))",
-                          }
+                          backgroundColor: "hsl(var(--foreground))",
+                          color: "hsl(var(--background))",
+                        }
                         : { color: "hsl(var(--foreground))" }
                     }
                   >
@@ -199,9 +199,7 @@ function App() {
           <header className="sticky top-0 z-20 border-b bg-background/92 backdrop-blur">
             <div className="flex min-h-16 items-center justify-between gap-3 px-4 sm:px-6">
               <div className="min-w-0">
-                <p className="text-xs font-medium uppercase text-muted-foreground">
-                  Aripa control room
-                </p>
+
                 <h1 className="truncate text-pretty text-xl font-semibold tracking-normal sm:text-2xl">
                   {viewTitle(view)}
                 </h1>
