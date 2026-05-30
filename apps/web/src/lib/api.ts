@@ -1,0 +1,62 @@
+import type {
+  ApiErrorResponse,
+  ConfigResponse,
+  DashboardStatus,
+  LogsResponse,
+  ReleasesResponse,
+  SaveConfigRequest,
+  SaveConfigResponse,
+  UpdateInstallRequest,
+  UpdateInstallResponse,
+} from "@/lib/api-types";
+
+async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(path, {
+    ...init,
+    headers: {
+      "content-type": "application/json",
+      ...init?.headers,
+    },
+  });
+  const payload = (await response.json()) as T | ApiErrorResponse;
+
+  if (!response.ok) {
+    const error =
+      payload && typeof payload === "object" && "error" in payload
+        ? payload.error
+        : "Request failed.";
+    throw new Error(error);
+  }
+
+  return payload as T;
+}
+
+export function getStatus(): Promise<DashboardStatus> {
+  return requestJson<DashboardStatus>("/api/status");
+}
+
+export function getConfig(): Promise<ConfigResponse> {
+  return requestJson<ConfigResponse>("/api/config");
+}
+
+export function saveConfig(body: SaveConfigRequest): Promise<SaveConfigResponse> {
+  return requestJson<SaveConfigResponse>("/api/config", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function getLogs(): Promise<LogsResponse> {
+  return requestJson<LogsResponse>("/api/logs");
+}
+
+export function getReleases(): Promise<ReleasesResponse> {
+  return requestJson<ReleasesResponse>("/api/releases");
+}
+
+export function installUpdate(body: UpdateInstallRequest): Promise<UpdateInstallResponse> {
+  return requestJson<UpdateInstallResponse>("/api/updates/install", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
