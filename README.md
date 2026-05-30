@@ -54,6 +54,11 @@ TOKEN="your-discord-bot-token" bun run dev
 
 Run `bun run update` to open the interactive updater. Onboarding installs or removes a managed crontab entry for automatic updates when a schedule is selected. The cron entry runs `bun run update --latest`, which installs the latest configured GitHub release without opening the TUI and redeploys the default Docker container when it is running.
 
+## Repository Layout
+
+- `apps/bot`: the runnable Discord bot, including actions and CLI entrypoints.
+- `packages/core`: shared Aripa logic imported through `@aripabot/core/*`.
+
 Common environment variables:
 
 - `TOKEN`: required Discord bot token.

@@ -1,1 +1,1 @@
-import "@/index.ts";
+import "@aripabot/bot/index.ts";
