@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import type * as React from "react";
 import {
@@ -73,15 +73,12 @@ import type {
   SaveConfigResponse,
   LogsResponse,
 } from "@/lib/api-types";
+import type { DashboardInitialData, LoadState } from "@/server/dashboard-page-data";
 import type { RuntimeJsonConfig, RuntimeModelSelection } from "@aripabot/core/config/config.ts";
 
 export type View = "overview" | "logs" | "updates" | "docker-deployments" | "settings";
 type ThemeMode = "system" | "light" | "dark";
 type ResolvedTheme = "light" | "dark";
-type LoadState<T> =
-  | { status: "loading"; data: null; error: null }
-  | { status: "ready"; data: T; error: null }
-  | { status: "error"; data: null; error: string };
 
 const views: Array<{ id: View; label: string; href: string; icon: typeof Activity }> = [
   { id: "overview", label: "Overview", href: "/", icon: Activity },
@@ -96,21 +93,32 @@ const views: Array<{ id: View; label: string; href: string; icon: typeof Activit
   { id: "settings", label: "Settings", href: "/settings", icon: Settings },
 ];
 
-export function Dashboard({ view }: { view: View }) {
+export function Dashboard({
+  view,
+  initialData = {},
+}: {
+  view: View;
+  initialData?: DashboardInitialData;
+}) {
   const pathname = usePathname();
-  const [statusState, setStatusState] = useState<LoadState<DashboardStatus>>(() =>
-    initialLoadState(),
+  const router = useRouter();
+  const [pendingHref, setPendingHref] = useState<string | null>(null);
+  const [statusState, setStatusState] = useState<LoadState<DashboardStatus>>(
+    () => initialData.status ?? initialLoadState(),
   );
-  const [logsState, setLogsState] = useState<LoadState<LogsResponse>>(() => initialLoadState());
-  const [releasesState, setReleasesState] = useState<LoadState<ReleasesResponse>>(() =>
-    initialLoadState(),
+  const [logsState, setLogsState] = useState<LoadState<LogsResponse>>(
+    () => initialData.logs ?? initialLoadState(),
   );
-  const [dockerState, setDockerState] = useState<LoadState<DockerDeploymentStatus>>(() =>
-    initialLoadState(),
+  const [releasesState, setReleasesState] = useState<LoadState<ReleasesResponse>>(
+    () => initialData.releases ?? initialLoadState(),
+  );
+  const [dockerState, setDockerState] = useState<LoadState<DockerDeploymentStatus>>(
+    () => initialData.dockerDeployment ?? initialLoadState(),
   );
   const [themeMode, setThemeMode] = useState<ThemeMode>("system");
   const [systemTheme, setSystemTheme] = useState<ResolvedTheme>("light");
   const resolvedTheme = themeMode === "system" ? systemTheme : themeMode;
+  const activeHref = pendingHref ?? pathname;
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
@@ -124,13 +132,19 @@ export function Dashboard({ view }: { view: View }) {
   }, []);
 
   useEffect(() => {
+    setPendingHref(null);
+  }, [pathname]);
+
+  useEffect(() => {
     document.documentElement.classList.toggle("dark", resolvedTheme === "dark");
     document.documentElement.style.colorScheme = resolvedTheme;
   }, [resolvedTheme]);
 
   useEffect(() => {
-    void refreshStatus();
-  }, []);
+    if (statusState.status === "loading") {
+      void refreshStatus();
+    }
+  }, [statusState.status]);
 
   useEffect(() => {
     if (view === "logs" && logsState.status === "loading") {
@@ -181,10 +195,29 @@ export function Dashboard({ view }: { view: View }) {
     }
   }
 
+  function markNavigationPending(href: string, event: React.MouseEvent<HTMLAnchorElement>): void {
+    if (
+      event.defaultPrevented ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey ||
+      event.button !== 0 ||
+      href === pathname
+    ) {
+      return;
+    }
+
+    setPendingHref(href);
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <div className="grid min-h-screen lg:grid-cols-[16rem_1fr]">
-        <aside className="border-b bg-card/70 lg:border-b-0 lg:border-r">
+        <aside
+          className="border-b bg-card/70 lg:border-b-0 lg:border-r"
+          style={{ viewTransitionName: "dashboard-sidebar" } as React.CSSProperties}
+        >
           <div className="flex h-full flex-col gap-5 p-4">
             <div className="flex items-center gap-3">
               <picture>
@@ -209,13 +242,25 @@ export function Dashboard({ view }: { view: View }) {
             >
               {views.map((item) => {
                 const Icon = item.icon;
-                const active = item.href === pathname;
+                const active = item.href === activeHref;
                 return (
                   <Link
                     key={item.id}
                     href={item.href}
+                    prefetch={true}
                     aria-current={active ? "page" : undefined}
                     className="inline-flex h-10 items-center justify-start gap-2 rounded-md px-4 py-2 text-sm font-medium transition-[background-color,color] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                    onFocus={() => {
+                      if (!active) {
+                        router.prefetch(item.href);
+                      }
+                    }}
+                    onClick={(event) => markNavigationPending(item.href, event)}
+                    onPointerEnter={() => {
+                      if (!active) {
+                        router.prefetch(item.href);
+                      }
+                    }}
                     style={
                       active
                         ? {
@@ -244,7 +289,10 @@ export function Dashboard({ view }: { view: View }) {
         </aside>
 
         <div className="min-w-0">
-          <header className="sticky top-0 z-20 border-b bg-background/92 backdrop-blur">
+          <header
+            className="sticky top-0 z-20 border-b bg-background/92 backdrop-blur"
+            style={{ viewTransitionName: "dashboard-header" } as React.CSSProperties}
+          >
             <div className="flex min-h-16 items-center justify-between gap-3 px-4 sm:px-6">
               <div className="min-w-0">
                 <h1 className="truncate text-pretty text-xl font-semibold tracking-normal sm:text-2xl">
