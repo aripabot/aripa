@@ -9,6 +9,7 @@ import {
   AlertCircle,
   CheckCircle2,
   Clipboard,
+  Container,
   Download,
   Filter,
   Logs,
@@ -20,11 +21,24 @@ import {
   Search,
   Server,
   Settings,
+  Square,
   Sun,
   Tags,
+  Terminal,
   UserRound,
 } from "lucide-react";
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -39,10 +53,21 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { getLogs, getReleases, getStatus, installUpdate, saveConfig } from "@/lib/api";
+import {
+  getDockerDeploymentStatus,
+  getLogs,
+  getReleases,
+  getStatus,
+  installUpdate,
+  runDockerDeploymentCommand,
+  saveConfig,
+} from "@/lib/api";
 import type {
   DashboardLogEntry,
   DashboardStatus,
+  DockerDeploymentAction,
+  DockerDeploymentCommandResponse,
+  DockerDeploymentStatus,
   LogEntryLevel,
   ReleasesResponse,
   SaveConfigResponse,
@@ -50,7 +75,7 @@ import type {
 } from "@/lib/api-types";
 import type { RuntimeJsonConfig, RuntimeModelSelection } from "@aripabot/core/config/config.ts";
 
-export type View = "overview" | "logs" | "updates" | "settings";
+export type View = "overview" | "logs" | "updates" | "docker-deployments" | "settings";
 type ThemeMode = "system" | "light" | "dark";
 type ResolvedTheme = "light" | "dark";
 type LoadState<T> =
@@ -62,6 +87,12 @@ const views: Array<{ id: View; label: string; href: string; icon: typeof Activit
   { id: "overview", label: "Overview", href: "/", icon: Activity },
   { id: "logs", label: "Logs", href: "/logs", icon: Logs },
   { id: "updates", label: "Updates", href: "/updates", icon: Download },
+  {
+    id: "docker-deployments",
+    label: "Docker Deployments",
+    href: "/docker-deployments",
+    icon: Container,
+  },
   { id: "settings", label: "Settings", href: "/settings", icon: Settings },
 ];
 
@@ -72,6 +103,9 @@ export function Dashboard({ view }: { view: View }) {
   );
   const [logsState, setLogsState] = useState<LoadState<LogsResponse>>(() => initialLoadState());
   const [releasesState, setReleasesState] = useState<LoadState<ReleasesResponse>>(() =>
+    initialLoadState(),
+  );
+  const [dockerState, setDockerState] = useState<LoadState<DockerDeploymentStatus>>(() =>
     initialLoadState(),
   );
   const [themeMode, setThemeMode] = useState<ThemeMode>("system");
@@ -105,7 +139,10 @@ export function Dashboard({ view }: { view: View }) {
     if (view === "updates" && releasesState.status === "loading") {
       void refreshReleases();
     }
-  }, [view, logsState.status, releasesState.status]);
+    if (view === "docker-deployments" && dockerState.status === "loading") {
+      void refreshDockerDeployment();
+    }
+  }, [view, logsState.status, releasesState.status, dockerState.status]);
 
   async function refreshStatus() {
     setStatusState(initialLoadState());
@@ -135,6 +172,15 @@ export function Dashboard({ view }: { view: View }) {
     }
   }
 
+  async function refreshDockerDeployment() {
+    setDockerState(initialLoadState());
+    try {
+      setDockerState({ status: "ready", data: await getDockerDeploymentStatus(), error: null });
+    } catch (error) {
+      setDockerState({ status: "error", data: null, error: readableError(error) });
+    }
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <div className="grid min-h-screen lg:grid-cols-[16rem_1fr]">
@@ -159,7 +205,7 @@ export function Dashboard({ view }: { view: View }) {
 
             <nav
               aria-label="Dashboard"
-              className="grid grid-cols-2 gap-1 sm:grid-cols-4 lg:flex lg:flex-col"
+              className="grid grid-cols-2 gap-1 sm:grid-cols-5 lg:flex lg:flex-col"
             >
               {views.map((item) => {
                 const Icon = item.icon;
@@ -248,6 +294,19 @@ export function Dashboard({ view }: { view: View }) {
                     }}
                     onInstalled={() => {
                       void refreshReleases();
+                      void refreshStatus();
+                    }}
+                  />
+                )}
+                {view === "docker-deployments" && (
+                  <DockerDeploymentsPage
+                    deployment={dockerState}
+                    onRefresh={() => {
+                      void refreshDockerDeployment();
+                      void refreshStatus();
+                    }}
+                    onStatusChange={(nextStatus) => {
+                      setDockerState({ status: "ready", data: nextStatus, error: null });
                       void refreshStatus();
                     }}
                   />
@@ -919,10 +978,6 @@ function UpdatesPage({
   const [message, setMessage] = useState<string | null>(null);
 
   async function install(tagName: string) {
-    if (!window.confirm(`Install ${tagName}? Aripa will update local release files.`)) {
-      return;
-    }
-
     setInstallingTag(tagName);
     setMessage(null);
     try {
@@ -998,19 +1053,27 @@ function UpdatesPage({
                       {release.tagName} · {formatDate(release.publishedAt)}
                     </p>
                   </div>
-                  <Button
-                    type="button"
-                    variant={index === 0 ? "default" : "outline"}
+                  <ConfirmActionButton
+                    title="Install Update"
+                    description={`Install ${release.tagName}. The dashboard will refresh release and runtime status after the update finishes.`}
+                    confirmLabel="Install Update"
                     disabled={installingTag !== null || isInstalled}
-                    onClick={() => void install(release.tagName)}
-                  >
-                    <Download aria-hidden="true" />
-                    {isInstalled
-                      ? "Installed"
-                      : installingTag === release.tagName
-                        ? "Installing…"
-                        : "Install"}
-                  </Button>
+                    onConfirm={() => void install(release.tagName)}
+                    trigger={
+                      <Button
+                        type="button"
+                        variant={index === 0 ? "default" : "outline"}
+                        disabled={installingTag !== null || isInstalled}
+                      >
+                        <Download aria-hidden="true" />
+                        {isInstalled
+                          ? "Installed"
+                          : installingTag === release.tagName
+                            ? "Installing…"
+                            : "Install"}
+                      </Button>
+                    }
+                  />
                 </CardContent>
               </Card>
             );
@@ -1018,6 +1081,284 @@ function UpdatesPage({
         </div>
       )}
     </div>
+  );
+}
+
+function DockerDeploymentsPage({
+  deployment,
+  onRefresh,
+  onStatusChange,
+}: {
+  deployment: LoadState<DockerDeploymentStatus>;
+  onRefresh: () => void;
+  onStatusChange: (status: DockerDeploymentStatus) => void;
+}) {
+  const [runningAction, setRunningAction] = useState<DockerDeploymentAction | null>(null);
+  const [commandResult, setCommandResult] = useState<DockerDeploymentCommandResponse | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  async function runAction(action: DockerDeploymentAction) {
+    setRunningAction(action);
+    setMessage(null);
+    setCommandResult(null);
+    try {
+      const result = await runDockerDeploymentCommand({ action });
+      setCommandResult(result);
+      onStatusChange(result.status);
+      setMessage(
+        result.exitCode === 0
+          ? `${dockerActionLabel(action)} completed.`
+          : `${dockerActionLabel(action)} exited with code ${result.exitCode}.`,
+      );
+    } catch (error) {
+      setMessage(readableError(error));
+    } finally {
+      setRunningAction(null);
+    }
+  }
+
+  if (deployment.status === "loading") {
+    return <LoadingPanel label="Loading Docker deployment" />;
+  }
+
+  if (deployment.status === "error") {
+    return (
+      <ErrorPanel
+        title="Docker deployment unavailable"
+        message={deployment.error}
+        onRetry={onRefresh}
+      />
+    );
+  }
+
+  const startScript = deployment.data.scripts.find((script) => script.action === "start");
+  const stopScript = deployment.data.scripts.find((script) => script.action === "stop");
+  const running = deployment.data.state === "running";
+
+  return (
+    <div className="grid gap-5">
+      <section className="overflow-hidden rounded-lg border bg-card">
+        <div className="flex flex-col gap-4 border-b p-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-3">
+              <span
+                className={`inline-flex items-center gap-2 rounded-md px-2.5 py-1 text-sm font-medium ${dockerStateClass(
+                  deployment.data.state,
+                )}`}
+              >
+                <span className="size-2 rounded-full bg-current" aria-hidden="true" />
+                {deployment.data.stateLabel}
+              </span>
+              <p className="break-words text-sm text-muted-foreground">{deployment.data.detail}</p>
+            </div>
+          </div>
+          <Button type="button" variant="outline" onClick={onRefresh}>
+            <RefreshCw aria-hidden="true" />
+            Refresh
+          </Button>
+        </div>
+
+        <div className="grid divide-y sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4">
+          <DeploymentMetric label="Status" value={deployment.data.stateLabel} detail="" />
+          <DeploymentMetric
+            label="Container"
+            value={deployment.data.containerName}
+            detail={
+              deployment.data.containerId ? `ID ${deployment.data.containerId}` : "Not created"
+            }
+          />
+          <DeploymentMetric
+            label="Image"
+            value={deployment.data.imageName}
+            detail={deployment.data.imageId ? `ID ${deployment.data.imageId}` : "Not built"}
+          />
+          <DeploymentMetric
+            label="Started"
+            value={
+              deployment.data.startedAt ? formatDateTime(deployment.data.startedAt) : "Not started"
+            }
+            detail=""
+          />
+        </div>
+      </section>
+
+      <section className="grid gap-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>Deployment Controls</CardTitle>
+            <CardDescription>Start, restart, or stop the local Docker deployment.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4">
+            {message ? (
+              <p className="rounded-md border bg-background px-3 py-2 text-sm" aria-live="polite">
+                {message}
+              </p>
+            ) : null}
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <ConfirmActionButton
+                title={running ? "Restart Deployment" : "Start Deployment"}
+                description={
+                  running
+                    ? "Restart the Docker deployment now. The bot may be briefly unavailable."
+                    : "Start the Docker deployment now."
+                }
+                confirmLabel={running ? "Restart Deployment" : "Start Deployment"}
+                disabled={runningAction !== null || startScript?.available !== true}
+                onConfirm={() => void runAction("start")}
+                trigger={
+                  <Button
+                    type="button"
+                    disabled={runningAction !== null || startScript?.available !== true}
+                  >
+                    <Play aria-hidden="true" />
+                    {runningAction === "start"
+                      ? "Starting…"
+                      : running
+                        ? "Restart Deployment"
+                        : "Start Deployment"}
+                  </Button>
+                }
+              />
+              <ConfirmActionButton
+                title="Stop Deployment"
+                description="Stop the Docker deployment now. Aripa will be offline until it is started again."
+                confirmLabel="Stop Deployment"
+                disabled={runningAction !== null || stopScript?.available !== true}
+                onConfirm={() => void runAction("stop")}
+                trigger={
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={runningAction !== null || stopScript?.available !== true}
+                  >
+                    <Square aria-hidden="true" />
+                    {runningAction === "stop" ? "Stopping…" : "Stop Deployment"}
+                  </Button>
+                }
+              />
+            </div>
+            <div className="grid gap-2">
+              {deployment.data.scripts.map((script) => (
+                <div
+                  key={script.action}
+                  className="flex flex-col gap-2 rounded-md border bg-background p-3 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">{script.label}</p>
+                  </div>
+                  <span
+                    className={`w-fit rounded-sm px-1.5 py-0.5 text-xs ${script.available ? "bg-muted text-foreground" : "bg-muted text-muted-foreground"}`}
+                  >
+                    {script.available ? "Available" : "Missing"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+
+      {commandResult ? <DockerCommandOutput result={commandResult} /> : null}
+    </div>
+  );
+}
+
+function DeploymentMetric({
+  label,
+  value,
+  detail,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+}) {
+  return (
+    <div className="min-w-0 p-4">
+      <p className="text-sm text-muted-foreground">{label}</p>
+      <p className="mt-2 truncate text-lg font-semibold tracking-normal" translate="no">
+        {value}
+      </p>
+      {detail ? (
+        <p className="mt-1 truncate text-sm text-muted-foreground" translate="no">
+          {detail}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function DockerCommandOutput({ result }: { result: DockerDeploymentCommandResponse }) {
+  const output = [result.stdout.trim(), result.stderr.trim()].filter(Boolean).join("\n\n");
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <CardTitle>Deployment Output</CardTitle>
+            <CardDescription>Completed at {formatTime(result.completedAt)}.</CardDescription>
+          </div>
+          <span
+            className={`w-fit rounded-sm px-1.5 py-0.5 text-xs ${
+              result.exitCode === 0
+                ? "bg-muted text-foreground"
+                : "bg-red-500/10 text-red-700 dark:text-red-300"
+            }`}
+          >
+            Exit {result.exitCode}
+          </span>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {output ? (
+          <pre
+            className="max-h-96 overflow-auto rounded-md bg-background p-3 font-mono text-xs leading-5"
+            translate="no"
+          >
+            {output}
+          </pre>
+        ) : (
+          <div className="flex items-start gap-3 rounded-md border bg-background p-3">
+            <Terminal aria-hidden="true" className="mt-0.5 size-4 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">The command completed without output.</p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ConfirmActionButton({
+  title,
+  description,
+  confirmLabel,
+  disabled,
+  onConfirm,
+  trigger,
+}: {
+  title: string;
+  description: string;
+  confirmLabel: string;
+  disabled?: boolean;
+  onConfirm: () => void;
+  trigger: React.ReactElement;
+}) {
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild disabled={disabled}>
+        {trigger}
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{title}</AlertDialogTitle>
+          <AlertDialogDescription>{description}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={onConfirm}>{confirmLabel}</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 
@@ -1633,6 +1974,26 @@ function runtimeToneClass(state: DashboardStatus["botRuntime"]["state"]): string
       return "bg-sky-500/10 text-sky-700 dark:text-sky-300";
     case "stopped":
       return "bg-red-500/10 text-red-700 dark:text-red-300";
+  }
+}
+
+function dockerStateClass(state: DockerDeploymentStatus["state"]): string {
+  switch (state) {
+    case "running":
+      return "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+    case "stopped":
+      return "bg-red-500/10 text-red-700 dark:text-red-300";
+    case "unknown":
+      return "bg-muted text-muted-foreground";
+  }
+}
+
+function dockerActionLabel(action: DockerDeploymentAction): string {
+  switch (action) {
+    case "start":
+      return "Start Deployment";
+    case "stop":
+      return "Stop Deployment";
   }
 }
 

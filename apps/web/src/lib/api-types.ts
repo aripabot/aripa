@@ -165,6 +165,43 @@ export interface UpdateInstallResponse {
   progress: string[];
 }
 
+export type DockerDeploymentAction = "start" | "stop";
+
+export interface DockerDeploymentStatus {
+  containerName: string;
+  imageName: string;
+  state: "running" | "stopped" | "unknown";
+  stateLabel: string;
+  detail: string;
+  containerId: string | null;
+  imageId: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  scripts: DockerDeploymentScript[];
+}
+
+export interface DockerDeploymentScript {
+  action: DockerDeploymentAction;
+  label: string;
+  command: string;
+  available: boolean;
+}
+
+export interface DockerDeploymentCommandRequest {
+  action: DockerDeploymentAction;
+}
+
+export interface DockerDeploymentCommandResponse {
+  action: DockerDeploymentAction;
+  command: string;
+  startedAt: string;
+  completedAt: string;
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+  status: DockerDeploymentStatus;
+}
+
 export interface ApiErrorResponse {
   error: string;
 }

@@ -2,6 +2,9 @@ import type {
   ApiErrorResponse,
   ConfigResponse,
   DashboardStatus,
+  DockerDeploymentCommandRequest,
+  DockerDeploymentCommandResponse,
+  DockerDeploymentStatus,
   LogsResponse,
   ReleasesResponse,
   SaveConfigRequest,
@@ -56,6 +59,19 @@ export function getReleases(): Promise<ReleasesResponse> {
 
 export function installUpdate(body: UpdateInstallRequest): Promise<UpdateInstallResponse> {
   return requestJson<UpdateInstallResponse>("/api/updates/install", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function getDockerDeploymentStatus(): Promise<DockerDeploymentStatus> {
+  return requestJson<DockerDeploymentStatus>("/api/docker-deployments");
+}
+
+export function runDockerDeploymentCommand(
+  body: DockerDeploymentCommandRequest,
+): Promise<DockerDeploymentCommandResponse> {
+  return requestJson<DockerDeploymentCommandResponse>("/api/docker-deployments", {
     method: "POST",
     body: JSON.stringify(body),
   });
