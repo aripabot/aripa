@@ -117,7 +117,35 @@ export interface LocalLogFile {
   lines: string[];
 }
 
+export type LogSourceKind = "docker" | "process" | "file";
+export type LogEntryLevel = "trace" | "debug" | "info" | "warn" | "error" | "fatal" | "unknown";
+
+export interface DashboardLogSource {
+  id: string;
+  kind: LogSourceKind;
+  name: string;
+  detail: string;
+  available: boolean;
+  updatedAt: string | null;
+  sizeBytes: number | null;
+  message: string | null;
+}
+
+export interface DashboardLogEntry {
+  id: string;
+  sourceId: string;
+  sourceKind: LogSourceKind;
+  sourceName: string;
+  level: LogEntryLevel;
+  timestamp: string | null;
+  message: string;
+  raw: string;
+  metadata: Record<string, unknown> | null;
+}
+
 export interface LogsResponse {
+  sources: DashboardLogSource[];
+  entries: DashboardLogEntry[];
   files: LocalLogFile[];
 }
 

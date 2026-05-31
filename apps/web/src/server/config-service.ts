@@ -21,8 +21,11 @@ import type {
   DashboardStatus,
   DashboardOperations,
   DiscordLookupStatus,
+  DashboardLogEntry,
+  DashboardLogSource,
   GuildOperationsSummary,
   LocalLogFile,
+  LogEntryLevel,
   LogsResponse,
   ReleasesResponse,
   SaveConfigResponse,
@@ -37,6 +40,8 @@ const webPackageJsonPath = join(appRoot, "package.json");
 const rootEnv = readRootEnv();
 const STYLE_PROMPTS = ["match", "concise", "formal", "friendly", "original", "playful"] as const;
 const execFileAsync = promisify(execFile);
+const DOCKER_CONTAINER_NAME = "aripabot-docker";
+const LOG_TAIL_LINE_COUNT = 500;
 
 function getEnv(name: string): string | undefined {
   return process.env[name] ?? rootEnv[name];
@@ -318,7 +323,7 @@ async function readLocalOperations(databasePath: string): Promise<LocalOperation
 }
 
 async function getBotRuntimeStatus(): Promise<BotRuntimeStatus> {
-  if (await isDockerContainerRunning("aripabot-docker")) {
+  if (await isDockerContainerRunning(DOCKER_CONTAINER_NAME)) {
     return {
       state: "docker",
       label: "Running via Docker",
@@ -357,17 +362,7 @@ async function isDockerContainerRunning(containerName: string): Promise<boolean>
 async function isBotProcessRunning(): Promise<boolean> {
   try {
     const { stdout } = await execFileAsync("ps", ["-axo", "command="], { timeout: 1_500 });
-    return stdout.split(/\r?\n/).some((line) => {
-      if (!line.includes("src/index.ts")) {
-        return false;
-      }
-
-      return (
-        line.includes("apps/bot") ||
-        line.includes("--cwd apps/bot") ||
-        line.includes("--env-file=../../.env")
-      );
-    });
+    return stdout.split(/\r?\n/).some(isBotProcessCommand);
   } catch {
     return false;
   }
@@ -619,8 +614,214 @@ export async function readLocalLogs(): Promise<LogsResponse> {
     join(repositoryRoot, "apps", "bot", "aripa-update.log"),
   ];
 
-  const files = await Promise.all(candidates.map(readLogCandidate));
-  return { files };
+  const [dockerSource, processSources, files] = await Promise.all([
+    readDockerLogs(),
+    readProcessLogs(),
+    Promise.all(candidates.map(readLogCandidate)),
+  ]);
+  const fileSources = files.map(logFileToSource);
+  const sources = [dockerSource, ...processSources, ...fileSources];
+  const entries = [
+    ...dockerSource.entries,
+    ...processSources.flatMap((source) => source.entries),
+    ...files.flatMap((file) => logFileToEntries(file)),
+  ]
+    .sort(compareLogEntries)
+    .slice(-LOG_TAIL_LINE_COUNT);
+
+  return {
+    sources: sources.map(({ entries: _entries, ...source }) => source),
+    entries,
+    files,
+  };
+}
+
+async function readDockerLogs(): Promise<LogSourceWithEntries> {
+  const running = await isDockerContainerRunning(DOCKER_CONTAINER_NAME);
+  const source: DashboardLogSource = {
+    id: `docker:${DOCKER_CONTAINER_NAME}`,
+    kind: "docker",
+    name: "Docker",
+    detail: DOCKER_CONTAINER_NAME,
+    available: running,
+    updatedAt: null,
+    sizeBytes: null,
+    message: running ? null : "Container logs are available when the Docker runtime is active.",
+  };
+
+  if (!running) {
+    return { ...source, entries: [] };
+  }
+
+  try {
+    const { stdout, stderr } = await execFileAsync(
+      "docker",
+      ["logs", "--timestamps", "--tail", String(LOG_TAIL_LINE_COUNT), DOCKER_CONTAINER_NAME],
+      { timeout: 5_000, maxBuffer: 1024 * 1024 },
+    );
+    const lines = [...stdout.split(/\r?\n/), ...stderr.split(/\r?\n/)].filter(Boolean);
+
+    return {
+      ...source,
+      entries: lines.map((line, index) => parseLogLine(line, source, index)),
+    };
+  } catch (error) {
+    return {
+      ...source,
+      available: false,
+      message: `Docker logs could not be read: ${readableError(error)}`,
+      entries: [],
+    };
+  }
+}
+
+async function readProcessLogs(): Promise<LogSourceWithEntries[]> {
+  const processIds = await findBotProcessIds();
+
+  if (processIds.length === 0) {
+    return [
+      {
+        id: "process:local",
+        kind: "process",
+        name: "Local Process",
+        detail: "Aripa bot process",
+        available: false,
+        updatedAt: null,
+        sizeBytes: null,
+        message: "No local Aripa bot process was found.",
+        entries: [],
+      },
+    ];
+  }
+
+  return Promise.all(processIds.map(readProcessLogSource));
+}
+
+async function findBotProcessIds(): Promise<string[]> {
+  try {
+    const { stdout } = await execFileAsync("ps", ["-axo", "pid=,command="], { timeout: 1_500 });
+    return stdout
+      .split(/\r?\n/)
+      .map((line) => {
+        const match = line.match(/^\s*(\d+)\s+(.+)$/);
+        if (!match) {
+          return null;
+        }
+
+        const pid = match[1];
+        const command = match[2];
+        if (!pid || !command) {
+          return null;
+        }
+
+        return isBotProcessCommand(command) ? pid : null;
+      })
+      .filter((pid): pid is string => Boolean(pid));
+  } catch {
+    return [];
+  }
+}
+
+function isBotProcessCommand(command: string): boolean {
+  if (!command.includes("src/index.ts")) {
+    return false;
+  }
+
+  return (
+    command.includes("apps/bot") ||
+    command.includes("--cwd apps/bot") ||
+    command.includes("--env-file=../../.env")
+  );
+}
+
+async function readProcessLogSource(pid: string): Promise<LogSourceWithEntries> {
+  const stdoutPath = await getProcessStdoutPath(pid);
+  const source: DashboardLogSource = {
+    id: `process:${pid}`,
+    kind: "process",
+    name: "Local Process",
+    detail: `PID ${pid}`,
+    available: Boolean(stdoutPath),
+    updatedAt: null,
+    sizeBytes: null,
+    message: stdoutPath
+      ? null
+      : "This process is not writing stdout to a readable file. Start Aripa with file logging or use Docker to view captured history.",
+  };
+
+  if (!stdoutPath) {
+    return { ...source, entries: [] };
+  }
+
+  try {
+    const file = await readLogCandidate(stdoutPath);
+    return {
+      ...source,
+      available: file.exists,
+      detail: `PID ${pid} · ${file.name}`,
+      updatedAt: file.updatedAt,
+      sizeBytes: file.sizeBytes,
+      message: file.exists
+        ? null
+        : "This process stdout is not written to a readable file. Start Aripa with file logging or use Docker to view captured history.",
+      entries: file.lines.map((line, index) => parseLogLine(line, source, index)),
+    };
+  } catch (error) {
+    return {
+      ...source,
+      available: false,
+      message: `Process logs could not be read: ${readableError(error)}`,
+      entries: [],
+    };
+  }
+}
+
+async function getProcessStdoutPath(pid: string): Promise<string | null> {
+  try {
+    const { stdout } = await execFileAsync("lsof", ["-a", "-p", pid, "-d", "1", "-Fn"], {
+      timeout: 1_500,
+    });
+    const stdoutPath = stdout
+      .split(/\r?\n/)
+      .find((line) => line.startsWith("n/"))
+      ?.slice(1);
+
+    return stdoutPath ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function logFileToSource(file: LocalLogFile): LogSourceWithEntries {
+  return {
+    id: `file:${file.path}`,
+    kind: "file",
+    name: file.name,
+    detail: file.path,
+    available: file.exists,
+    updatedAt: file.updatedAt,
+    sizeBytes: file.sizeBytes,
+    message: file.exists ? null : "File not found.",
+    entries: logFileToEntries(file),
+  };
+}
+
+function logFileToEntries(file: LocalLogFile): DashboardLogEntry[] {
+  const source = logFileToSourceMetadata(file);
+  return file.lines.map((line, index) => parseLogLine(line, source, index));
+}
+
+function logFileToSourceMetadata(file: LocalLogFile): DashboardLogSource {
+  return {
+    id: `file:${file.path}`,
+    kind: "file",
+    name: file.name,
+    detail: file.path,
+    available: file.exists,
+    updatedAt: file.updatedAt,
+    sizeBytes: file.sizeBytes,
+    message: file.exists ? null : "File not found.",
+  };
 }
 
 async function resolveDatabasePath(): Promise<string> {
@@ -678,6 +879,17 @@ async function readLogCandidate(path: string): Promise<LocalLogFile> {
 
   try {
     const metadata = await stat(path);
+    if (!metadata.isFile()) {
+      return {
+        name,
+        path,
+        exists: false,
+        updatedAt: null,
+        sizeBytes: 0,
+        lines: [],
+      };
+    }
+
     const text = await readFile(path, "utf8");
     const lines = text.split(/\r?\n/).filter(Boolean).slice(-150);
 
@@ -699,6 +911,217 @@ async function readLogCandidate(path: string): Promise<LocalLogFile> {
       lines: [],
     };
   }
+}
+
+export function parseLogLine(
+  rawLine: string,
+  source: Pick<DashboardLogSource, "id" | "kind" | "name">,
+  index: number,
+): DashboardLogEntry {
+  const cleanedLine = redactLogText(stripAnsi(rawLine));
+  const { timestamp, body } = splitDockerTimestamp(cleanedLine);
+  const parsed = parsePinoJson(body);
+
+  return {
+    id: `${source.id}:${index}:${hashString(cleanedLine)}`,
+    sourceId: source.id,
+    sourceKind: source.kind,
+    sourceName: source.name,
+    level: parsed.level,
+    timestamp: parsed.timestamp ?? timestamp,
+    message: parsed.message,
+    raw: parsed.raw,
+    metadata: parsed.metadata,
+  };
+}
+
+function splitDockerTimestamp(line: string): { timestamp: string | null; body: string } {
+  const match = line.match(/^(\d{4}-\d{2}-\d{2}T\S+)\s+(.*)$/);
+  if (!match) {
+    return { timestamp: null, body: line };
+  }
+
+  return { timestamp: normalizeTimestamp(match[1] ?? null), body: match[2] ?? "" };
+}
+
+function parsePinoJson(line: string): {
+  level: LogEntryLevel;
+  timestamp: string | null;
+  message: string;
+  raw: string;
+  metadata: Record<string, unknown> | null;
+} {
+  try {
+    const payload = JSON.parse(line) as Record<string, unknown>;
+    const message = getString(payload.msg) ?? getString(payload.message) ?? line;
+    const timestamp = normalizeTimestamp(payload.time);
+    const level = normalizeLogLevel(payload.level);
+    const metadata = extractLogMetadata(payload);
+
+    return {
+      level,
+      timestamp,
+      message: redactLogText(message),
+      raw: redactLogText(JSON.stringify(payload)),
+      metadata: redactLogObject(metadata),
+    };
+  } catch {
+    return {
+      level: inferTextLogLevel(line),
+      timestamp: null,
+      message: line,
+      raw: line,
+      metadata: null,
+    };
+  }
+}
+
+function normalizeTimestamp(value: unknown): string | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return new Date(value).toISOString();
+  }
+
+  if (typeof value !== "string" || !value.trim()) {
+    return null;
+  }
+
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : value;
+}
+
+function normalizeLogLevel(value: unknown): LogEntryLevel {
+  if (typeof value === "string") {
+    const lower = value.toLowerCase();
+    return isLogEntryLevel(lower) ? lower : "unknown";
+  }
+
+  if (typeof value !== "number") {
+    return "unknown";
+  }
+
+  if (value >= 60) {
+    return "fatal";
+  }
+  if (value >= 50) {
+    return "error";
+  }
+  if (value >= 40) {
+    return "warn";
+  }
+  if (value >= 30) {
+    return "info";
+  }
+  if (value >= 20) {
+    return "debug";
+  }
+  if (value >= 10) {
+    return "trace";
+  }
+
+  return "unknown";
+}
+
+function isLogEntryLevel(value: string): value is LogEntryLevel {
+  return ["trace", "debug", "info", "warn", "error", "fatal", "unknown"].includes(value);
+}
+
+function inferTextLogLevel(line: string): LogEntryLevel {
+  const normalized = line.toLowerCase();
+
+  if (/\bfatal\b/.test(normalized)) {
+    return "fatal";
+  }
+  if (/\berror\b/.test(normalized)) {
+    return "error";
+  }
+  if (/\bwarn(?:ing)?\b/.test(normalized)) {
+    return "warn";
+  }
+  if (/\bdebug\b/.test(normalized)) {
+    return "debug";
+  }
+  if (/\btrace\b/.test(normalized)) {
+    return "trace";
+  }
+  if (/\binfo\b/.test(normalized)) {
+    return "info";
+  }
+
+  return "unknown";
+}
+
+function extractLogMetadata(payload: Record<string, unknown>): Record<string, unknown> | null {
+  const metadata: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(payload)) {
+    if (["level", "time", "timestamp", "msg", "message", "pid", "hostname"].includes(key)) {
+      continue;
+    }
+
+    metadata[key] = value;
+  }
+
+  return Object.keys(metadata).length > 0 ? metadata : null;
+}
+
+function redactLogObject<T>(value: T): T {
+  if (value === null || typeof value !== "object") {
+    return typeof value === "string" ? (redactLogText(value) as T) : value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((entry) => redactLogObject(entry)) as T;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, entry]) => [
+      key,
+      isSensitiveLogKey(key) ? "[redacted]" : redactLogObject(entry),
+    ]),
+  ) as T;
+}
+
+function isSensitiveLogKey(key: string): boolean {
+  return /token|authorization|api[_-]?key|secret|password/i.test(key);
+}
+
+function redactLogText(value: string): string {
+  return value
+    .replace(/(Bot\s+)[A-Za-z0-9._-]+/g, "$1[redacted]")
+    .replace(/(Bearer\s+)[A-Za-z0-9._-]+/g, "$1[redacted]")
+    .replace(
+      /((?:token|authorization|api[_-]?key|secret|password)["']?\s*[:=]\s*["']?)[^"',\s}]+/gi,
+      "$1[redacted]",
+    );
+}
+
+function stripAnsi(value: string): string {
+  return value.replace(new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "g"), "");
+}
+
+function getString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function compareLogEntries(left: DashboardLogEntry, right: DashboardLogEntry): number {
+  const leftTime = left.timestamp ? Date.parse(left.timestamp) : Number.NaN;
+  const rightTime = right.timestamp ? Date.parse(right.timestamp) : Number.NaN;
+
+  if (Number.isFinite(leftTime) && Number.isFinite(rightTime)) {
+    return leftTime - rightTime;
+  }
+
+  return left.id.localeCompare(right.id);
+}
+
+function hashString(value: string): string {
+  let hash = 0;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
+  }
+
+  return hash.toString(36);
 }
 
 async function readJson<T>(pathOrUrl: string | URL): Promise<T> {
@@ -861,6 +1284,10 @@ interface LocalActiveMute {
   expiresAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+interface LogSourceWithEntries extends DashboardLogSource {
+  entries: DashboardLogEntry[];
 }
 
 interface DiscordGuildSummary {

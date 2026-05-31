@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 
 import { describe, expect, test } from "vitest";
 
-import { readConfig, saveConfig } from "@/server/config-service";
+import { parseLogLine, readConfig, saveConfig } from "@/server/config-service";
 import { cloneDefaultRuntimeConfig } from "@aripabot/core/config/config.ts";
 
 describe("dashboard config service", () => {
@@ -44,6 +44,48 @@ describe("dashboard config service", () => {
       expect(result.config.allowlistedServerIds).toEqual([]);
       expect(result.config.agentRateLimitMessagesPerMinute).toBeNull();
       expect(raw.futureFlag).toBe(true);
+    });
+  });
+
+  test("parses pino log lines into dashboard entries", () => {
+    const entry = parseLogLine(
+      JSON.stringify({
+        level: 30,
+        time: 1_735_689_600_000,
+        msg: "Action requested.",
+        metadata: { action: "ping" },
+      }),
+      { id: "docker:aripabot-docker", kind: "docker", name: "Docker" },
+      0,
+    );
+
+    expect(entry.level).toBe("info");
+    expect(entry.timestamp).toBe("2025-01-01T00:00:00.000Z");
+    expect(entry.message).toBe("Action requested.");
+    expect(entry.metadata).toEqual({ metadata: { action: "ping" } });
+  });
+
+  test("redacts sensitive log fields before returning entries", () => {
+    const entry = parseLogLine(
+      JSON.stringify({
+        level: 50,
+        msg: "Request failed with Bearer secret-token-value",
+        metadata: {
+          token: "secret-token-value",
+          nested: { apiKey: "secret-api-key" },
+        },
+      }),
+      { id: "file:/tmp/aripa.log", kind: "file", name: "aripa.log" },
+      1,
+    );
+
+    expect(entry.message).toContain("Bearer [redacted]");
+    expect(entry.raw).not.toContain("secret-token-value");
+    expect(entry.metadata).toEqual({
+      metadata: {
+        token: "[redacted]",
+        nested: { apiKey: "[redacted]" },
+      },
     });
   });
 });

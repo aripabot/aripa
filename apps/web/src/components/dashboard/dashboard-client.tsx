@@ -8,9 +8,13 @@ import {
   Activity,
   AlertCircle,
   CheckCircle2,
+  Clipboard,
   Download,
+  Filter,
   Logs,
   Moon,
+  Pause,
+  Play,
   RefreshCw,
   Save,
   Search,
@@ -33,13 +37,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { getLogs, getReleases, getStatus, installUpdate, saveConfig } from "@/lib/api";
 import type {
+  DashboardLogEntry,
   DashboardStatus,
-  LocalLogFile,
+  LogEntryLevel,
   ReleasesResponse,
   SaveConfigResponse,
+  LogsResponse,
 } from "@/lib/api-types";
 import type { RuntimeJsonConfig, RuntimeModelSelection } from "@aripabot/core/config/config.ts";
 
@@ -63,7 +70,7 @@ export function Dashboard({ view }: { view: View }) {
   const [statusState, setStatusState] = useState<LoadState<DashboardStatus>>(() =>
     initialLoadState(),
   );
-  const [logsState, setLogsState] = useState<LoadState<LocalLogFile[]>>(() => initialLoadState());
+  const [logsState, setLogsState] = useState<LoadState<LogsResponse>>(() => initialLoadState());
   const [releasesState, setReleasesState] = useState<LoadState<ReleasesResponse>>(() =>
     initialLoadState(),
   );
@@ -113,7 +120,7 @@ export function Dashboard({ view }: { view: View }) {
     setLogsState(initialLoadState());
     try {
       const logs = await getLogs();
-      setLogsState({ status: "ready", data: logs.files, error: null });
+      setLogsState({ status: "ready", data: logs, error: null });
     } catch (error) {
       setLogsState({ status: "error", data: null, error: readableError(error) });
     }
@@ -609,8 +616,11 @@ function EmptyState({
     </div>
   );
 }
-function LogsPage({ logs, onRefresh }: { logs: LoadState<LocalLogFile[]>; onRefresh: () => void }) {
+function LogsPage({ logs, onRefresh }: { logs: LoadState<LogsResponse>; onRefresh: () => void }) {
   const [query, setQuery] = useState("");
+  const [level, setLevel] = useState<LogEntryLevel | "all">("all");
+  const [sourceId, setSourceId] = useState("all");
+  const [liveTail, setLiveTail] = useState(true);
 
   if (logs.status === "loading") {
     return <LoadingPanel label="Loading logs" />;
@@ -620,61 +630,223 @@ function LogsPage({ logs, onRefresh }: { logs: LoadState<LocalLogFile[]>; onRefr
     return <ErrorPanel title="Logs unavailable" message={logs.error} onRetry={onRefresh} />;
   }
 
-  const availableFiles = logs.data.filter((file) => file.exists);
-  const visibleFiles = availableFiles.map((file) => ({
-    ...file,
-    lines: file.lines.filter((line) => line.toLowerCase().includes(query.toLowerCase())),
-  }));
+  const availableSources = logs.data.sources.filter((source) => source.available);
+  const activeSourceId =
+    sourceId === "all" || availableSources.some((source) => source.id === sourceId)
+      ? sourceId
+      : "all";
+  const queryText = query.trim().toLowerCase();
+  const visibleEntries = logs.data.entries.filter((entry) => {
+    if (level !== "all" && entry.level !== level) {
+      return false;
+    }
+
+    if (activeSourceId !== "all" && entry.sourceId !== activeSourceId) {
+      return false;
+    }
+
+    if (!queryText) {
+      return true;
+    }
+
+    return `${entry.message} ${entry.raw} ${entry.sourceName}`.toLowerCase().includes(queryText);
+  });
+  const summary = summarizeLogs(logs.data.entries);
+  const shownEntries = liveTail ? visibleEntries.slice(-200) : visibleEntries.slice(0, 200);
 
   return (
     <div className="grid gap-5">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="relative w-full md:max-w-md">
-          <Search
-            aria-hidden="true"
-            className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-          />
-          <Input
-            aria-label="Filter logs"
-            className="pl-9"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Filter log lines"
-          />
+      <section className="overflow-hidden rounded-lg border bg-card">
+        <div className="grid gap-4 border-b p-4 lg:grid-cols-[1.2fr_2fr] lg:items-center">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-2 rounded-md bg-foreground px-2.5 py-1 text-sm font-medium text-background">
+                <span className="size-2 rounded-full bg-current" aria-hidden="true" />
+                {availableSources.length > 0 ? "Capturing Logs" : "No Stream Available"}
+              </span>
+              <span className="text-sm text-muted-foreground">
+                {formatCount(logs.data.entries.length)} recent entries
+              </span>
+            </div>
+            <p className="mt-2 break-words text-sm text-muted-foreground">
+              {primaryLogDetail(logs.data)}
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <LogMetric label="Errors" value={summary.errors} tone="error" />
+            <LogMetric label="Warnings" value={summary.warnings} tone="warn" />
+            <LogMetric label="Sources" value={availableSources.length} tone="default" />
+          </div>
         </div>
-        <Button type="button" variant="outline" onClick={onRefresh}>
-          <RefreshCw aria-hidden="true" />
-          Refresh
-        </Button>
-      </div>
+        <div className="grid gap-3 p-4 lg:grid-cols-[minmax(16rem,1fr)_12rem_auto_auto] lg:items-center">
+          <div className="relative min-w-0">
+            <Search
+              aria-hidden="true"
+              className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+            />
+            <Input
+              aria-label="Search Logs"
+              name="log-search"
+              autoComplete="off"
+              className="pl-9"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search logs…"
+              spellCheck={false}
+            />
+          </div>
+          <Select value={level} onValueChange={(value) => setLevel(value as LogEntryLevel | "all")}>
+            <SelectTrigger aria-label="Filter by Level">
+              <Filter aria-hidden="true" />
+              <SelectValue placeholder="Level" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Levels</SelectItem>
+              {logLevels.map((item) => (
+                <SelectItem key={item} value={item}>
+                  {levelLabel(item)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            type="button"
+            variant="outline"
+            aria-pressed={liveTail}
+            onClick={() => setLiveTail((current) => !current)}
+          >
+            {liveTail ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
+            {liveTail ? "Pause" : "Tail"}
+          </Button>
+          <Button type="button" variant="outline" onClick={onRefresh}>
+            <RefreshCw aria-hidden="true" />
+            Refresh
+          </Button>
+        </div>
+      </section>
 
-      {availableFiles.length === 0 ? (
+      {availableSources.length === 0 ? (
         <EmptyPanel
-          title="No local log files found"
-          message="Start Aripa with file logging enabled to review recent entries here."
+          title="No Logs Available"
+          message="Run Aripa in Docker, or start the local process with stdout written to a file."
         />
       ) : (
-        <div className="grid gap-4">
-          {visibleFiles.map((file) => (
-            <Card key={file.path}>
-              <CardHeader>
-                <CardTitle>{file.name}</CardTitle>
-                <CardDescription>
-                  {file.updatedAt
-                    ? `Updated ${new Date(file.updatedAt).toLocaleString()}`
-                    : "Not available"}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <pre className="max-h-[28rem] overflow-auto rounded-md bg-background p-3 text-xs leading-5 text-foreground">
-                  {file.lines.length > 0 ? file.lines.join("\n") : "No matching lines."}
-                </pre>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        <section className="min-w-0 overflow-hidden rounded-lg border bg-card">
+          <div className="border-b p-4">
+            <Tabs value={activeSourceId} onValueChange={setSourceId}>
+              <TabsList className="h-auto max-w-full flex-wrap justify-start">
+                <TabsTrigger value="all">All Logs</TabsTrigger>
+                {availableSources.map((source) => (
+                  <TabsTrigger key={source.id} value={source.id}>
+                    {sourceTabLabel(source.name)}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+          </div>
+          <div className="flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <h2 className="text-base font-semibold text-pretty">Runtime Events</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Showing {formatCount(shownEntries.length)} of {formatCount(visibleEntries.length)}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void copyLogEntries(shownEntries)}
+                disabled={shownEntries.length === 0}
+              >
+                <Clipboard aria-hidden="true" />
+                Copy
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => downloadLogEntries(shownEntries)}
+                disabled={shownEntries.length === 0}
+              >
+                <Download aria-hidden="true" />
+                Download
+              </Button>
+            </div>
+          </div>
+
+          {shownEntries.length === 0 ? (
+            <div className="p-4">
+              <EmptyPanel
+                title="No Matching Entries"
+                message="Adjust the search, level, or source filters."
+              />
+            </div>
+          ) : (
+            <div className="max-h-[42rem] overflow-auto overscroll-contain">
+              <div className="min-w-[52rem] divide-y">
+                {shownEntries.map((entry) => (
+                  <LogEntryRow key={entry.id} entry={entry} />
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
       )}
     </div>
+  );
+}
+
+function LogMetric({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone: "default" | "warn" | "error";
+}) {
+  return (
+    <div className="rounded-md border bg-background p-3">
+      <p className="text-xs font-medium uppercase text-muted-foreground">{label}</p>
+      <p className={`mt-2 text-2xl font-semibold ${logMetricClass(tone)}`}>{formatCount(value)}</p>
+    </div>
+  );
+}
+
+function LogEntryRow({ entry }: { entry: DashboardLogEntry }) {
+  const metadata = entry.metadata ? JSON.stringify(entry.metadata, null, 2) : null;
+
+  return (
+    <article className="grid grid-cols-[9rem_5.5rem_8rem_minmax(0,1fr)] gap-3 px-4 py-3 text-sm [contain-intrinsic-size:88px] [content-visibility:auto]">
+      <time className="text-xs text-muted-foreground" dateTime={entry.timestamp ?? undefined}>
+        {entry.timestamp ? formatTime(entry.timestamp) : "No Time"}
+      </time>
+      <div>
+        <span
+          className={`rounded-sm px-1.5 py-0.5 text-xs font-medium ${logLevelClass(entry.level)}`}
+        >
+          {levelLabel(entry.level)}
+        </span>
+      </div>
+      <p className="truncate text-xs text-muted-foreground">{entry.sourceName}</p>
+      <div className="min-w-0">
+        <p className="break-words font-mono text-xs leading-5" translate="no">
+          {entry.message}
+        </p>
+        {metadata ? (
+          <details className="mt-2">
+            <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
+              Details
+            </summary>
+            <pre
+              className="mt-2 overflow-auto rounded-md bg-background p-3 text-xs leading-5"
+              translate="no"
+            >
+              {metadata}
+            </pre>
+          </details>
+        ) : null}
+      </div>
+    </article>
   );
 }
 
@@ -1460,6 +1632,121 @@ function datumToneClass(tone: "default" | "good" | "muted"): string {
     case "default":
       return "text-foreground";
   }
+}
+
+const logLevels: LogEntryLevel[] = ["trace", "debug", "info", "warn", "error", "fatal", "unknown"];
+
+function summarizeLogs(entries: readonly DashboardLogEntry[]): {
+  errors: number;
+  warnings: number;
+} {
+  return {
+    errors: entries.filter((entry) => entry.level === "error" || entry.level === "fatal").length,
+    warnings: entries.filter((entry) => entry.level === "warn").length,
+  };
+}
+
+function primaryLogDetail(logs: LogsResponse): string {
+  const docker = logs.sources.find((source) => source.kind === "docker" && source.available);
+  const process = logs.sources.find((source) => source.kind === "process" && source.available);
+  const fileCount = logs.sources.filter(
+    (source) => source.kind === "file" && source.available,
+  ).length;
+
+  if (docker) {
+    return `Reading Docker output from ${docker.detail}.`;
+  }
+
+  if (process) {
+    return `Reading captured output from ${process.detail}.`;
+  }
+
+  if (fileCount > 0) {
+    return `Reading ${formatCount(fileCount)} local log ${fileCount === 1 ? "file" : "files"}.`;
+  }
+
+  return "Start Aripa with a captured log source to inspect runtime events here.";
+}
+
+function sourceTabLabel(name: string): string {
+  if (name === "Docker" || name === "Local Process") {
+    return name;
+  }
+
+  return name.split("/").at(-1) ?? name;
+}
+
+function levelLabel(level: LogEntryLevel): string {
+  switch (level) {
+    case "trace":
+      return "Trace";
+    case "debug":
+      return "Debug";
+    case "info":
+      return "Info";
+    case "warn":
+      return "Warn";
+    case "error":
+      return "Error";
+    case "fatal":
+      return "Fatal";
+    case "unknown":
+      return "Raw";
+  }
+}
+
+function logMetricClass(tone: "default" | "warn" | "error"): string {
+  switch (tone) {
+    case "error":
+      return "text-red-700 dark:text-red-300";
+    case "warn":
+      return "text-amber-700 dark:text-amber-300";
+    case "default":
+      return "text-foreground";
+  }
+}
+
+function logLevelClass(level: LogEntryLevel): string {
+  switch (level) {
+    case "fatal":
+    case "error":
+      return "bg-red-500/10 text-red-700 dark:text-red-300";
+    case "warn":
+      return "bg-amber-500/10 text-amber-700 dark:text-amber-300";
+    case "info":
+      return "bg-sky-500/10 text-sky-700 dark:text-sky-300";
+    case "debug":
+    case "trace":
+      return "bg-muted text-muted-foreground";
+    case "unknown":
+      return "bg-background text-muted-foreground";
+  }
+}
+
+async function copyLogEntries(entries: readonly DashboardLogEntry[]): Promise<void> {
+  await navigator.clipboard.writeText(formatLogEntries(entries));
+}
+
+function downloadLogEntries(entries: readonly DashboardLogEntry[]): void {
+  const blob = new Blob([formatLogEntries(entries)], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = `aripa-logs-${new Date().toISOString().replace(/[:.]/g, "-")}.log`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function formatLogEntries(entries: readonly DashboardLogEntry[]): string {
+  return entries
+    .map((entry) => {
+      const timestamp = entry.timestamp ?? "no-time";
+      return `[${timestamp}] [${entry.sourceName}] [${levelLabel(entry.level)}] ${entry.raw}`;
+    })
+    .join("\n");
 }
 
 function formatModel(model: RuntimeModelSelection): string {
