@@ -621,6 +621,54 @@ function LogsPage({ logs, onRefresh }: { logs: LoadState<LogsResponse>; onRefres
   const [level, setLevel] = useState<LogEntryLevel | "all">("all");
   const [sourceId, setSourceId] = useState("all");
   const [liveTail, setLiveTail] = useState(true);
+  const [entries, setEntries] = useState<DashboardLogEntry[]>([]);
+  const [streamState, setStreamState] = useState<"idle" | "live" | "paused" | "reconnecting">(
+    "idle",
+  );
+
+  useEffect(() => {
+    if (logs.status === "ready") {
+      setEntries(logs.data.entries);
+    }
+  }, [logs]);
+
+  useEffect(() => {
+    if (logs.status !== "ready") {
+      setStreamState("idle");
+      return;
+    }
+
+    if (!liveTail) {
+      setStreamState("paused");
+      return;
+    }
+
+    const dockerSource = logs.data.sources.find(
+      (source) => source.kind === "docker" && source.available,
+    );
+
+    if (!dockerSource) {
+      setStreamState("idle");
+      return;
+    }
+
+    const eventSource = new EventSource(
+      `/api/log-stream?source=${encodeURIComponent(dockerSource.id)}`,
+    );
+
+    eventSource.addEventListener("open", () => setStreamState("live"));
+    eventSource.addEventListener("log", (event) => {
+      const entry = JSON.parse(event.data) as DashboardLogEntry;
+      setEntries((current) => appendLogEntry(current, entry));
+    });
+    eventSource.addEventListener("stream-error", () => setStreamState("reconnecting"));
+    eventSource.addEventListener("done", () => setStreamState("reconnecting"));
+    eventSource.addEventListener("error", () => setStreamState("reconnecting"));
+
+    return () => {
+      eventSource.close();
+    };
+  }, [liveTail, logs]);
 
   if (logs.status === "loading") {
     return <LoadingPanel label="Loading logs" />;
@@ -636,7 +684,7 @@ function LogsPage({ logs, onRefresh }: { logs: LoadState<LogsResponse>; onRefres
       ? sourceId
       : "all";
   const queryText = query.trim().toLowerCase();
-  const visibleEntries = logs.data.entries.filter((entry) => {
+  const visibleEntries = entries.filter((entry) => {
     if (level !== "all" && entry.level !== level) {
       return false;
     }
@@ -651,7 +699,7 @@ function LogsPage({ logs, onRefresh }: { logs: LoadState<LogsResponse>; onRefres
 
     return `${entry.message} ${entry.raw} ${entry.sourceName}`.toLowerCase().includes(queryText);
   });
-  const summary = summarizeLogs(logs.data.entries);
+  const summary = summarizeLogs(entries);
   const shownEntries = liveTail ? visibleEntries.slice(-200) : visibleEntries.slice(0, 200);
 
   return (
@@ -662,10 +710,10 @@ function LogsPage({ logs, onRefresh }: { logs: LoadState<LogsResponse>; onRefres
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-2 rounded-md bg-foreground px-2.5 py-1 text-sm font-medium text-background">
                 <span className="size-2 rounded-full bg-current" aria-hidden="true" />
-                {availableSources.length > 0 ? "Capturing Logs" : "No Stream Available"}
+                {logCaptureLabel(availableSources.length, streamState)}
               </span>
               <span className="text-sm text-muted-foreground">
-                {formatCount(logs.data.entries.length)} recent entries
+                {formatCount(entries.length)} recent entries
               </span>
             </div>
             <p className="mt-2 break-words text-sm text-muted-foreground">
@@ -1636,6 +1684,22 @@ function datumToneClass(tone: "default" | "good" | "muted"): string {
 
 const logLevels: LogEntryLevel[] = ["trace", "debug", "info", "warn", "error", "fatal", "unknown"];
 
+function appendLogEntry(
+  entries: readonly DashboardLogEntry[],
+  entry: DashboardLogEntry,
+): DashboardLogEntry[] {
+  const entryKey = logEntryKey(entry);
+  if (entries.some((current) => logEntryKey(current) === entryKey)) {
+    return [...entries];
+  }
+
+  return [...entries, entry].slice(-800);
+}
+
+function logEntryKey(entry: DashboardLogEntry): string {
+  return `${entry.sourceId}:${entry.timestamp ?? ""}:${entry.raw}`;
+}
+
 function summarizeLogs(entries: readonly DashboardLogEntry[]): {
   errors: number;
   warnings: number;
@@ -1644,6 +1708,26 @@ function summarizeLogs(entries: readonly DashboardLogEntry[]): {
     errors: entries.filter((entry) => entry.level === "error" || entry.level === "fatal").length,
     warnings: entries.filter((entry) => entry.level === "warn").length,
   };
+}
+
+function logCaptureLabel(
+  sourceCount: number,
+  streamState: "idle" | "live" | "paused" | "reconnecting",
+): string {
+  if (sourceCount === 0) {
+    return "No Stream Available";
+  }
+
+  switch (streamState) {
+    case "live":
+      return "Live Logs";
+    case "paused":
+      return "Tail Paused";
+    case "reconnecting":
+      return "Reconnecting";
+    case "idle":
+      return "Capturing Logs";
+  }
 }
 
 function primaryLogDetail(logs: LogsResponse): string {
