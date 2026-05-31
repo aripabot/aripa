@@ -4,7 +4,7 @@ import {
   AUTO_UPDATE_CRON_PRESETS,
   type AutoUpdateCronExpression,
   type AutoUpdateCronPresetId,
-} from "@aripabot/core/update/release-updater.ts";
+} from "@aripabot/core/update/auto-update-cron.ts";
 
 export const RUNTIME_MODEL_PROVIDERS = [
   "openai",

@@ -1,6 +1,9 @@
-import { StrictMode, useEffect, useMemo, useState } from "react";
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import type * as React from "react";
-import { createRoot } from "react-dom/client";
 import {
   Activity,
   Bot,
@@ -17,8 +20,6 @@ import {
   Terminal,
 } from "lucide-react";
 
-import aripaMarkDark from "@/assets/aripa-mark-dark.svg";
-import aripaMarkLight from "@/assets/aripa-mark-light.svg";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -40,9 +41,8 @@ import type {
   SaveConfigResponse,
 } from "@/lib/api-types";
 import type { RuntimeJsonConfig, RuntimeModelSelection } from "@aripabot/core/config/config.ts";
-import "./styles.css";
 
-type View = "overview" | "logs" | "updates" | "settings";
+export type View = "overview" | "logs" | "updates" | "settings";
 type ThemeMode = "system" | "light" | "dark";
 type ResolvedTheme = "light" | "dark";
 type LoadState<T> =
@@ -50,15 +50,15 @@ type LoadState<T> =
   | { status: "ready"; data: T; error: null }
   | { status: "error"; data: null; error: string };
 
-const views: Array<{ id: View; label: string; icon: typeof Activity }> = [
-  { id: "overview", label: "Overview", icon: Activity },
-  { id: "logs", label: "Logs", icon: Logs },
-  { id: "updates", label: "Updates", icon: Download },
-  { id: "settings", label: "Settings", icon: Settings },
+const views: Array<{ id: View; label: string; href: string; icon: typeof Activity }> = [
+  { id: "overview", label: "Overview", href: "/", icon: Activity },
+  { id: "logs", label: "Logs", href: "/logs", icon: Logs },
+  { id: "updates", label: "Updates", href: "/updates", icon: Download },
+  { id: "settings", label: "Settings", href: "/settings", icon: Settings },
 ];
 
-function App() {
-  const [view, setView] = useState<View>(() => parseView(window.location.hash));
+export function Dashboard({ view }: { view: View }) {
+  const pathname = usePathname();
   const [statusState, setStatusState] = useState<LoadState<DashboardStatus>>(() =>
     initialLoadState(),
   );
@@ -69,12 +69,6 @@ function App() {
   const [themeMode, setThemeMode] = useState<ThemeMode>("system");
   const [systemTheme, setSystemTheme] = useState<ResolvedTheme>(() => preferredTheme());
   const resolvedTheme = themeMode === "system" ? systemTheme : themeMode;
-
-  useEffect(() => {
-    const onHashChange = () => setView(parseView(window.location.hash));
-    window.addEventListener("hashchange", onHashChange);
-    return () => window.removeEventListener("hashchange", onHashChange);
-  }, []);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
@@ -141,7 +135,7 @@ function App() {
             <div className="flex items-center gap-3">
               <picture>
                 <img
-                  src={resolvedTheme === "dark" ? aripaMarkDark : aripaMarkLight}
+                  src={resolvedTheme === "dark" ? "/aripa-mark-dark.svg" : "/aripa-mark-light.svg"}
                   alt=""
                   width="40"
                   height="40"
@@ -161,25 +155,25 @@ function App() {
             >
               {views.map((item) => {
                 const Icon = item.icon;
-                const active = item.id === view;
+                const active = item.href === pathname;
                 return (
-                  <a
+                  <Link
                     key={item.id}
-                    href={`#${item.id}`}
+                    href={item.href}
                     aria-current={active ? "page" : undefined}
                     className="inline-flex h-10 items-center justify-start gap-2 rounded-md px-4 py-2 text-sm font-medium transition-[background-color,color] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                     style={
                       active
                         ? {
-                          backgroundColor: "hsl(var(--foreground))",
-                          color: "hsl(var(--background))",
-                        }
+                            backgroundColor: "hsl(var(--foreground))",
+                            color: "hsl(var(--background))",
+                          }
                         : { color: "hsl(var(--foreground))" }
                     }
                   >
                     <Icon aria-hidden="true" className="size-4" />
                     {item.label}
-                  </a>
+                  </Link>
                 );
               })}
             </nav>
@@ -199,7 +193,6 @@ function App() {
           <header className="sticky top-0 z-20 border-b bg-background/92 backdrop-blur">
             <div className="flex min-h-16 items-center justify-between gap-3 px-4 sm:px-6">
               <div className="min-w-0">
-
                 <h1 className="truncate text-pretty text-xl font-semibold tracking-normal sm:text-2xl">
                   {viewTitle(view)}
                 </h1>
@@ -1086,16 +1079,15 @@ function EmptyPanel({ title, message }: { title: string; message: string }) {
   );
 }
 
-function parseView(hash: string): View {
-  const value = hash.replace(/^#/, "");
-  return views.some((item) => item.id === value) ? (value as View) : "overview";
-}
-
 function viewTitle(view: View): string {
   return views.find((item) => item.id === view)?.label ?? "Overview";
 }
 
 function preferredTheme(): ResolvedTheme {
+  if (typeof window === "undefined") {
+    return "light";
+  }
+
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
@@ -1140,9 +1132,3 @@ function formatTime(input: string): string {
     timeStyle: "short",
   }).format(new Date(input));
 }
-
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-);

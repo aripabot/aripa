@@ -3,6 +3,18 @@ import { createHash, createPublicKey, verify as verifySignature } from "node:cry
 import { basename, dirname, resolve, join } from "node:path";
 import { tmpdir } from "node:os";
 
+import {
+  AUTO_UPDATE_CRON_PRESETS,
+  type AutoUpdateCronExpression,
+  type AutoUpdateCronPresetId,
+} from "@aripabot/core/update/auto-update-cron.ts";
+
+export {
+  AUTO_UPDATE_CRON_PRESETS,
+  type AutoUpdateCronExpression,
+  type AutoUpdateCronPresetId,
+} from "@aripabot/core/update/auto-update-cron.ts";
+
 export const DEFAULT_GITHUB_REPO = "aripabot/aripa";
 export const DEFAULT_RELEASE_PUBLIC_KEY_PEM_B64 =
   "LS0tLS1CRUdJTiBQVUJMSUMgS0VZLS0tLS0KTUNvd0JRWURLMlZ3QXlFQVY4d2JnNEZXYzV5YTQ3VXFhalJ2L3Y3Qm1xd253WjlpREtzTm1uNXNwdzg9Ci0tLS0tRU5EIFBVQkxJQyBLRVktLS0tLQo=";
@@ -10,29 +22,6 @@ export const RELEASE_MANIFEST_ASSET_NAME = "aripa-release.json";
 export const RELEASE_MANIFEST_SIGNATURE_ASSET_NAME = "aripa-release.json.sig";
 export const RELEASE_PUBLIC_KEY_ENV = "ARIPA_RELEASE_PUBLIC_KEY_PEM";
 export const RELEASE_PUBLIC_KEY_BASE64_ENV = "ARIPA_RELEASE_PUBLIC_KEY_PEM_B64";
-export const AUTO_UPDATE_CRON_PRESETS = [
-  {
-    id: "daily-4am",
-    name: "Daily at 04:00",
-    description: "Install the latest release every morning.",
-    cronExpression: "0 4 * * *",
-  },
-  {
-    id: "weekly-sunday-4am",
-    name: "Weekly on Sunday at 04:00",
-    description: "Install the latest release during a quiet weekly window.",
-    cronExpression: "0 4 * * 0",
-  },
-  {
-    id: "monthly-first-4am",
-    name: "Monthly on the 1st at 04:00",
-    description: "Install the latest release once per month.",
-    cronExpression: "0 4 1 * *",
-  },
-] as const;
-
-export type AutoUpdateCronPresetId = (typeof AUTO_UPDATE_CRON_PRESETS)[number]["id"];
-export type AutoUpdateCronExpression = (typeof AUTO_UPDATE_CRON_PRESETS)[number]["cronExpression"];
 
 export interface GitHubReleaseAsset {
   name: string;
