@@ -62,6 +62,17 @@ export class GuildConfigStore {
     return row ? mapGuildConfigRow(row) : null;
   }
 
+  listGuildConfigs(): GuildConfig[] {
+    return this.db
+      .query<GuildConfigRow, []>(
+        `SELECT guild_id, log_channel_id, mod_logs_enabled, ban_message, mute_role_id, mute_mode, created_at, updated_at
+         FROM guild_config
+         ORDER BY updated_at DESC, guild_id ASC`,
+      )
+      .all()
+      .map(mapGuildConfigRow);
+  }
+
   getLogChannelId(guildId: string): string | null {
     return this.getGuildConfig(guildId)?.logChannelId ?? null;
   }
@@ -217,6 +228,32 @@ export class GuildConfigStore {
          ORDER BY tag_name ASC`,
       )
       .all(guildId)
+      .map((row) => ({
+        guildId: row.guild_id,
+        name: row.tag_name,
+        content: row.content,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      }));
+  }
+
+  listAllTags(): GuildTag[] {
+    return this.db
+      .query<
+        {
+          guild_id: string;
+          tag_name: string;
+          content: string;
+          created_at: string;
+          updated_at: string;
+        },
+        []
+      >(
+        `SELECT guild_id, tag_name, content, created_at, updated_at
+         FROM guild_tag
+         ORDER BY guild_id ASC, tag_name ASC`,
+      )
+      .all()
       .map((row) => ({
         guildId: row.guild_id,
         name: row.tag_name,

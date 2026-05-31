@@ -13,10 +13,79 @@ export interface DashboardStatus {
   databasePath: string;
   tokenConfigured: boolean;
   prefix: string;
+  botRuntime: BotRuntimeStatus;
+  operations: DashboardOperations;
   styles: StylePromptOption[];
   providers: RuntimeModelProvider[];
   reasoningEfforts: RuntimeReasoningEffort[];
   config: RuntimeJsonConfig;
+}
+
+export interface BotRuntimeStatus {
+  state: "running" | "docker" | "stopped";
+  label: string;
+  detail: string;
+}
+
+export interface DashboardOperations {
+  guilds: GuildOperationsSummary[];
+  activeMutes: ActiveMuteSummary[];
+  attentionItems: AttentionItem[];
+  totals: OperationsTotals;
+  discordLookup: DiscordLookupStatus;
+}
+
+export interface GuildOperationsSummary {
+  guildId: string;
+  name: string | null;
+  iconUrl: string | null;
+  logChannelId: string | null;
+  logChannelName: string | null;
+  modLogsEnabled: boolean;
+  banMessage: string | null;
+  muteRoleId: string | null;
+  muteRoleName: string | null;
+  muteMode: "none" | "role" | "timeout";
+  tagCount: number;
+  activeMuteCount: number;
+  updatedAt: string | null;
+  readiness: "ready" | "attention" | "quiet";
+}
+
+export interface ActiveMuteSummary {
+  guildId: string;
+  guildName: string | null;
+  userId: string;
+  username: string | null;
+  displayName: string | null;
+  avatarUrl: string | null;
+  muteRoleId: string;
+  muteRoleName: string | null;
+  expiresAt: string | null;
+  createdAt: string;
+  status: "active" | "expired" | "indefinite";
+}
+
+export interface AttentionItem {
+  id: string;
+  severity: "critical" | "warning" | "info";
+  title: string;
+  detail: string;
+  guildId?: string;
+}
+
+export interface OperationsTotals {
+  guilds: number;
+  readyGuilds: number;
+  attentionGuilds: number;
+  activeMutes: number;
+  expiredMutes: number;
+  tags: number;
+}
+
+export interface DiscordLookupStatus {
+  available: boolean;
+  detail: string;
 }
 
 export interface StylePromptOption {

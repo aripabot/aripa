@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import type * as React from "react";
 import {
   Activity,
-  Bot,
+  AlertCircle,
   CheckCircle2,
   Download,
   Logs,
@@ -14,10 +14,11 @@ import {
   RefreshCw,
   Save,
   Search,
+  Server,
   Settings,
-  ShieldCheck,
   Sun,
-  Terminal,
+  Tags,
+  UserRound,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -67,7 +68,7 @@ export function Dashboard({ view }: { view: View }) {
     initialLoadState(),
   );
   const [themeMode, setThemeMode] = useState<ThemeMode>("system");
-  const [systemTheme, setSystemTheme] = useState<ResolvedTheme>(() => preferredTheme());
+  const [systemTheme, setSystemTheme] = useState<ResolvedTheme>("light");
   const resolvedTheme = themeMode === "system" ? systemTheme : themeMode;
 
   useEffect(() => {
@@ -228,7 +229,16 @@ export function Dashboard({ view }: { view: View }) {
                 {view === "updates" && (
                   <UpdatesPage
                     releases={releasesState}
+                    status={statusState}
+                    currentPackageVersion={
+                      statusState.status === "ready" ? statusState.data.botVersion : null
+                    }
                     onRefresh={refreshReleases}
+                    onStatusRefresh={refreshStatus}
+                    onSettingsSaved={() => {
+                      void refreshStatus();
+                      void refreshReleases();
+                    }}
                     onInstalled={() => {
                       void refreshReleases();
                       void refreshStatus();
@@ -275,112 +285,330 @@ function Overview({
     return <ErrorPanel title="Overview unavailable" message={status.error} onRetry={onRefresh} />;
   }
 
-  const config = status.data.config;
-  const statCards = [
-    { label: "Bot name", value: config.name, icon: Bot },
-    { label: "Prefix", value: status.data.prefix, icon: Terminal },
-    {
-      label: "Token",
-      value: status.data.tokenConfigured ? "Configured" : "Missing",
-      icon: ShieldCheck,
-    },
-    { label: "Version", value: status.data.botVersion, icon: CheckCircle2 },
-  ];
+  const { operations } = status.data;
+  const visibleGuilds = operations.guilds.slice(0, 8);
+  const visibleMutes = operations.activeMutes.slice(0, 6);
+  const runtimeTone = runtimeToneClass(status.data.botRuntime.state);
 
   return (
-    <div className="grid gap-5">
-      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-        <div>
+    <div className="grid gap-6">
+      <section className="rounded-lg border bg-card">
+        <div className="flex flex-col gap-4 border-b p-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-3">
+              <span
+                className={`inline-flex items-center gap-2 rounded-md px-2.5 py-1 text-sm font-medium ${runtimeTone}`}
+              >
+                <span className="size-2 rounded-full bg-current" aria-hidden="true" />
+                {status.data.botRuntime.label}
+              </span>
+              <p className="break-words text-sm text-muted-foreground">
+                {status.data.botRuntime.detail}
+              </p>
+            </div>
+          </div>
+          <Button type="button" variant="outline" onClick={onRefresh}>
+            <RefreshCw aria-hidden="true" />
+            Refresh
+          </Button>
+        </div>
+
+        <div className="grid divide-y sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4">
+          <Metric label="Servers" value={operations.totals.guilds} detail="" />
+          <Metric
+            label="Need Attention"
+            value={operations.totals.attentionGuilds + operations.totals.expiredMutes}
+            detail=""
+          />
+          <Metric label="Active Mutes" value={operations.totals.activeMutes} detail="" />
+          <Metric label="Tags" value={operations.totals.tags} detail="" />
+        </div>
+      </section>
+
+      <section className="grid gap-3">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-base font-semibold text-pretty">Attention</h2>
+          <span className="text-sm text-muted-foreground">
+            {operations.discordLookup.available ? "" : "Discord names limited"}
+          </span>
+        </div>
+        {operations.attentionItems.length === 0 ? (
+          <div className="rounded-lg border bg-card p-4">
+            <div className="flex items-center gap-3">
+              <CheckCircle2
+                aria-hidden="true"
+                className="size-5 text-emerald-600 dark:text-emerald-400"
+              />
+              <p className="text-sm font-medium">No obvious setup issues.</p>
+            </div>
+          </div>
+        ) : (
+          <div className="divide-y rounded-lg border bg-card">
+            {operations.attentionItems.map((item) => (
+              <div key={item.id} className="flex gap-3 p-4">
+                <AlertCircle
+                  aria-hidden="true"
+                  className={`mt-0.5 size-4 shrink-0 ${attentionIconClass(item.severity)}`}
+                />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">{item.title}</p>
+                  <p className="mt-1 break-words text-sm text-muted-foreground">{item.detail}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="grid gap-3">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <h2 className="text-base font-semibold text-pretty">Servers</h2>
+          <p className="text-sm text-muted-foreground"></p>
+        </div>
+        {visibleGuilds.length === 0 ? (
+          <EmptyState
+            icon={Server}
+            title="No Servers Tracked"
+            message="Allowlist a server or configure guild settings to see operational status here."
+          />
+        ) : (
+          <div className="overflow-hidden rounded-lg border bg-card">
+            <div className="hidden grid-cols-[minmax(16rem,1.4fr)_repeat(4,minmax(8rem,1fr))] gap-4 border-b px-4 py-2 text-xs font-medium uppercase text-muted-foreground lg:grid">
+              <span>Server</span>
+              <span>Mod Logs</span>
+              <span>Mute Mode</span>
+              <span>Active Mutes</span>
+              <span>Tags</span>
+            </div>
+            <div className="divide-y">
+              {visibleGuilds.map((guild) => (
+                <GuildRow key={guild.guildId} guild={guild} />
+              ))}
+            </div>
+          </div>
+        )}
+      </section>
+
+      <section className="grid gap-3">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <h2 className="text-base font-semibold text-pretty">Active Mutes</h2>
           <p className="text-sm text-muted-foreground">
-            A compact view of the bot runtime and local configuration.
+            Role mutes waiting for manual or scheduled cleanup.
           </p>
         </div>
-        <Button type="button" variant="outline" onClick={onRefresh}>
-          <RefreshCw aria-hidden="true" />
-          Refresh
-        </Button>
+        {visibleMutes.length === 0 ? (
+          <EmptyState
+            icon={UserRound}
+            title="No Active Role Mutes"
+            message="Timed role mutes will appear here when they are stored for expiry."
+          />
+        ) : (
+          <div className="divide-y rounded-lg border bg-card">
+            {visibleMutes.map((mute) => (
+              <MuteRow key={`${mute.guildId}:${mute.userId}`} mute={mute} />
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="rounded-lg border bg-card">
+        <div className="grid gap-4 p-4 sm:grid-cols-3">
+          <RuntimeDetail label="Agent Model" value={formatModel(status.data.config.models.agent)} />
+          <RuntimeDetail
+            label="Rate Limit"
+            value={
+              status.data.config.agentRateLimitMessagesPerMinute === null
+                ? "Off"
+                : `${status.data.config.agentRateLimitMessagesPerMinute}/min`
+            }
+          />
+          <RuntimeDetail label="Version" value={status.data.botVersion} />
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function Metric({ label, value, detail }: { label: string; value: number; detail: string }) {
+  return (
+    <div className="p-4">
+      <p className="text-sm text-muted-foreground">{label}</p>
+      <p className="mt-2 text-3xl font-semibold tracking-normal">{formatCount(value)}</p>
+      <p className="mt-1 text-sm text-muted-foreground">{detail}</p>
+    </div>
+  );
+}
+
+function GuildRow({ guild }: { guild: DashboardStatus["operations"]["guilds"][number] }) {
+  const statusLabel =
+    guild.readiness === "attention"
+      ? "Needs Attention"
+      : guild.readiness === "ready"
+        ? "Ready"
+        : "Unconfigured";
+  const logStatus = guild.modLogsEnabled
+    ? guild.logChannelName
+      ? `#${guild.logChannelName}`
+      : guild.logChannelId
+        ? `#${guild.logChannelId}`
+        : "Missing Channel"
+    : guild.logChannelId
+      ? "Disabled"
+      : "Not Set";
+  const muteStatus =
+    guild.muteMode === "role"
+      ? guild.muteRoleName
+        ? `@${guild.muteRoleName}`
+        : guild.muteRoleId
+          ? `@${guild.muteRoleId}`
+          : "Missing Role"
+      : guild.muteMode === "timeout"
+        ? "Discord Timeout"
+        : "Off";
+
+  return (
+    <div className="grid gap-4 p-4 lg:grid-cols-[minmax(16rem,1.4fr)_repeat(4,minmax(8rem,1fr))] lg:items-center">
+      <div className="flex min-w-0 items-center gap-3">
+        {guild.iconUrl ? (
+          <img
+            src={guild.iconUrl}
+            alt=""
+            width="36"
+            height="36"
+            loading="lazy"
+            className="size-9 rounded-md"
+          />
+        ) : (
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted">
+            <Server aria-hidden="true" className="size-4 text-muted-foreground" />
+          </div>
+        )}
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium">{guild.name ?? guild.guildId}</p>
+          <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2">
+            <span className={`rounded-sm px-1.5 py-0.5 text-xs ${readinessClass(guild.readiness)}`}>
+              {statusLabel}
+            </span>
+            <span className="truncate text-xs text-muted-foreground" translate="no">
+              {guild.guildId}
+            </span>
+          </div>
+        </div>
       </div>
+      <ResponsiveDatum
+        label="Mod Logs"
+        value={logStatus}
+        tone={guild.modLogsEnabled ? "good" : "muted"}
+      />
+      <ResponsiveDatum
+        label="Mute Mode"
+        value={muteStatus}
+        tone={guild.muteMode === "none" ? "muted" : "good"}
+      />
+      <ResponsiveDatum label="Active Mutes" value={formatCount(guild.activeMuteCount)} />
+      <ResponsiveDatum label="Tags" value={formatCount(guild.tagCount)} icon={Tags} />
+    </div>
+  );
+}
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {statCards.map((card) => {
-          const Icon = card.icon;
-          return (
-            <Card key={card.label}>
-              <CardHeader className="flex-row items-center justify-between space-y-0">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  {card.label}
-                </CardTitle>
-                <Icon aria-hidden="true" className="size-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <p className="truncate text-2xl font-semibold">{card.value}</p>
-              </CardContent>
-            </Card>
-          );
-        })}
+function MuteRow({ mute }: { mute: DashboardStatus["operations"]["activeMutes"][number] }) {
+  const person = mute.displayName ?? mute.username ?? mute.userId;
+  const role = mute.muteRoleName ? `@${mute.muteRoleName}` : `@${mute.muteRoleId}`;
+
+  return (
+    <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex min-w-0 items-center gap-3">
+        {mute.avatarUrl ? (
+          <img
+            src={mute.avatarUrl}
+            alt=""
+            width="36"
+            height="36"
+            loading="lazy"
+            className="size-9 rounded-full"
+          />
+        ) : (
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted">
+            <UserRound aria-hidden="true" className="size-4 text-muted-foreground" />
+          </div>
+        )}
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium">{person}</p>
+          <p className="mt-1 truncate text-xs text-muted-foreground">
+            {mute.guildName ?? mute.guildId} · {role}
+          </p>
+        </div>
       </div>
-
-      <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-        <Card>
-          <CardHeader>
-            <CardTitle>Agent</CardTitle>
-            <CardDescription>Current model selection and guardrails.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-3 sm:grid-cols-2">
-            <Detail
-              label="Agent model"
-              value={`${config.models.agent.provider} / ${config.models.agent.model}`}
-            />
-            <Detail
-              label="Summarizer"
-              value={`${config.models.summarizer.provider} / ${config.models.summarizer.model}`}
-            />
-            <Detail
-              label="Web search"
-              value={config.models.web.enabled ? config.models.web.model : "Disabled"}
-            />
-            <Detail
-              label="Rate limit"
-              value={
-                config.agentRateLimitMessagesPerMinute === null
-                  ? "Off"
-                  : `${config.agentRateLimitMessagesPerMinute} messages per minute`
-              }
-            />
-            <Detail
-              label="Concurrent requests"
-              value={`${config.agentMaxConcurrentRequests} global, ${config.agentMaxConcurrentRequestsPerGuild} per server`}
-            />
-            <Detail label="Style" value={config.stylePrompt} />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Access</CardTitle>
-            <CardDescription>Server allowlist and privacy posture.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Detail
-              label="Allowlisted servers"
-              value={
-                config.allowlistedServerIds.length === 0
-                  ? "No servers configured"
-                  : `${config.allowlistedServerIds.length} server${config.allowlistedServerIds.length === 1 ? "" : "s"}`
-              }
-            />
-            <Detail label="Log privacy" value={config.logPrivacy ? "Enabled" : "Disabled"} />
-            <div className="rounded-md border bg-background p-3">
-              <p className="text-xs font-medium text-muted-foreground">Database</p>
-              <p className="mt-1 break-all text-sm">{status.data.databasePath}</p>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+        <span className={`rounded-sm px-1.5 py-0.5 text-xs ${muteStatusClass(mute.status)}`}>
+          {mute.status === "expired"
+            ? "Expired"
+            : mute.status === "indefinite"
+              ? "Indefinite"
+              : "Active"}
+        </span>
+        <span className="text-sm text-muted-foreground">
+          {mute.expiresAt ? formatDateTime(mute.expiresAt) : "No expiry"}
+        </span>
       </div>
     </div>
   );
 }
 
+function ResponsiveDatum({
+  label,
+  value,
+  tone = "default",
+  icon: Icon,
+}: {
+  label: string;
+  value: string;
+  tone?: "default" | "good" | "muted";
+  icon?: typeof Tags;
+}) {
+  return (
+    <div className="min-w-0">
+      <p className="text-xs font-medium uppercase text-muted-foreground lg:hidden">{label}</p>
+      <p
+        className={`mt-1 flex min-w-0 items-center gap-2 truncate text-sm lg:mt-0 ${datumToneClass(tone)}`}
+      >
+        {Icon ? <Icon aria-hidden="true" className="size-3.5 shrink-0" /> : null}
+        <span className="truncate">{value}</span>
+      </p>
+    </div>
+  );
+}
+
+function RuntimeDetail({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-sm text-muted-foreground">{label}</p>
+      <p className="mt-1 truncate text-sm font-medium">{value}</p>
+    </div>
+  );
+}
+
+function EmptyState({
+  icon: Icon,
+  title,
+  message,
+}: {
+  icon: typeof Server;
+  title: string;
+  message: string;
+}) {
+  return (
+    <div className="rounded-lg border bg-card p-4">
+      <div className="flex items-start gap-3">
+        <Icon aria-hidden="true" className="mt-0.5 size-4 text-muted-foreground" />
+        <div className="min-w-0">
+          <p className="text-sm font-medium">{title}</p>
+          <p className="mt-1 break-words text-sm text-muted-foreground">{message}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
 function LogsPage({ logs, onRefresh }: { logs: LoadState<LocalLogFile[]>; onRefresh: () => void }) {
   const [query, setQuery] = useState("");
 
@@ -452,11 +680,19 @@ function LogsPage({ logs, onRefresh }: { logs: LoadState<LocalLogFile[]>; onRefr
 
 function UpdatesPage({
   releases,
+  status,
+  currentPackageVersion,
   onRefresh,
+  onStatusRefresh,
+  onSettingsSaved,
   onInstalled,
 }: {
   releases: LoadState<ReleasesResponse>;
+  status: LoadState<DashboardStatus>;
+  currentPackageVersion: string | null;
   onRefresh: () => void;
+  onStatusRefresh: () => void;
+  onSettingsSaved: (result: SaveConfigResponse) => void;
   onInstalled: () => void;
 }) {
   const [installingTag, setInstallingTag] = useState<string | null>(null);
@@ -504,6 +740,7 @@ function UpdatesPage({
           {message}
         </p>
       ) : null}
+      <UpdateSettingsPanel status={status} onRetry={onStatusRefresh} onSaved={onSettingsSaved} />
       {releases.data.releases.length === 0 ? (
         <EmptyPanel
           title="No releases available"
@@ -511,42 +748,210 @@ function UpdatesPage({
         />
       ) : (
         <div className="grid gap-3">
-          {releases.data.releases.map((release, index) => (
-            <Card key={release.id}>
-              <CardContent className="flex flex-col gap-4 p-5 md:flex-row md:items-center md:justify-between">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="truncate text-base font-semibold">{release.name}</h2>
-                    {index === 0 ? (
-                      <span className="rounded-md bg-success/15 px-2 py-1 text-xs font-medium text-success">
-                        Latest
-                      </span>
-                    ) : null}
-                    {release.prerelease ? (
-                      <span className="rounded-md bg-warning/15 px-2 py-1 text-xs font-medium text-warning">
-                        Pre-release
-                      </span>
-                    ) : null}
+          {releases.data.releases.map((release, index) => {
+            const isInstalled =
+              normalizeVersionTag(release.tagName) === normalizeVersionTag(currentPackageVersion);
+
+            return (
+              <Card key={release.id}>
+                <CardContent className="flex flex-col gap-4 p-5 md:flex-row md:items-center md:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="truncate text-base font-semibold">{release.name}</h2>
+                      {index === 0 ? (
+                        <span className="rounded-md bg-success/15 px-2 py-1 text-xs font-medium text-success">
+                          Latest
+                        </span>
+                      ) : null}
+                      {isInstalled ? (
+                        <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
+                          Installed
+                        </span>
+                      ) : null}
+                      {release.prerelease ? (
+                        <span className="rounded-md bg-warning/15 px-2 py-1 text-xs font-medium text-warning">
+                          Pre-release
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {release.tagName} · {formatDate(release.publishedAt)}
+                    </p>
                   </div>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {release.tagName} · {formatDate(release.publishedAt)}
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  variant={index === 0 ? "default" : "outline"}
-                  disabled={installingTag !== null}
-                  onClick={() => void install(release.tagName)}
-                >
-                  <Download aria-hidden="true" />
-                  {installingTag === release.tagName ? "Installing…" : "Install"}
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
+                  <Button
+                    type="button"
+                    variant={index === 0 ? "default" : "outline"}
+                    disabled={installingTag !== null || isInstalled}
+                    onClick={() => void install(release.tagName)}
+                  >
+                    <Download aria-hidden="true" />
+                    {isInstalled
+                      ? "Installed"
+                      : installingTag === release.tagName
+                        ? "Installing…"
+                        : "Install"}
+                  </Button>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>
+  );
+}
+
+function UpdateSettingsPanel({
+  status,
+  onRetry,
+  onSaved,
+}: {
+  status: LoadState<DashboardStatus>;
+  onRetry: () => void;
+  onSaved: (result: SaveConfigResponse) => void;
+}) {
+  const [config, setConfig] = useState<RuntimeJsonConfig | null>(
+    status.status === "ready" ? status.data.config : null,
+  );
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (status.status === "ready") {
+      setConfig(status.data.config);
+    }
+  }, [status]);
+
+  if (status.status === "loading" || config === null) {
+    return <LoadingPanel label="Loading update settings" />;
+  }
+
+  if (status.status === "error") {
+    return (
+      <ErrorPanel title="Update settings unavailable" message={status.error} onRetry={onRetry} />
+    );
+  }
+
+  const dirty = JSON.stringify(config.updates) !== JSON.stringify(status.data.config.updates);
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (config === null) {
+      return;
+    }
+
+    setSaving(true);
+    setMessage(null);
+    try {
+      const result = await saveConfig({ config });
+      setConfig(result.config);
+      setMessage(`Saved ${formatTime(result.savedAt)}.`);
+      onSaved(result);
+    } catch (error) {
+      setMessage(readableError(error));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <CardTitle>Update Settings</CardTitle>
+          <CardDescription>Release source and automatic install schedule.</CardDescription>
+        </div>
+        <Button type="submit" form="update-settings-form" disabled={saving || !dirty}>
+          <Save aria-hidden="true" />
+          {saving ? "Saving…" : "Save Update Settings"}
+        </Button>
+      </CardHeader>
+      <CardContent>
+        <form id="update-settings-form" className="grid gap-4" onSubmit={submit}>
+          {message ? (
+            <p className="rounded-md border bg-background px-3 py-2 text-sm" aria-live="polite">
+              {message}
+            </p>
+          ) : null}
+          <div className="grid gap-4 md:grid-cols-2">
+            <SwitchField
+              label="Enable updates"
+              checked={config.updates.enabled}
+              onCheckedChange={(enabled) =>
+                setConfig({ ...config, updates: { ...config.updates, enabled } })
+              }
+            />
+            <SwitchField
+              label="Automatic installs"
+              checked={config.updates.autoInstall.enabled}
+              onCheckedChange={(enabled) =>
+                setConfig({
+                  ...config,
+                  updates: {
+                    ...config.updates,
+                    autoInstall: { ...config.updates.autoInstall, enabled },
+                  },
+                })
+              }
+            />
+            <Field label="Repository" htmlFor="update-repo">
+              <Input
+                id="update-repo"
+                name="update-repository"
+                autoComplete="off"
+                value={config.updates.githubRepo}
+                onChange={(event) =>
+                  setConfig({
+                    ...config,
+                    updates: { ...config.updates, githubRepo: event.target.value },
+                  })
+                }
+              />
+            </Field>
+            <Field label="Cron expression" htmlFor="update-cron">
+              <Input
+                id="update-cron"
+                name="update-cron-expression"
+                autoComplete="off"
+                value={config.updates.autoInstall.cronExpression}
+                onChange={(event) =>
+                  setConfig({
+                    ...config,
+                    updates: {
+                      ...config.updates,
+                      autoInstall: {
+                        ...config.updates.autoInstall,
+                        cronExpression: event.target
+                          .value as RuntimeJsonConfig["updates"]["autoInstall"]["cronExpression"],
+                      },
+                    },
+                  })
+                }
+              />
+            </Field>
+            <Field label="Release public key" htmlFor="release-key">
+              <Textarea
+                id="release-key"
+                name="release-public-key"
+                autoComplete="off"
+                value={config.updates.releasePublicKeyPemBase64 ?? ""}
+                onChange={(event) =>
+                  setConfig({
+                    ...config,
+                    updates: {
+                      ...config.updates,
+                      releasePublicKeyPemBase64: event.target.value.trim() || undefined,
+                    },
+                  })
+                }
+                placeholder="Optional base64 public key…"
+                spellCheck={false}
+              />
+            </Field>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -824,89 +1229,6 @@ function SettingsPage({
           </CardContent>
         </Card>
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Updates</CardTitle>
-          <CardDescription>Release source and automatic update schedule.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-2">
-          <SwitchField
-            label="Enable updates"
-            checked={config.updates.enabled}
-            onCheckedChange={(enabled) =>
-              setConfig({ ...config, updates: { ...config.updates, enabled } })
-            }
-          />
-          <SwitchField
-            label="Automatic installs"
-            checked={config.updates.autoInstall.enabled}
-            onCheckedChange={(enabled) =>
-              setConfig({
-                ...config,
-                updates: {
-                  ...config.updates,
-                  autoInstall: { ...config.updates.autoInstall, enabled },
-                },
-              })
-            }
-          />
-          <Field label="Repository" htmlFor="update-repo">
-            <Input
-              id="update-repo"
-              name="update-repository"
-              autoComplete="off"
-              value={config.updates.githubRepo}
-              onChange={(event) =>
-                setConfig({
-                  ...config,
-                  updates: { ...config.updates, githubRepo: event.target.value },
-                })
-              }
-            />
-          </Field>
-          <Field label="Cron expression" htmlFor="update-cron">
-            <Input
-              id="update-cron"
-              name="update-cron-expression"
-              autoComplete="off"
-              value={config.updates.autoInstall.cronExpression}
-              onChange={(event) =>
-                setConfig({
-                  ...config,
-                  updates: {
-                    ...config.updates,
-                    autoInstall: {
-                      ...config.updates.autoInstall,
-                      cronExpression: event.target
-                        .value as RuntimeJsonConfig["updates"]["autoInstall"]["cronExpression"],
-                    },
-                  },
-                })
-              }
-            />
-          </Field>
-          <Field label="Release public key" htmlFor="release-key">
-            <Textarea
-              id="release-key"
-              name="release-public-key"
-              autoComplete="off"
-              value={config.updates.releasePublicKeyPemBase64 ?? ""}
-              onChange={(event) =>
-                setConfig({
-                  ...config,
-                  updates: {
-                    ...config.updates,
-                    releasePublicKeyPemBase64: event.target.value.trim() || undefined,
-                  },
-                })
-              }
-              placeholder="Optional base64 public key…"
-              spellCheck={false}
-            />
-          </Field>
-        </CardContent>
-      </Card>
     </form>
   );
 }
@@ -1022,15 +1344,6 @@ function SwitchField({
   );
 }
 
-function Detail({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-md border bg-background p-3">
-      <p className="text-xs font-medium text-muted-foreground">{label}</p>
-      <p className="mt-1 break-words text-sm">{value}</p>
-    </div>
-  );
-}
-
 function LoadingPanel({ label }: { label: string }) {
   return (
     <Card>
@@ -1083,12 +1396,73 @@ function viewTitle(view: View): string {
   return views.find((item) => item.id === view)?.label ?? "Overview";
 }
 
-function preferredTheme(): ResolvedTheme {
-  if (typeof window === "undefined") {
-    return "light";
+function runtimeToneClass(state: DashboardStatus["botRuntime"]["state"]): string {
+  switch (state) {
+    case "running":
+      return "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+    case "docker":
+      return "bg-sky-500/10 text-sky-700 dark:text-sky-300";
+    case "stopped":
+      return "bg-red-500/10 text-red-700 dark:text-red-300";
   }
+}
 
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+function readinessClass(readiness: DashboardStatus["operations"]["guilds"][number]["readiness"]) {
+  switch (readiness) {
+    case "ready":
+      return "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+    case "attention":
+      return "bg-red-500/10 text-red-700 dark:text-red-300";
+    case "quiet":
+      return "bg-muted text-muted-foreground";
+  }
+}
+
+function attentionIconClass(
+  severity: DashboardStatus["operations"]["attentionItems"][number]["severity"],
+) {
+  switch (severity) {
+    case "critical":
+      return "text-red-600 dark:text-red-400";
+    case "warning":
+      return "text-amber-600 dark:text-amber-400";
+    case "info":
+      return "text-sky-600 dark:text-sky-400";
+  }
+}
+
+function muteStatusClass(status: DashboardStatus["operations"]["activeMutes"][number]["status"]) {
+  switch (status) {
+    case "active":
+      return "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+    case "expired":
+      return "bg-red-500/10 text-red-700 dark:text-red-300";
+    case "indefinite":
+      return "bg-muted text-muted-foreground";
+  }
+}
+
+function datumToneClass(tone: "default" | "good" | "muted"): string {
+  switch (tone) {
+    case "good":
+      return "text-foreground";
+    case "muted":
+      return "text-muted-foreground";
+    case "default":
+      return "text-foreground";
+  }
+}
+
+function formatModel(model: RuntimeModelSelection): string {
+  return `${model.provider} / ${model.model}`;
+}
+
+function normalizeVersionTag(value: string | null): string | null {
+  return value?.replace(/^v(?=\d)/i, "") ?? null;
+}
+
+function formatCount(value: number): string {
+  return new Intl.NumberFormat().format(value);
 }
 
 function nextThemeMode(themeMode: ThemeMode): ThemeMode {
@@ -1124,6 +1498,13 @@ function readableError(error: unknown): string {
 function formatDate(input: string): string {
   return new Intl.DateTimeFormat(undefined, {
     dateStyle: "medium",
+  }).format(new Date(input));
+}
+
+function formatDateTime(input: string): string {
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
   }).format(new Date(input));
 }
 

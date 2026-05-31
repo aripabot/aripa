@@ -5,7 +5,7 @@ WORKDIR /app
 COPY package.json bun.lock ./
 COPY apps/bot/package.json ./apps/bot/package.json
 COPY packages/core/package.json ./packages/core/package.json
-RUN bun install --frozen-lockfile --production
+RUN bun install 
 
 FROM oven/bun:1.3-alpine AS runtime
 
