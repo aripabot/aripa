@@ -1044,11 +1044,11 @@ function SettingsPage({
         </p>
       ) : null}
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="grid gap-4 xl:grid-cols-3">
         <Card>
           <CardHeader>
             <CardTitle>Identity</CardTitle>
-            <CardDescription>How Aripa presents itself and limits access.</CardDescription>
+            <CardDescription>How Aripa presents itself.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
             <Field label="Bot name" htmlFor="name">
@@ -1092,6 +1092,15 @@ function SettingsPage({
                 </SelectContent>
               </Select>
             </Field>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Access Controls</CardTitle>
+            <CardDescription>Servers allowed to use Aripa.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4">
             <Field label="Server allowlist" htmlFor="allowlist">
               <Textarea
                 id="allowlist"
