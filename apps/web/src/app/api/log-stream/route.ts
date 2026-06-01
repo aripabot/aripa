@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 
 import { parseLogLine } from "@/server/config-service";
+import { requireDashboardApiAuth } from "@/server/dashboard-auth-next";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -9,6 +10,11 @@ const DOCKER_CONTAINER_NAME = "aripabot-docker";
 const DOCKER_SOURCE_ID = `docker:${DOCKER_CONTAINER_NAME}`;
 
 export async function GET(request: Request): Promise<Response> {
+  const authError = await requireDashboardApiAuth(request);
+  if (authError) {
+    return authError;
+  }
+
   const url = new URL(request.url);
   const source = url.searchParams.get("source") ?? DOCKER_SOURCE_ID;
 

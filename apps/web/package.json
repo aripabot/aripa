@@ -8,6 +8,7 @@
     "build": "bunx next build",
     "start": "bunx next start -H 127.0.0.1",
     "preview": "bun run build && bun run start",
+    "dashboard:password": "bun --env-file=../../.env src/scripts/create-dashboard-password.ts",
     "lint": "oxlint",
     "format": "oxfmt",
     "test": "bun --bun ../../node_modules/vitest/vitest.mjs run",

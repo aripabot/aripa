@@ -12,6 +12,7 @@ import {
   Container,
   Download,
   Filter,
+  LogOut,
   Logs,
   Moon,
   Pause,
@@ -195,6 +196,11 @@ export function Dashboard({
     }
   }
 
+  async function signOut() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.refresh();
+  }
+
   function markNavigationPending(href: string, event: React.MouseEvent<HTMLAnchorElement>): void {
     if (
       event.defaultPrevented ||
@@ -285,6 +291,10 @@ export function Dashboard({
                   : "Loading config path…"}
               </p>
             </div>
+            <Button type="button" variant="outline" onClick={() => void signOut()}>
+              <LogOut aria-hidden="true" />
+              Sign Out
+            </Button>
           </div>
         </aside>
 

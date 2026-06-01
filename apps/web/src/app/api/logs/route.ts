@@ -1,20 +1,18 @@
-import type { UpdateInstallRequest } from "@/lib/api-types";
 import { json, jsonError } from "@/app/api/_utils/json";
+import { readLocalLogs } from "@/server/config-service";
 import { requireDashboardApiAuth } from "@/server/dashboard-auth-next";
-import { installRelease } from "@/server/update-service";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function POST(request: Request) {
+export async function GET(request: Request) {
   const authError = await requireDashboardApiAuth(request);
   if (authError) {
     return authError;
   }
 
   try {
-    const body = (await request.json()) as UpdateInstallRequest;
-    return json(await installRelease(body.tagName));
+    return json(await readLocalLogs());
   } catch (error) {
     return jsonError(error);
   }
