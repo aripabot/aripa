@@ -2,12 +2,16 @@ import { spawn } from "node:child_process";
 
 import { parseLogLine } from "@/server/config-service";
 import { requireDashboardApiAuth } from "@/server/dashboard-auth-next";
+import {
+  CURRENT_DOCKER_SOURCE_ID,
+  HOST_DOCKER_SOURCE_ID,
+  DOCKER_CONTAINER_NAME,
+  getDockerRuntimeLogPath,
+  isInsideDockerRuntime,
+} from "@/server/docker-runtime";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-const DOCKER_CONTAINER_NAME = "aripabot-docker";
-const DOCKER_SOURCE_ID = `docker:${DOCKER_CONTAINER_NAME}`;
 
 export async function GET(request: Request): Promise<Response> {
   const authError = await requireDashboardApiAuth(request);
@@ -16,9 +20,10 @@ export async function GET(request: Request): Promise<Response> {
   }
 
   const url = new URL(request.url);
-  const source = url.searchParams.get("source") ?? DOCKER_SOURCE_ID;
+  const defaultSource = isInsideDockerRuntime() ? CURRENT_DOCKER_SOURCE_ID : HOST_DOCKER_SOURCE_ID;
+  const source = url.searchParams.get("source") ?? defaultSource;
 
-  if (source !== DOCKER_SOURCE_ID) {
+  if (source !== HOST_DOCKER_SOURCE_ID && source !== CURRENT_DOCKER_SOURCE_ID) {
     return Response.json(
       { error: "Realtime streaming is currently available for Docker logs only." },
       { status: 400 },
@@ -30,16 +35,15 @@ export async function GET(request: Request): Promise<Response> {
   let lineIndex = 0;
   let stdoutBuffer = "";
   let stderrBuffer = "";
-  let dockerProcess: ReturnType<typeof spawn> | null = null;
+  let logProcess: ReturnType<typeof spawn> | null = null;
+  const streamConfig = createLogStreamConfig(source);
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
-      const currentProcess = spawn(
-        "docker",
-        ["logs", "--follow", "--timestamps", "--tail", "0", DOCKER_CONTAINER_NAME],
-        { stdio: ["ignore", "pipe", "pipe"] },
-      );
-      dockerProcess = currentProcess;
+      const currentProcess = spawn(streamConfig.command, streamConfig.args, {
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      logProcess = currentProcess;
 
       function enqueue(event: string, payload: unknown) {
         if (closed) {
@@ -56,7 +60,7 @@ export async function GET(request: Request): Promise<Response> {
 
         const entry = parseLogLine(
           line,
-          { id: DOCKER_SOURCE_ID, kind: "docker", name: "Docker" },
+          { id: streamConfig.sourceId, kind: "docker", name: "Docker" },
           lineIndex,
         );
         lineIndex += 1;
@@ -100,7 +104,7 @@ export async function GET(request: Request): Promise<Response> {
         close();
       });
 
-      enqueue("ready", { sourceId: DOCKER_SOURCE_ID });
+      enqueue("ready", { sourceId: streamConfig.sourceId });
 
       function close() {
         if (closed) {
@@ -108,14 +112,14 @@ export async function GET(request: Request): Promise<Response> {
         }
 
         closed = true;
-        dockerProcess = null;
+        logProcess = null;
         controller.close();
       }
     },
     cancel() {
       closed = true;
-      dockerProcess?.kill();
-      dockerProcess = null;
+      logProcess?.kill();
+      logProcess = null;
     },
   });
 
@@ -127,6 +131,26 @@ export async function GET(request: Request): Promise<Response> {
       "x-accel-buffering": "no",
     },
   });
+}
+
+function createLogStreamConfig(sourceId: string): {
+  sourceId: string;
+  command: string;
+  args: string[];
+} {
+  if (sourceId === CURRENT_DOCKER_SOURCE_ID) {
+    return {
+      sourceId,
+      command: "tail",
+      args: ["-n", "0", "-f", getDockerRuntimeLogPath()],
+    };
+  }
+
+  return {
+    sourceId: HOST_DOCKER_SOURCE_ID,
+    command: "docker",
+    args: ["logs", "--follow", "--timestamps", "--tail", "0", DOCKER_CONTAINER_NAME],
+  };
 }
 
 function flushLines(text: string): { lines: string[]; rest: string } {

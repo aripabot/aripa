@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 
 import { describe, expect, test } from "vitest";
 
-import { parseLogLine, readConfig, saveConfig } from "@/server/config-service";
+import { parseLogLine, readConfig, readLocalLogs, saveConfig } from "@/server/config-service";
 import { cloneDefaultRuntimeConfig } from "@aripabot/core/config/config.ts";
 
 describe("dashboard config service", () => {
@@ -89,6 +89,46 @@ describe("dashboard config service", () => {
         nested: { apiKey: "[redacted]" },
       },
     });
+  });
+
+  test("reads current container logs when running inside Docker", async () => {
+    const previousDockerRuntime = process.env.ARIPA_DOCKER_RUNTIME;
+    const previousDockerLogPath = process.env.ARIPA_DOCKER_LOG_PATH;
+    const directory = await mkdtemp(join(tmpdir(), "aripa-docker-log-test-"));
+    const logPath = join(directory, "aripa-docker.log");
+
+    try {
+      process.env.ARIPA_DOCKER_RUNTIME = "1";
+      process.env.ARIPA_DOCKER_LOG_PATH = logPath;
+      await Bun.write(
+        logPath,
+        `${JSON.stringify({
+          level: 30,
+          time: 1_735_689_600_000,
+          msg: "Container log line.",
+        })}\n`,
+      );
+
+      const result = await readLocalLogs();
+      const dockerSource = result.sources.find((source) => source.id === "docker:current");
+
+      expect(dockerSource?.available).toBe(true);
+      expect(result.entries.some((entry) => entry.message === "Container log line.")).toBe(true);
+    } finally {
+      if (previousDockerRuntime === undefined) {
+        delete process.env.ARIPA_DOCKER_RUNTIME;
+      } else {
+        process.env.ARIPA_DOCKER_RUNTIME = previousDockerRuntime;
+      }
+
+      if (previousDockerLogPath === undefined) {
+        delete process.env.ARIPA_DOCKER_LOG_PATH;
+      } else {
+        process.env.ARIPA_DOCKER_LOG_PATH = previousDockerLogPath;
+      }
+
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 });
 

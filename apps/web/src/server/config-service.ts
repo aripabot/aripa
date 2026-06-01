@@ -41,6 +41,14 @@ import type {
   SaveConfigResponse,
   StylePromptOption,
 } from "@/lib/api-types";
+import {
+  CURRENT_DOCKER_SOURCE_ID,
+  DOCKER_CONTAINER_NAME,
+  HOST_DOCKER_SOURCE_ID,
+  getDockerRuntimeLogPath,
+  isInsideDockerRuntime,
+} from "@/server/docker-runtime";
+import { requestBotRuntimeConfigReload } from "@/server/bot-runtime-control";
 
 const appRoot = process.cwd();
 const repositoryRoot = join(/* turbopackIgnore: true */ appRoot, "../..");
@@ -50,7 +58,6 @@ const webPackageJsonPath = join(appRoot, "package.json");
 const rootEnv = readRootEnv();
 const STYLE_PROMPTS = ["match", "concise", "formal", "friendly", "original", "playful"] as const;
 const execFileAsync = promisify(execFile);
-const DOCKER_CONTAINER_NAME = "aripabot-docker";
 const LOG_TAIL_LINE_COUNT = 500;
 const AUTO_UPDATE_CRON_BEGIN = "# BEGIN ARIPA AUTO UPDATE";
 const AUTO_UPDATE_CRON_END = "# END ARIPA AUTO UPDATE";
@@ -135,6 +142,7 @@ export async function saveConfig(config: RuntimeJsonConfig): Promise<SaveConfigR
   const mergedConfig = { ...existing, ...parsedConfig };
 
   await writeFile(pathOrUrl, `${JSON.stringify(mergedConfig, null, 2)}\n`);
+  await requestBotRuntimeConfigReload();
 
   return {
     path: formatPath(pathOrUrl),
@@ -482,6 +490,14 @@ async function readLocalOperations(databasePath: string): Promise<LocalOperation
 }
 
 async function getBotRuntimeStatus(): Promise<BotRuntimeStatus> {
+  if (isInsideDockerRuntime()) {
+    return {
+      state: "docker",
+      label: "Running via Docker",
+      detail: "Current Aripa Docker container is active.",
+    };
+  }
+
   if (await isDockerContainerRunning(DOCKER_CONTAINER_NAME)) {
     return {
       state: "docker",
@@ -796,9 +812,13 @@ export async function readLocalLogs(): Promise<LogsResponse> {
 }
 
 async function readDockerLogs(): Promise<LogSourceWithEntries> {
+  if (isInsideDockerRuntime()) {
+    return readCurrentDockerRuntimeLogs();
+  }
+
   const running = await isDockerContainerRunning(DOCKER_CONTAINER_NAME);
   const source: DashboardLogSource = {
-    id: `docker:${DOCKER_CONTAINER_NAME}`,
+    id: HOST_DOCKER_SOURCE_ID,
     kind: "docker",
     name: "Docker",
     detail: DOCKER_CONTAINER_NAME,
@@ -829,6 +849,38 @@ async function readDockerLogs(): Promise<LogSourceWithEntries> {
       ...source,
       available: false,
       message: `Docker logs could not be read: ${readableError(error)}`,
+      entries: [],
+    };
+  }
+}
+
+async function readCurrentDockerRuntimeLogs(): Promise<LogSourceWithEntries> {
+  const logPath = getDockerRuntimeLogPath();
+  const source: DashboardLogSource = {
+    id: CURRENT_DOCKER_SOURCE_ID,
+    kind: "docker",
+    name: "Docker",
+    detail: `Current container · ${logPath}`,
+    available: false,
+    updatedAt: null,
+    sizeBytes: null,
+    message: "Container runtime logs are not available yet.",
+  };
+
+  try {
+    const file = await readLogCandidate(logPath);
+    return {
+      ...source,
+      available: file.exists,
+      updatedAt: file.updatedAt,
+      sizeBytes: file.sizeBytes,
+      message: file.exists ? null : `Container runtime log was not found at ${logPath}.`,
+      entries: file.lines.map((line, index) => parseLogLine(line, source, index)),
+    };
+  } catch (error) {
+    return {
+      ...source,
+      message: `Container runtime logs could not be read: ${readableError(error)}`,
       entries: [],
     };
   }

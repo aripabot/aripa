@@ -9,12 +9,12 @@ import type {
   DockerDeploymentScript,
   DockerDeploymentStatus,
 } from "@/lib/api-types";
+import { DOCKER_CONTAINER_NAME, isInsideDockerRuntime } from "@/server/docker-runtime";
 
 const execFileAsync = promisify(execFile);
 const appRoot = process.cwd();
 const repositoryRoot = join(/* turbopackIgnore: true */ appRoot, "../..");
 const packageJsonPath = join(repositoryRoot, "package.json");
-const CONTAINER_NAME = "aripabot-docker";
 const IMAGE_NAME = "aripa";
 const SCRIPT_BY_ACTION: Record<DockerDeploymentAction, { label: string; script: string }> = {
   start: { label: "Start Deployment", script: "docker:deploy" },
@@ -22,6 +22,21 @@ const SCRIPT_BY_ACTION: Record<DockerDeploymentAction, { label: string; script: 
 };
 
 export async function getDockerDeploymentStatus(): Promise<DockerDeploymentStatus> {
+  if (isInsideDockerRuntime()) {
+    return {
+      containerName: DOCKER_CONTAINER_NAME,
+      imageName: IMAGE_NAME,
+      state: "running",
+      stateLabel: "Running",
+      detail: "This dashboard is running inside the active Aripa Docker container.",
+      containerId: process.env.HOSTNAME?.slice(0, 12) || null,
+      imageId: null,
+      startedAt: null,
+      finishedAt: null,
+      scripts: await getDockerDeploymentScripts(false),
+    };
+  }
+
   const [container, image, scripts] = await Promise.all([
     inspectContainer(),
     inspectImage(),
@@ -30,7 +45,7 @@ export async function getDockerDeploymentStatus(): Promise<DockerDeploymentStatu
 
   if (!container.available) {
     return {
-      containerName: CONTAINER_NAME,
+      containerName: DOCKER_CONTAINER_NAME,
       imageName: IMAGE_NAME,
       state: "stopped",
       stateLabel: "Not Running",
@@ -44,7 +59,7 @@ export async function getDockerDeploymentStatus(): Promise<DockerDeploymentStatu
   }
 
   return {
-    containerName: CONTAINER_NAME,
+    containerName: DOCKER_CONTAINER_NAME,
     imageName: IMAGE_NAME,
     state: container.running ? "running" : "stopped",
     stateLabel: container.running ? "Running" : "Stopped",
@@ -62,6 +77,10 @@ export async function getDockerDeploymentStatus(): Promise<DockerDeploymentStatu
 export async function runDockerDeploymentCommand(
   action: DockerDeploymentAction,
 ): Promise<DockerDeploymentCommandResponse> {
+  if (isInsideDockerRuntime()) {
+    throw new Error("Docker deployment controls are unavailable inside the running container.");
+  }
+
   const script = SCRIPT_BY_ACTION[action];
   if (!script) {
     throw new Error("Choose a supported Docker deployment action.");
@@ -119,7 +138,7 @@ export async function runDockerDeploymentCommand(
   }
 }
 
-async function getDockerDeploymentScripts(): Promise<DockerDeploymentScript[]> {
+async function getDockerDeploymentScripts(available = true): Promise<DockerDeploymentScript[]> {
   const packageJson = await readPackageJson();
   const scripts =
     packageJson && typeof packageJson.scripts === "object" && packageJson.scripts !== null
@@ -134,7 +153,7 @@ async function getDockerDeploymentScripts(): Promise<DockerDeploymentScript[]> {
     action,
     label: config.label,
     command: `bun run ${config.script}`,
-    available: typeof scripts[config.script] === "string",
+    available: available && typeof scripts[config.script] === "string",
   }));
 }
 
@@ -161,7 +180,7 @@ async function inspectContainer(): Promise<{
         "inspect",
         "-f",
         "{{.Id}}\n{{.State.Running}}\n{{.State.StartedAt}}\n{{.State.FinishedAt}}",
-        CONTAINER_NAME,
+        DOCKER_CONTAINER_NAME,
       ],
       { timeout: 2_000 },
     );
