@@ -2,7 +2,14 @@ import type {
   RuntimeJsonConfig,
   RuntimeModelProvider,
   RuntimeReasoningEffort,
+  RuntimeUpdateConfig,
 } from "@aripabot/core/config/config.ts";
+import type { RuntimeOnboardingInput } from "@aripabot/core/config/onboarding.ts";
+import type { OnboardingModelOptions } from "@aripabot/core/onboarding-models.ts";
+import type {
+  AutoUpdateCronExpression,
+  AutoUpdateCronPresetId,
+} from "@aripabot/core/update/auto-update-cron.ts";
 import type { GitHubRelease } from "@aripabot/core/update/release-updater.ts";
 
 export interface DashboardStatus {
@@ -10,6 +17,7 @@ export interface DashboardStatus {
   botVersion: string;
   webVersion: string;
   configPath: string;
+  configExists: boolean;
   databasePath: string;
   tokenConfigured: boolean;
   prefix: string;
@@ -96,6 +104,7 @@ export interface StylePromptOption {
 
 export interface ConfigResponse {
   path: string;
+  exists: boolean;
   raw: Record<string, unknown>;
   config: RuntimeJsonConfig;
 }
@@ -106,6 +115,37 @@ export interface SaveConfigRequest {
 
 export interface SaveConfigResponse extends ConfigResponse {
   savedAt: string;
+}
+
+export interface OnboardingOptionsResponse {
+  configPath: string;
+  config: RuntimeJsonConfig;
+  styles: StylePromptOption[];
+  modelOptions: OnboardingModelOptions;
+  autoUpdateCronPresets: AutoUpdateCronPreset[];
+  defaultUpdateRepo: string;
+}
+
+export interface AutoUpdateCronPreset {
+  id: AutoUpdateCronPresetId;
+  name: string;
+  description: string;
+  cronExpression: AutoUpdateCronExpression;
+}
+
+export interface CompleteOnboardingRequest {
+  input: RuntimeOnboardingInput;
+}
+
+export interface CompleteOnboardingResponse extends ConfigResponse {
+  savedAt: string;
+  cronMessage: string;
+  updates: RuntimeUpdateConfig;
+}
+
+export interface GenerateSigningKeyResponse {
+  privateKeyPemBase64: string;
+  publicKeyPemBase64: string;
 }
 
 export interface LocalLogFile {

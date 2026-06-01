@@ -14,11 +14,11 @@ import {
   type SelectRenderableOptions,
   type TextOptions,
 } from "@opentui/core";
-import { generateKeyPairSync } from "node:crypto";
 import { fileURLToPath } from "node:url";
 
 import {
   buildRuntimeConfig,
+  generateReleaseSigningKeyPair,
   loadExistingRuntimeConfig,
   parseAgentRateLimitInput,
   parseAllowlistedServerIds,
@@ -1377,20 +1377,6 @@ function isUpdateKeyRequired(): boolean {
   return (
     state.updates.enabled && state.updates.githubRepo !== DEFAULT_RUNTIME_CONFIG.updates.githubRepo
   );
-}
-
-function generateReleaseSigningKeyPair(): {
-  privateKeyPemBase64: string;
-  publicKeyPemBase64: string;
-} {
-  const { privateKey, publicKey } = generateKeyPairSync("ed25519");
-  const privateKeyPem = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
-  const publicKeyPem = publicKey.export({ type: "spki", format: "pem" }).toString();
-
-  return {
-    privateKeyPemBase64: Buffer.from(privateKeyPem, "utf8").toString("base64"),
-    publicKeyPemBase64: Buffer.from(publicKeyPem, "utf8").toString("base64"),
-  };
 }
 
 async function copyToClipboard(value: string): Promise<boolean> {

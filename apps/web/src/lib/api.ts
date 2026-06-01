@@ -1,11 +1,15 @@
 import type {
   ApiErrorResponse,
   ConfigResponse,
+  CompleteOnboardingRequest,
+  CompleteOnboardingResponse,
   DashboardStatus,
   DockerDeploymentCommandRequest,
   DockerDeploymentCommandResponse,
   DockerDeploymentStatus,
+  GenerateSigningKeyResponse,
   LogsResponse,
+  OnboardingOptionsResponse,
   ReleasesResponse,
   SaveConfigRequest,
   SaveConfigResponse,
@@ -46,6 +50,25 @@ export function saveConfig(body: SaveConfigRequest): Promise<SaveConfigResponse>
   return requestJson<SaveConfigResponse>("/api/config", {
     method: "POST",
     body: JSON.stringify(body),
+  });
+}
+
+export function getOnboardingOptions(): Promise<OnboardingOptionsResponse> {
+  return requestJson<OnboardingOptionsResponse>("/api/onboarding");
+}
+
+export function completeOnboarding(
+  body: CompleteOnboardingRequest,
+): Promise<CompleteOnboardingResponse> {
+  return requestJson<CompleteOnboardingResponse>("/api/onboarding", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function generateSigningKey(): Promise<GenerateSigningKeyResponse> {
+  return requestJson<GenerateSigningKeyResponse>("/api/onboarding/signing-key", {
+    method: "POST",
   });
 }
 

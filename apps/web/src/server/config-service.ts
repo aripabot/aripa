@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { access, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -11,22 +11,32 @@ import {
   parseRuntimeJsonConfig,
   type RuntimeJsonConfig,
 } from "@aripabot/core/config/runtime-config.ts";
+import {
+  buildRuntimeConfig,
+  generateReleaseSigningKeyPair,
+  type RuntimeOnboardingInput,
+} from "@aripabot/core/config/onboarding.ts";
+import { loadWizardModelOptions } from "@aripabot/core/onboarding-wizard/model-options.ts";
+import { AUTO_UPDATE_CRON_PRESETS } from "@aripabot/core/update/auto-update-cron.ts";
 import type { GitHubRelease } from "@aripabot/core/update/release-updater.ts";
 
 import type {
   ActiveMuteSummary,
   AttentionItem,
   BotRuntimeStatus,
+  CompleteOnboardingResponse,
   ConfigResponse,
   DashboardStatus,
   DashboardOperations,
   DiscordLookupStatus,
+  GenerateSigningKeyResponse,
   DashboardLogEntry,
   DashboardLogSource,
   GuildOperationsSummary,
   LocalLogFile,
   LogEntryLevel,
   LogsResponse,
+  OnboardingOptionsResponse,
   ReleasesResponse,
   SaveConfigResponse,
   StylePromptOption,
@@ -42,6 +52,12 @@ const STYLE_PROMPTS = ["match", "concise", "formal", "friendly", "original", "pl
 const execFileAsync = promisify(execFile);
 const DOCKER_CONTAINER_NAME = "aripabot-docker";
 const LOG_TAIL_LINE_COUNT = 500;
+const AUTO_UPDATE_CRON_BEGIN = "# BEGIN ARIPA AUTO UPDATE";
+const AUTO_UPDATE_CRON_END = "# END ARIPA AUTO UPDATE";
+const AUTO_UPDATE_CRON_BLOCK_PATTERN = new RegExp(
+  `${escapeRegExp(AUTO_UPDATE_CRON_BEGIN)}\\n[\\s\\S]*?\\n${escapeRegExp(AUTO_UPDATE_CRON_END)}\\n?`,
+  "g",
+);
 
 function getEnv(name: string): string | undefined {
   return process.env[name] ?? rootEnv[name];
@@ -106,6 +122,7 @@ export async function readConfig(): Promise<ConfigResponse> {
 
   return {
     path: formatPath(pathOrUrl),
+    exists: existing !== null,
     raw: (existing ?? DEFAULT_RUNTIME_CONFIG) as Record<string, unknown>,
     config,
   };
@@ -121,16 +138,157 @@ export async function saveConfig(config: RuntimeJsonConfig): Promise<SaveConfigR
 
   return {
     path: formatPath(pathOrUrl),
+    exists: true,
     raw: mergedConfig,
     config: parseRuntimeJsonConfig(mergedConfig),
     savedAt: new Date().toISOString(),
   };
 }
 
+export async function getOnboardingOptions(): Promise<OnboardingOptionsResponse> {
+  const configResponse = await readConfig();
+  const [styles, modelOptions] = await Promise.all([
+    getStylePromptOptions(configResponse.config.stylePrompt),
+    loadWizardModelOptions(),
+  ]);
+
+  return {
+    configPath: configResponse.path,
+    config: configResponse.config,
+    styles,
+    modelOptions,
+    autoUpdateCronPresets: [...AUTO_UPDATE_CRON_PRESETS],
+    defaultUpdateRepo: DEFAULT_RUNTIME_CONFIG.updates.githubRepo,
+  };
+}
+
+export async function completeOnboarding(
+  input: RuntimeOnboardingInput,
+): Promise<CompleteOnboardingResponse> {
+  const pathOrUrl = resolveConfigPath();
+  const existingConfig = await readExistingJsonObject(pathOrUrl);
+
+  if (existingConfig) {
+    throw new Error(`${formatPath(pathOrUrl)} already exists.`);
+  }
+
+  const rawConfig = buildRuntimeConfig(input);
+  await writeFile(pathOrUrl, `${JSON.stringify(rawConfig, null, 2)}\n`);
+  const config = parseRuntimeJsonConfig(rawConfig);
+  const cronMessage = await syncAutoUpdateCron(config, pathOrUrl);
+
+  return {
+    path: formatPath(pathOrUrl),
+    exists: true,
+    raw: rawConfig,
+    config,
+    savedAt: new Date().toISOString(),
+    cronMessage,
+    updates: config.updates,
+  };
+}
+
+export function createReleaseSigningKeyPair(): GenerateSigningKeyResponse {
+  return generateReleaseSigningKeyPair();
+}
+
+async function syncAutoUpdateCron(
+  config: RuntimeJsonConfig,
+  configPath: string | URL,
+): Promise<string> {
+  const existingCrontab = await readUserCrontab();
+
+  if (!config.updates.enabled || !config.updates.autoInstall.enabled) {
+    const updatedCrontab = removeManagedAutoUpdateCronContent(existingCrontab);
+    if (updatedCrontab !== existingCrontab) {
+      await writeUserCrontab(updatedCrontab);
+    }
+    return "Automatic update cron is disabled.";
+  }
+
+  const cronEntry = buildAutoUpdateCronEntry(configPath, config.updates.autoInstall.cronExpression);
+  await writeUserCrontab(updateManagedAutoUpdateCronContent(existingCrontab, cronEntry));
+  return `Automatic update cron installed for ${config.updates.autoInstall.cronExpression}.`;
+}
+
+function buildAutoUpdateCronEntry(configPath: string | URL, cronExpression: string): string {
+  const formattedConfigPath = formatCronPath(configPath);
+  const bunExecutable = process.env.BUN_EXECUTABLE?.trim() || "bun";
+  const logPath = join(repositoryRoot, "aripa-update.log");
+  const command = [
+    `cd ${shellQuote(repositoryRoot)}`,
+    `CONFIG_PATH=${shellQuote(formattedConfigPath)} ${shellQuote(
+      bunExecutable,
+    )} run update --latest >> ${shellQuote(logPath)} 2>&1`,
+  ].join(" && ");
+
+  return `${cronExpression} ${command}`;
+}
+
+function updateManagedAutoUpdateCronContent(existingCrontab: string, cronEntry: string): string {
+  const unmanagedCrontab = removeManagedAutoUpdateCronContent(existingCrontab).trimEnd();
+  const managedBlock = `${AUTO_UPDATE_CRON_BEGIN}\n${cronEntry}\n${AUTO_UPDATE_CRON_END}`;
+
+  return `${unmanagedCrontab ? `${unmanagedCrontab}\n\n` : ""}${managedBlock}\n`;
+}
+
+function removeManagedAutoUpdateCronContent(existingCrontab: string): string {
+  const withoutManagedBlock = existingCrontab
+    .replace(AUTO_UPDATE_CRON_BLOCK_PATTERN, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trimEnd();
+
+  return withoutManagedBlock ? `${withoutManagedBlock}\n` : "";
+}
+
+async function readUserCrontab(): Promise<string> {
+  try {
+    const { stdout } = await execFileAsync("crontab", ["-l"]);
+    return stdout;
+  } catch (error) {
+    const stderr =
+      typeof error === "object" && error !== null && "stderr" in error ? String(error.stderr) : "";
+
+    if (/no crontab/i.test(stderr)) {
+      return "";
+    }
+
+    throw error;
+  }
+}
+
+async function writeUserCrontab(content: string): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const subprocess = spawn("crontab", ["-"], {
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    const stdoutChunks: Buffer[] = [];
+    const stderrChunks: Buffer[] = [];
+
+    subprocess.stdout.on("data", (chunk: Buffer) => stdoutChunks.push(chunk));
+    subprocess.stderr.on("data", (chunk: Buffer) => stderrChunks.push(chunk));
+    subprocess.on("error", reject);
+    subprocess.on("close", (exitCode) => {
+      if (exitCode === 0) {
+        resolve();
+        return;
+      }
+
+      const output = [...stderrChunks, ...stdoutChunks]
+        .map((chunk) => chunk.toString("utf8").trim())
+        .filter(Boolean)
+        .join("\n");
+      reject(new Error(output || `crontab update failed with exit code ${exitCode}.`));
+    });
+    subprocess.stdin.write(content);
+    subprocess.stdin.end();
+  });
+}
+
 export async function getDashboardStatus(): Promise<DashboardStatus> {
-  const [configResponse, styles, botPackageJson, webPackageJson, botRuntime] = await Promise.all([
-    readConfig(),
-    getStylePromptOptions(),
+  const configResponse = await readConfig();
+  const [styles, botPackageJson, webPackageJson, botRuntime] = await Promise.all([
+    getStylePromptOptions(configResponse.config.stylePrompt),
     readJson<{ version?: string }>(packageJsonPath),
     readJson<{ version?: string }>(webPackageJsonPath),
     getBotRuntimeStatus(),
@@ -143,6 +301,7 @@ export async function getDashboardStatus(): Promise<DashboardStatus> {
     botVersion: botPackageJson.version ?? "unknown",
     webVersion: webPackageJson.version ?? "unknown",
     configPath: configResponse.path,
+    configExists: configResponse.exists,
     databasePath,
     tokenConfigured: Boolean(getEnv("TOKEN")?.trim()),
     prefix: getEnv("PREFIX")?.trim() || "-",
@@ -860,11 +1019,10 @@ export async function listReleases(): Promise<ReleasesResponse> {
   return { repo, releases };
 }
 
-async function getStylePromptOptions(): Promise<StylePromptOption[]> {
-  const { config } = await readConfig();
+async function getStylePromptOptions(selectedStylePrompt: string): Promise<StylePromptOption[]> {
   const styles: string[] = [...STYLE_PROMPTS];
-  if (!styles.includes(config.stylePrompt)) {
-    styles.push(config.stylePrompt);
+  if (!styles.includes(selectedStylePrompt)) {
+    styles.push(selectedStylePrompt);
   }
 
   return styles.map((style) => ({
@@ -872,6 +1030,25 @@ async function getStylePromptOptions(): Promise<StylePromptOption[]> {
     label: toTitleCase(style),
     description: stylePromptDescription(style),
   }));
+}
+
+function stylePromptDescription(stylePrompt: string): string {
+  switch (stylePrompt) {
+    case "match":
+      return "Adapt to the conversation's tone.";
+    case "friendly":
+      return "Warm and approachable.";
+    case "concise":
+      return "Short, direct responses.";
+    case "formal":
+      return "Polished and restrained.";
+    case "playful":
+      return "Light, casual energy.";
+    case "original":
+      return "The base Aripa personality.";
+    default:
+      return "Custom prompt style.";
+  }
 }
 
 async function readLogCandidate(path: string): Promise<LocalLogFile> {
@@ -1132,31 +1309,28 @@ function formatPath(pathOrUrl: string | URL): string {
   return pathOrUrl instanceof URL ? pathOrUrl.pathname : pathOrUrl;
 }
 
+function formatCronPath(pathOrUrl: string | URL): string {
+  if (pathOrUrl instanceof URL) {
+    return pathOrUrl.pathname;
+  }
+
+  return pathOrUrl;
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function toTitleCase(value: string): string {
   return value
     .split(/[-_\s]+/)
     .filter(Boolean)
     .map((word) => `${word.slice(0, 1).toUpperCase()}${word.slice(1)}`)
     .join(" ");
-}
-
-function stylePromptDescription(stylePrompt: string): string {
-  switch (stylePrompt) {
-    case "match":
-      return "Adapt to the conversation's tone.";
-    case "friendly":
-      return "Warm and approachable.";
-    case "concise":
-      return "Short, direct responses.";
-    case "formal":
-      return "Polished and restrained.";
-    case "playful":
-      return "Light, casual energy.";
-    case "original":
-      return "The base Aripa personality.";
-    default:
-      return "Custom prompt style.";
-  }
 }
 
 export function latestReleaseTag(releases: readonly GitHubRelease[]): string | null {

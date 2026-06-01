@@ -3,11 +3,7 @@ import { createHash, createPublicKey, verify as verifySignature } from "node:cry
 import { basename, dirname, resolve, join } from "node:path";
 import { tmpdir } from "node:os";
 
-import {
-  AUTO_UPDATE_CRON_PRESETS,
-  type AutoUpdateCronExpression,
-  type AutoUpdateCronPresetId,
-} from "@aripabot/core/update/auto-update-cron.ts";
+import { AUTO_UPDATE_CRON_PRESETS } from "@aripabot/core/update/auto-update-cron.ts";
 
 export {
   AUTO_UPDATE_CRON_PRESETS,

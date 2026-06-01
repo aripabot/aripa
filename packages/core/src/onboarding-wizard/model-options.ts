@@ -1,4 +1,4 @@
-import { DEFAULT_RUNTIME_CONFIG } from "@aripabot/core/config/config.ts";
+import { DEFAULT_RUNTIME_CONFIG } from "@aripabot/core/config/runtime-config.ts";
 import {
   DEFAULT_ONBOARDING_MODEL_OPTIONS,
   type OnboardingModelOptions,

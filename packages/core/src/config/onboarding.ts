@@ -4,7 +4,25 @@ import {
   type RuntimeModelConfig,
   type RuntimeProviderConfig,
   type RuntimeUpdateConfig,
-} from "@aripabot/core/config/config.ts";
+} from "@aripabot/core/config/runtime-config.ts";
+import {
+  validateAgentRateLimitMessagesPerMinute,
+  validateAllowlistedServerIds,
+  validateGitHubRepo,
+  validateOperatorUserId,
+} from "@aripabot/core/config/onboarding-validation.ts";
+import { generateKeyPairSync } from "node:crypto";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+export {
+  parseAgentRateLimitInput,
+  parseAllowlistedServerIds,
+  validateAgentRateLimitMessagesPerMinute,
+  validateAllowlistedServerIds,
+  validateGitHubRepo,
+  validateOperatorUserId,
+} from "@aripabot/core/config/onboarding-validation.ts";
 
 export interface RuntimeOnboardingInput {
   name?: string;
@@ -30,6 +48,11 @@ export interface WriteRuntimeConfigResult {
   existed: boolean;
 }
 
+export interface ReleaseSigningKeyPair {
+  privateKeyPemBase64: string;
+  publicKeyPemBase64: string;
+}
+
 const DEFAULT_ONBOARDING_CONFIG = {
   name: DEFAULT_RUNTIME_CONFIG.name,
   operatorUserId: DEFAULT_RUNTIME_CONFIG.operatorUserId,
@@ -37,83 +60,6 @@ const DEFAULT_ONBOARDING_CONFIG = {
   agentRateLimitMessagesPerMinute: DEFAULT_RUNTIME_CONFIG.agentRateLimitMessagesPerMinute,
   logPrivacy: DEFAULT_RUNTIME_CONFIG.logPrivacy,
 } as const;
-
-const DISCORD_SNOWFLAKE_PATTERN = /^\d{17,20}$/;
-const GITHUB_REPO_PATTERN = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
-
-export function parseAllowlistedServerIds(input: string): string[] {
-  const ids = input
-    .split(/[\s,]+/)
-    .map((entry) => entry.trim())
-    .filter(Boolean);
-
-  return [...new Set(ids)];
-}
-
-export function validateAllowlistedServerIds(ids: readonly string[]): string | null {
-  if (ids.length === 0) {
-    return "Enter at least one Discord server ID.";
-  }
-
-  const invalidId = ids.find((id) => !DISCORD_SNOWFLAKE_PATTERN.test(id));
-  if (invalidId) {
-    return `Server ID "${invalidId}" should be a Discord snowflake with 17-20 digits.`;
-  }
-
-  return null;
-}
-
-export function validateOperatorUserId(operatorUserId: string | null): string | null {
-  if (operatorUserId === null) {
-    return null;
-  }
-
-  if (!DISCORD_SNOWFLAKE_PATTERN.test(operatorUserId)) {
-    return "Operator user ID should be a Discord snowflake with 17-20 digits, or blank.";
-  }
-
-  return null;
-}
-
-export function validateAgentRateLimitMessagesPerMinute(value: number | null): string | null {
-  if (value === null) {
-    return null;
-  }
-
-  if (!Number.isInteger(value) || value < 1) {
-    return "Agent rate limit must be a whole number greater than 0, or off.";
-  }
-
-  return null;
-}
-
-export function validateGitHubRepo(value: string): string | null {
-  if (!GITHUB_REPO_PATTERN.test(value.trim())) {
-    return "GitHub update repository must use owner/repo format.";
-  }
-
-  return null;
-}
-
-export function parseAgentRateLimitInput(input: string): number | null | "invalid" {
-  const normalizedInput = input.trim().toLowerCase();
-
-  if (
-    normalizedInput === "off" ||
-    normalizedInput === "none" ||
-    normalizedInput === "disabled" ||
-    normalizedInput === "0"
-  ) {
-    return null;
-  }
-
-  if (!/^\d+$/.test(normalizedInput)) {
-    return "invalid";
-  }
-
-  const parsed = Number(normalizedInput);
-  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : "invalid";
-}
 
 export function buildRuntimeConfig(
   input: RuntimeOnboardingInput,
@@ -207,7 +153,7 @@ export async function loadExistingRuntimeConfig(
 }
 
 export async function writeRuntimeConfig({
-  pathOrUrl = new URL("../../../../config.json", import.meta.url),
+  pathOrUrl = getDefaultRuntimeConfigPath(),
   input,
   overwrite = false,
 }: WriteRuntimeConfigOptions): Promise<WriteRuntimeConfigResult> {
@@ -230,10 +176,25 @@ export async function writeRuntimeConfig({
   };
 }
 
+function getDefaultRuntimeConfigPath(): string {
+  return join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..", "config.json");
+}
+
 export function formatConfigPath(pathOrUrl: string | URL): string {
   if (pathOrUrl instanceof URL) {
     return pathOrUrl.pathname;
   }
 
   return pathOrUrl;
+}
+
+export function generateReleaseSigningKeyPair(): ReleaseSigningKeyPair {
+  const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+  const privateKeyPem = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
+  const publicKeyPem = publicKey.export({ type: "spki", format: "pem" }).toString();
+
+  return {
+    privateKeyPemBase64: Buffer.from(privateKeyPem, "utf8").toString("base64"),
+    publicKeyPemBase64: Buffer.from(publicKeyPem, "utf8").toString("base64"),
+  };
 }

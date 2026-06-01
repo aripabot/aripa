@@ -63,7 +63,9 @@ import {
   runDockerDeploymentCommand,
   saveConfig,
 } from "@/lib/api";
+import { DashboardOnboardingScreen } from "@/components/dashboard/dashboard-onboarding-screen";
 import type {
+  CompleteOnboardingResponse,
   DashboardLogEntry,
   DashboardStatus,
   DockerDeploymentAction,
@@ -215,6 +217,37 @@ export function Dashboard({
     }
 
     setPendingHref(href);
+  }
+
+  function completeFirstRun(result: CompleteOnboardingResponse): void {
+    setStatusState((current) => {
+      if (current.status !== "ready") {
+        return current;
+      }
+
+      return {
+        status: "ready",
+        error: null,
+        data: {
+          ...current.data,
+          appName: result.config.name,
+          configPath: result.path,
+          configExists: true,
+          config: result.config,
+        },
+      };
+    });
+    router.refresh();
+  }
+
+  if (statusState.status === "ready" && !statusState.data.configExists) {
+    return (
+      <DashboardOnboardingScreen
+        initialStatus={statusState.data}
+        onComplete={completeFirstRun}
+        onSignOut={() => void signOut()}
+      />
+    );
   }
 
   return (

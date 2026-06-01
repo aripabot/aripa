@@ -15,6 +15,7 @@ describe("dashboard config service", () => {
       const result = await readConfig();
 
       expect(result.path).toBe(configPath);
+      expect(result.exists).toBe(false);
       expect(result.config.name).toBe("Aripa");
       expect(result.config.allowlistedServerIds).toEqual([]);
     });
@@ -40,6 +41,7 @@ describe("dashboard config service", () => {
       const result = await saveConfig(config);
       const raw = (await Bun.file(configPath).json()) as Record<string, unknown>;
 
+      expect(result.exists).toBe(true);
       expect(result.config.name).toBe("Dashboard");
       expect(result.config.allowlistedServerIds).toEqual([]);
       expect(result.config.agentRateLimitMessagesPerMinute).toBeNull();

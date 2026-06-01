@@ -66,9 +66,9 @@ function DashboardPasswordSetup({ authPath }: { authPath: string }) {
           bun run dashboard:password
         </div>
         <p className="break-words text-sm text-muted-foreground">
-          Keep the generated password somewhere
-          safe. It is only shown once.
+          Keep the generated password somewhere safe. It is only shown once.
         </p>
+        <p className="break-words text-xs text-muted-foreground">{authPath}</p>
       </CardContent>
     </Card>
   );
