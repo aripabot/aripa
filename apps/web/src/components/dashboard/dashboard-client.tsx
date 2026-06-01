@@ -850,7 +850,7 @@ function LogsPage({ logs, onRefresh }: { logs: LoadState<LogsResponse>; onRefres
     return `${entry.message} ${entry.raw} ${entry.sourceName}`.toLowerCase().includes(queryText);
   });
   const summary = summarizeLogs(entries);
-  const shownEntries = liveTail ? visibleEntries.slice(-200) : visibleEntries.slice(0, 200);
+  const shownEntries = newestFirstLogEntries(visibleEntries);
 
   return (
     <div className="grid gap-5">
@@ -2146,6 +2146,10 @@ function appendLogEntry(
   }
 
   return [...entries, entry].slice(-800);
+}
+
+function newestFirstLogEntries(entries: readonly DashboardLogEntry[]): DashboardLogEntry[] {
+  return entries.slice(-200).reverse();
 }
 
 function logEntryKey(entry: DashboardLogEntry): string {
