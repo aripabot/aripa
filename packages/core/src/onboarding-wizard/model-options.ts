@@ -5,6 +5,8 @@ import {
   type OnboardingModelRole,
   type WizardModelOption,
 } from "@aripabot/core/onboarding-models.ts";
+import { getFmDefaultBaseURL } from "@aripabot/core/agent/fm-compat.ts";
+import { isFmProviderAvailable } from "@aripabot/core/onboarding-wizard/provider-availability.ts";
 import type { ConfigurableProvider } from "@aripabot/core/onboarding-wizard/types.ts";
 
 export async function loadWizardModelOptions(): Promise<OnboardingModelOptions> {
@@ -12,6 +14,14 @@ export async function loadWizardModelOptions(): Promise<OnboardingModelOptions> 
   const gatewayModels = await fetchGatewayModels();
   const ollamaModels = await fetchOpenAICompatibleModels("http://localhost:11434/v1");
   const lmStudioModels = await fetchOpenAICompatibleModels("http://localhost:1234/v1");
+  const fmAvailable = await isFmProviderAvailable();
+  const fmModels = fmAvailable ? await fetchOpenAICompatibleModels(getFmDefaultBaseURL()) : [];
+  const fmModelOptions =
+    fmAvailable && fmModels.length > 0
+      ? fmModels
+      : fmAvailable
+        ? DEFAULT_ONBOARDING_MODEL_OPTIONS.agent.fm
+        : [];
 
   return {
     agent: {
@@ -28,6 +38,7 @@ export async function loadWizardModelOptions(): Promise<OnboardingModelOptions> 
         lmStudioModels.length > 0
           ? lmStudioModels
           : DEFAULT_ONBOARDING_MODEL_OPTIONS.agent.lmstudio,
+      fm: fmModelOptions,
     },
     summarizer: {
       openai: DEFAULT_ONBOARDING_MODEL_OPTIONS.summarizer.openai,
@@ -45,6 +56,7 @@ export async function loadWizardModelOptions(): Promise<OnboardingModelOptions> 
         lmStudioModels.length > 0
           ? lmStudioModels
           : DEFAULT_ONBOARDING_MODEL_OPTIONS.summarizer.lmstudio,
+      fm: fmModelOptions,
     },
     web: DEFAULT_ONBOARDING_MODEL_OPTIONS.web,
   };

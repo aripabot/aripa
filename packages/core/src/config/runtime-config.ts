@@ -12,6 +12,7 @@ export const RUNTIME_MODEL_PROVIDERS = [
   "gateway",
   "ollama",
   "lmstudio",
+  "fm",
   "google",
 ] as const;
 export const CONFIGURABLE_MODEL_PROVIDERS = [
@@ -20,6 +21,7 @@ export const CONFIGURABLE_MODEL_PROVIDERS = [
   "gateway",
   "ollama",
   "lmstudio",
+  "fm",
 ] as const;
 export const REASONING_EFFORTS = ["minimal", "low", "medium", "high"] as const;
 

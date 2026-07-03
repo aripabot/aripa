@@ -83,6 +83,7 @@ let generatedKeyMessage: string | null = null;
 
 const STYLE_PROMPTS = await loadStylePrompts(state.stylePrompt);
 const MODEL_OPTIONS = await loadWizardModelOptions();
+const SELECTABLE_MODEL_PROVIDERS = selectableProvidersFromModelOptions(MODEL_OPTIONS);
 
 try {
   renderer = await createCliRenderer({
@@ -1294,29 +1295,7 @@ function selectProviderControl(
   selectedProvider: ConfigurableProvider,
   onSelected: (provider: ConfigurableProvider) => void,
 ) {
-  const options: SelectOption[] = [
-    { name: "OpenAI", description: "Use OPENAI_API_KEY and OpenAI models.", value: "openai" },
-    {
-      name: "OpenRouter",
-      description: "Use OPENROUTER_API_KEY and OpenRouter model routing.",
-      value: "openrouter",
-    },
-    {
-      name: "Vercel AI Gateway",
-      description: "Use AI_GATEWAY_API_KEY and Gateway model IDs.",
-      value: "gateway",
-    },
-    {
-      name: "Ollama",
-      description: "Use a local OpenAI-compatible Ollama server.",
-      value: "ollama",
-    },
-    {
-      name: "LM Studio",
-      description: "Use a local LM Studio OpenAI-compatible server.",
-      value: "lmstudio",
-    },
-  ];
+  const options: SelectOption[] = SELECTABLE_MODEL_PROVIDERS.map(providerOptionFor);
 
   return selectControl(
     options,
@@ -1327,6 +1306,55 @@ function selectProviderControl(
       options.findIndex((option) => option.value === selectedProvider),
     ),
   );
+}
+
+function selectableProvidersFromModelOptions(
+  options: typeof MODEL_OPTIONS,
+): ConfigurableProvider[] {
+  return (Object.keys(options.agent) as ConfigurableProvider[]).filter(
+    (provider) => options.agent[provider].length > 0 && options.summarizer[provider].length > 0,
+  );
+}
+
+function providerOptionFor(provider: ConfigurableProvider): SelectOption {
+  switch (provider) {
+    case "openai":
+      return {
+        name: "OpenAI",
+        description: "Use OPENAI_API_KEY and OpenAI models.",
+        value: provider,
+      };
+    case "openrouter":
+      return {
+        name: "OpenRouter",
+        description: "Use OPENROUTER_API_KEY and OpenRouter model routing.",
+        value: provider,
+      };
+    case "gateway":
+      return {
+        name: "Vercel AI Gateway",
+        description: "Use AI_GATEWAY_API_KEY and Gateway model IDs.",
+        value: provider,
+      };
+    case "ollama":
+      return {
+        name: "Ollama",
+        description: "Use a local OpenAI-compatible Ollama server.",
+        value: provider,
+      };
+    case "lmstudio":
+      return {
+        name: "LM Studio",
+        description: "Use a local LM Studio OpenAI-compatible server.",
+        value: provider,
+      };
+    case "fm":
+      return {
+        name: "Apple Foundation Models",
+        description: "Use fm serve with the system or PCC model.",
+        value: provider,
+      };
+  }
 }
 
 function selectModelControl(

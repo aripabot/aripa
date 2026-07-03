@@ -488,9 +488,7 @@ export function DashboardOnboardingScreen({
               <h1 className="text-2xl font-semibold tracking-normal text-pretty">
                 Configure Aripa
               </h1>
-              <p className="mt-1 max-w-2xl text-sm text-muted-foreground text-pretty">
-
-              </p>
+              <p className="mt-1 max-w-2xl text-sm text-muted-foreground text-pretty"></p>
             </div>
             <div className="rounded-md border bg-card px-3 py-2 text-sm text-muted-foreground">
               <span className="break-all">{initialStatus.configPath}</span>
@@ -683,6 +681,10 @@ export function DashboardOnboardingScreen({
           <ProviderSelect
             id="onboarding-agent-provider"
             label="Agent Provider"
+            providers={selectableProvidersFromModelOptions(
+              options,
+              config.models.agent.provider as ConfigurableRuntimeModelProvider,
+            )}
             value={config.models.agent.provider as ConfigurableRuntimeModelProvider}
             onValueChange={(provider) => {
               updateModel("agent", {
@@ -712,6 +714,10 @@ export function DashboardOnboardingScreen({
           <ProviderSelect
             id="onboarding-summarizer-provider"
             label="Summarizer Provider"
+            providers={selectableProvidersFromModelOptions(
+              options,
+              config.models.summarizer.provider as ConfigurableRuntimeModelProvider,
+            )}
             value={config.models.summarizer.provider as ConfigurableRuntimeModelProvider}
             onValueChange={(provider) => {
               updateModel("summarizer", {
@@ -1032,11 +1038,13 @@ function ChoiceList({
 function ProviderSelect({
   id,
   label,
+  providers,
   value,
   onValueChange,
 }: {
   id: string;
   label: string;
+  providers: ConfigurableRuntimeModelProvider[];
   value: ConfigurableRuntimeModelProvider;
   onValueChange: (value: ConfigurableRuntimeModelProvider) => void;
 }) {
@@ -1050,7 +1058,7 @@ function ProviderSelect({
           <SelectValue placeholder="Choose provider" />
         </SelectTrigger>
         <SelectContent>
-          {(["openai", "openrouter", "gateway", "ollama", "lmstudio"] as const).map((provider) => (
+          {providers.map((provider) => (
             <SelectItem key={provider} value={provider}>
               {provider}
             </SelectItem>
@@ -1059,6 +1067,21 @@ function ProviderSelect({
       </Select>
     </Field>
   );
+}
+
+function selectableProvidersFromModelOptions(
+  options: OnboardingOptionsResponse,
+  currentProvider: ConfigurableRuntimeModelProvider,
+): ConfigurableRuntimeModelProvider[] {
+  const providers = (
+    Object.keys(options.modelOptions.agent) as ConfigurableRuntimeModelProvider[]
+  ).filter(
+    (provider) =>
+      options.modelOptions.agent[provider]?.length > 0 &&
+      options.modelOptions.summarizer[provider]?.length > 0,
+  );
+
+  return providers.includes(currentProvider) ? providers : [...providers, currentProvider];
 }
 
 function ModelSelect({
@@ -1133,22 +1156,22 @@ function progressIndex(step: Step): number {
     step === "rate-limit-custom"
       ? "rate-limit"
       : [
-        "agent-provider",
-        "agent-model",
-        "summarizer-provider",
-        "summarizer-model",
-        "web-capability",
-        "web-model",
-      ].includes(step)
+            "agent-provider",
+            "agent-model",
+            "summarizer-provider",
+            "summarizer-model",
+            "web-capability",
+            "web-model",
+          ].includes(step)
         ? "models"
         : [
-          "update-source",
-          "update-repo",
-          "update-key",
-          "update-key-paste",
-          "update-key-generated",
-          "update-schedule",
-        ].includes(step)
+              "update-source",
+              "update-repo",
+              "update-key",
+              "update-key-paste",
+              "update-key-generated",
+              "update-schedule",
+            ].includes(step)
           ? "update-source"
           : step;
 

@@ -29,8 +29,8 @@ describe("parseRuntimeJsonConfig", () => {
             reasoningEffort: "high",
           },
           summarizer: {
-            provider: "lmstudio",
-            model: " local-summary ",
+            provider: "fm",
+            model: " system ",
           },
           web: {
             enabled: false,
@@ -71,8 +71,8 @@ describe("parseRuntimeJsonConfig", () => {
           reasoningEffort: "high",
         },
         summarizer: {
-          provider: "lmstudio",
-          model: "local-summary",
+          provider: "fm",
+          model: "system",
           reasoningEffort: "low",
         },
         web: {

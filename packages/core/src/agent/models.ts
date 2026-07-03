@@ -10,6 +10,7 @@ import type {
   RuntimeProviderSettings,
   RuntimeWebModelSelection,
 } from "@aripabot/core/config/config.ts";
+import { createFmCompatibleFetch, getFmDefaultBaseURL } from "@aripabot/core/agent/fm-compat.ts";
 
 export interface ResolvedTextModel {
   model: LanguageModelV3;
@@ -89,6 +90,13 @@ function resolveLanguageModel(
         ...(readConfiguredApiKey(providerSettings)
           ? { apiKey: readConfiguredApiKey(providerSettings) }
           : {}),
+      }).chatModel(selection.model);
+    case "fm":
+      return createOpenAICompatible({
+        name: "fm",
+        baseURL: providerSettings?.baseURL ?? getFmDefaultBaseURL(),
+        apiKey: readConfiguredApiKey(providerSettings) ?? "sk-local-fm",
+        fetch: createFmCompatibleFetch(),
       }).chatModel(selection.model);
     case "google":
       throw new Error("Google is only supported for the web-search model.");

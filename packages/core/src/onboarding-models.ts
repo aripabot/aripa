@@ -83,6 +83,18 @@ export const DEFAULT_ONBOARDING_MODEL_OPTIONS: OnboardingModelOptions = {
         value: "qwen/qwen3.5-9b",
       },
     ],
+    fm: [
+      {
+        name: "system",
+        description: "On-device Apple Foundation Model served by fm.",
+        value: "system",
+      },
+      {
+        name: "pcc",
+        description: "Apple Private Cloud Compute model served by fm.",
+        value: "pcc",
+      },
+    ],
   },
   summarizer: {
     openai: [
@@ -124,6 +136,18 @@ export const DEFAULT_ONBOARDING_MODEL_OPTIONS: OnboardingModelOptions = {
         name: "openai/gpt-oss-20b",
         description: "Local LM Studio summarizer candidate.",
         value: "openai/gpt-oss-20b",
+      },
+    ],
+    fm: [
+      {
+        name: "system",
+        description: "On-device Apple Foundation Model served by fm.",
+        value: "system",
+      },
+      {
+        name: "pcc",
+        description: "Apple Private Cloud Compute model served by fm.",
+        value: "pcc",
       },
     ],
   },

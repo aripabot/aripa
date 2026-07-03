@@ -7,7 +7,6 @@ import { promisify } from "node:util";
 import {
   DEFAULT_RUNTIME_CONFIG,
   REASONING_EFFORTS,
-  RUNTIME_MODEL_PROVIDERS,
   parseRuntimeJsonConfig,
   type RuntimeJsonConfig,
 } from "@aripabot/core/config/runtime-config.ts";
@@ -17,6 +16,7 @@ import {
   type RuntimeOnboardingInput,
 } from "@aripabot/core/config/onboarding.ts";
 import { loadWizardModelOptions } from "@aripabot/core/onboarding-wizard/model-options.ts";
+import { getSelectableModelProviders } from "@aripabot/core/onboarding-wizard/provider-availability.ts";
 import { AUTO_UPDATE_CRON_PRESETS } from "@aripabot/core/update/auto-update-cron.ts";
 import type { GitHubRelease } from "@aripabot/core/update/release-updater.ts";
 
@@ -295,11 +295,12 @@ async function writeUserCrontab(content: string): Promise<void> {
 
 export async function getDashboardStatus(): Promise<DashboardStatus> {
   const configResponse = await readConfig();
-  const [styles, botPackageJson, webPackageJson, botRuntime] = await Promise.all([
+  const [styles, botPackageJson, webPackageJson, botRuntime, providers] = await Promise.all([
     getStylePromptOptions(configResponse.config.stylePrompt),
     readJson<{ version?: string }>(packageJsonPath),
     readJson<{ version?: string }>(webPackageJsonPath),
     getBotRuntimeStatus(),
+    getSelectableModelProviders(),
   ]);
   const databasePath = await resolveDatabasePath();
   const operations = await getDashboardOperations(configResponse.config, databasePath);
@@ -316,7 +317,7 @@ export async function getDashboardStatus(): Promise<DashboardStatus> {
     botRuntime,
     operations,
     styles,
-    providers: [...RUNTIME_MODEL_PROVIDERS],
+    providers,
     reasoningEfforts: [...REASONING_EFFORTS],
     config: configResponse.config,
   };
