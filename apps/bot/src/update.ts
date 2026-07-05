@@ -14,12 +14,7 @@ import {
   type GitHubRelease,
 } from "@aripabot/core/update/release-updater.ts";
 import type { MinimalKeyEvent } from "@aripabot/core/onboarding-wizard/types.ts";
-import {
-  createSelectControlFactory,
-  createWizardShell,
-  isExitKey,
-  parseMinimalKey,
-} from "./tui/kit.ts";
+import { createSelectControlFactory, createWizardShell, isExitKey } from "./tui/kit.ts";
 
 type View = "loading" | "select" | "confirm" | "updating" | "done" | "error";
 
@@ -54,9 +49,10 @@ let detectedDefaultDockerContainer = false;
 let spinnerIndex = 0;
 const shell = createWizardShell({
   backgroundColor: colors.background,
+  exitOutput: exitOutput,
   rendererName: "Update",
+  onFinish: stopSpinner,
   onKeyPress: handleKeyPress,
-  onRawInput: handleRawExitInput,
 });
 const { Box, Text, Select, controls } = shell;
 const selectControl = createSelectControlFactory({ Select, controls, colors });
@@ -583,41 +579,17 @@ function handleKeyPress(key: MinimalKeyEvent): boolean {
 }
 
 function finish(output: string): void {
-  if (shell.isFinished()) {
-    return;
-  }
-
-  stopSpinner();
   shell.finish(output);
 }
 
-function handleRawExitInput(chunk: Buffer | string): void {
-  const sequence = Buffer.isBuffer(chunk) ? chunk.toString("utf8") : chunk;
-  if (sequence === "\u0003" || sequence === "\u001B") {
-    if (view === "updating") {
-      return;
-    }
-
-    if (view === "done") {
-      finish(message);
-      return;
-    }
-
-    finish("No changes made.");
-    return;
+function exitOutput(): string | null {
+  if (view === "updating") {
+    return null;
   }
 
-  const key = parseMinimalKey(sequence);
-  if (key && isExitKey(key)) {
-    if (view === "updating") {
-      return;
-    }
-
-    if (view === "done") {
-      finish(message);
-      return;
-    }
-
-    finish("No changes made.");
+  if (view === "done") {
+    return message;
   }
+
+  return "No changes made.";
 }

@@ -50,12 +50,7 @@ import type {
   OnboardingState,
   Step,
 } from "@aripabot/core/onboarding-wizard/types.ts";
-import {
-  createSelectControlFactory,
-  createWizardShell,
-  isExitKey,
-  parseMinimalKey,
-} from "./tui/kit.ts";
+import { createSelectControlFactory, createWizardShell, isExitKey } from "./tui/kit.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../..", import.meta.url));
 const CONFIG_PATH = Bun.env.CONFIG_PATH?.trim() || new URL("../../../config.json", import.meta.url);
@@ -72,9 +67,9 @@ const MODEL_OPTIONS = await loadWizardModelOptions();
 const SELECTABLE_MODEL_PROVIDERS = selectableProvidersFromModelOptions(MODEL_OPTIONS);
 const shell = createWizardShell({
   backgroundColor: colors.background,
+  exitOutput: () => "No changes made.",
   rendererName: "Onboarding",
   onKeyPress: handleKeyPress,
-  onRawInput: handleRawExitInput,
 });
 const { Box, Text, Input, Select, controls } = shell;
 const selectControl = createSelectControlFactory({ Select, controls, colors });
@@ -1075,19 +1070,6 @@ function goBack(): void {
 
 function finish(message: string): void {
   shell.finish(message);
-}
-
-function handleRawExitInput(chunk: Buffer | string): void {
-  const sequence = Buffer.isBuffer(chunk) ? chunk.toString("utf8") : chunk;
-  if (sequence === "\u0003" || sequence === "\u001B") {
-    finish("No changes made.");
-    return;
-  }
-
-  const key = parseMinimalKey(sequence);
-  if (key && isExitKey(key)) {
-    finish("No changes made.");
-  }
 }
 
 function footerText(): string {

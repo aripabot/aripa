@@ -226,14 +226,16 @@ export function closeTuiRenderer(
 
 export function createWizardShell({
   backgroundColor,
+  exitOutput,
+  onFinish,
   rendererName,
   onKeyPress,
-  onRawInput,
 }: {
   backgroundColor: string;
+  exitOutput: () => string | null;
+  onFinish?: () => void;
   rendererName: string;
   onKeyPress: (key: MinimalKeyEvent) => boolean;
-  onRawInput: RawInputHandler;
 }): ReturnType<typeof createRenderableFactories> & {
   controls: TuiControlState;
   destroy: () => void;
@@ -258,7 +260,21 @@ export function createWizardShell({
 
   const factories = createRenderableFactories(requireRenderer);
 
-  return {
+  function handleRawInput(chunk: Buffer | string): void {
+    const sequence = Buffer.isBuffer(chunk) ? chunk.toString("utf8") : chunk;
+    const isDirectExitSequence = sequence === "\u0003" || sequence === "\u001B";
+    const key = isDirectExitSequence ? null : parseMinimalKey(sequence);
+    if (!isDirectExitSequence && (!key || !isExitKey(key))) {
+      return;
+    }
+
+    const output = exitOutput();
+    if (output !== null) {
+      shell.finish(output);
+    }
+  }
+
+  const shell = {
     ...factories,
     controls,
     destroy() {
@@ -271,6 +287,7 @@ export function createWizardShell({
       }
 
       finished = true;
+      onFinish?.();
       rawInputHandler = closeTuiRenderer(renderer, rawInputHandler);
       renderer = null;
       console.log(output);
@@ -311,9 +328,11 @@ export function createWizardShell({
         onKeyPress,
       });
 
-      rawInputHandler = onRawInput;
+      rawInputHandler = handleRawInput;
       renderer.stdin.prependListener("data", rawInputHandler);
       render();
     },
   };
+
+  return shell;
 }
