@@ -1,5 +1,6 @@
 import { DashboardRoute } from "@/app/_components/dashboard-route";
 import { DashboardAuthScreen } from "@/components/dashboard/dashboard-auth-screen";
+import { DashboardUpdatesClient } from "@/components/dashboard/dashboard-updates-client";
 import { getDashboardPageAuthState } from "@/server/dashboard-auth-next";
 import { loadDashboardReleases, loadDashboardStatus } from "@/server/dashboard-page-data";
 
@@ -15,5 +16,9 @@ export default async function UpdatesPage() {
 
   const [status, releases] = await Promise.all([loadDashboardStatus(), loadDashboardReleases()]);
 
-  return <DashboardRoute view="updates" initialData={{ status, releases }} />;
+  return (
+    <DashboardRoute>
+      <DashboardUpdatesClient status={status} releases={releases} />
+    </DashboardRoute>
+  );
 }

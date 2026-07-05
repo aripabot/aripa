@@ -1,5 +1,6 @@
 import { DashboardRoute } from "@/app/_components/dashboard-route";
 import { DashboardAuthScreen } from "@/components/dashboard/dashboard-auth-screen";
+import { DashboardDockerClient } from "@/components/dashboard/dashboard-docker-client";
 import { getDashboardPageAuthState } from "@/server/dashboard-auth-next";
 import { loadDashboardStatus, loadDockerDeployment } from "@/server/dashboard-page-data";
 
@@ -18,5 +19,9 @@ export default async function DockerDeploymentsPage() {
     loadDockerDeployment(),
   ]);
 
-  return <DashboardRoute view="docker-deployments" initialData={{ status, dockerDeployment }} />;
+  return (
+    <DashboardRoute>
+      <DashboardDockerClient status={status} deployment={dockerDeployment} />
+    </DashboardRoute>
+  );
 }

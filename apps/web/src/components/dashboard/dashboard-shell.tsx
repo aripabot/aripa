@@ -6,23 +6,24 @@ import { useEffect, useState } from "react";
 import type * as React from "react";
 import { Activity, Container, Download, LogOut, Logs, Moon, Settings, Sun } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
-import { getDockerDeploymentStatus, getLogs, getReleases, getStatus } from "@/lib/api";
-import { cn } from "@/lib/utils";
 import { ErrorPanel } from "@/components/dashboard/components/panels";
 import { DashboardOnboardingScreen } from "@/components/dashboard/dashboard-onboarding-screen";
 import { useLoadState } from "@/components/dashboard/hooks/use-load-state";
-import { DockerDeploymentsPage } from "@/components/dashboard/pages/docker";
-import { LogsPage } from "@/components/dashboard/pages/logs";
-import { Overview } from "@/components/dashboard/pages/overview";
-import { SettingsPage } from "@/components/dashboard/pages/settings";
-import { UpdatesPage } from "@/components/dashboard/pages/updates";
-import type { CompleteOnboardingResponse } from "@/lib/api-types";
-import type { DashboardInitialData } from "@/server/dashboard-page-data";
+import { Button } from "@/components/ui/button";
+import { getStatus } from "@/lib/api";
+import type { CompleteOnboardingResponse, DashboardStatus } from "@/lib/api-types";
+import { cn } from "@/lib/utils";
+import type { LoadState } from "@/server/dashboard-page-data";
 
 export type View = "overview" | "logs" | "updates" | "docker-deployments" | "settings";
 type ThemeMode = "system" | "light" | "dark";
 type ResolvedTheme = "light" | "dark";
+
+interface DashboardShellRenderContext {
+  statusState: LoadState<DashboardStatus>;
+  refreshStatus: () => Promise<void>;
+  setStatusState: React.Dispatch<React.SetStateAction<LoadState<DashboardStatus>>>;
+}
 
 const views: Array<{ id: View; label: string; href: string; icon: typeof Activity }> = [
   { id: "overview", label: "Overview", href: "/", icon: Activity },
@@ -37,12 +38,14 @@ const views: Array<{ id: View; label: string; href: string; icon: typeof Activit
   { id: "settings", label: "Settings", href: "/settings", icon: Settings },
 ];
 
-export function Dashboard({
+export function DashboardShell({
+  children,
+  initialStatus,
   view,
-  initialData = {},
 }: {
+  children: (context: DashboardShellRenderContext) => React.ReactNode;
+  initialStatus?: LoadState<DashboardStatus>;
   view: View;
-  initialData?: DashboardInitialData;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -51,17 +54,7 @@ export function Dashboard({
     state: statusState,
     refresh: refreshStatus,
     setState: setStatusState,
-  } = useLoadState(getStatus, initialData.status);
-  const { state: logsState, refresh: refreshLogs } = useLoadState(getLogs, initialData.logs);
-  const { state: releasesState, refresh: refreshReleases } = useLoadState(
-    getReleases,
-    initialData.releases,
-  );
-  const {
-    state: dockerState,
-    refresh: refreshDockerDeployment,
-    setState: setDockerState,
-  } = useLoadState(getDockerDeploymentStatus, initialData.dockerDeployment);
+  } = useLoadState(getStatus, initialStatus);
   const [themeMode, setThemeMode] = useState<ThemeMode>("system");
   const [systemTheme, setSystemTheme] = useState<ResolvedTheme>("light");
   const resolvedTheme = themeMode === "system" ? systemTheme : themeMode;
@@ -241,58 +234,7 @@ export function Dashboard({
                 onRetry={refreshStatus}
               />
             ) : (
-              <>
-                {view === "overview" && <Overview status={statusState} onRefresh={refreshStatus} />}
-                {view === "logs" && <LogsPage logs={logsState} onRefresh={refreshLogs} />}
-                {view === "updates" && (
-                  <UpdatesPage
-                    releases={releasesState}
-                    status={statusState}
-                    currentPackageVersion={
-                      statusState.status === "ready" ? statusState.data.botVersion : null
-                    }
-                    onRefresh={refreshReleases}
-                    onStatusRefresh={refreshStatus}
-                    onSettingsSaved={() => {
-                      void refreshStatus();
-                      void refreshReleases();
-                    }}
-                    onInstalled={() => {
-                      void refreshReleases();
-                      void refreshStatus();
-                    }}
-                  />
-                )}
-                {view === "docker-deployments" && (
-                  <DockerDeploymentsPage
-                    deployment={dockerState}
-                    onRefresh={() => {
-                      void refreshDockerDeployment();
-                      void refreshStatus();
-                    }}
-                    onStatusChange={(nextStatus) => {
-                      setDockerState({ status: "ready", data: nextStatus, error: null });
-                      void refreshStatus();
-                    }}
-                  />
-                )}
-                {view === "settings" && statusState.status === "ready" && (
-                  <SettingsPage
-                    status={statusState.data}
-                    onSaved={(result) => {
-                      setStatusState({
-                        status: "ready",
-                        data: {
-                          ...statusState.data,
-                          appName: result.config.name,
-                          config: result.config,
-                        },
-                        error: null,
-                      });
-                    }}
-                  />
-                )}
-              </>
+              children({ statusState, refreshStatus, setStatusState })
             )}
           </main>
         </div>

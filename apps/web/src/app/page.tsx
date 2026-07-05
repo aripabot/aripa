@@ -1,5 +1,6 @@
 import { DashboardRoute } from "@/app/_components/dashboard-route";
 import { DashboardAuthScreen } from "@/components/dashboard/dashboard-auth-screen";
+import { DashboardOverviewClient } from "@/components/dashboard/dashboard-overview-client";
 import { getDashboardPageAuthState } from "@/server/dashboard-auth-next";
 import { loadDashboardStatus } from "@/server/dashboard-page-data";
 
@@ -15,5 +16,9 @@ export default async function OverviewPage() {
 
   const status = await loadDashboardStatus();
 
-  return <DashboardRoute view="overview" initialData={{ status }} />;
+  return (
+    <DashboardRoute>
+      <DashboardOverviewClient status={status} />
+    </DashboardRoute>
+  );
 }
