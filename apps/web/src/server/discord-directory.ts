@@ -9,6 +9,11 @@ const discordDirectoryCache = new Map<
 >();
 const discordDirectoryInflight = new Map<string, Promise<DiscordDirectory>>();
 
+export function resetDiscordDirectoryCacheForTests(): void {
+  discordDirectoryCache.clear();
+  discordDirectoryInflight.clear();
+}
+
 export async function getDiscordDirectory(
   guildIds: readonly string[],
   activeMutes: readonly { guildId: string; userId: string; muteRoleId: string }[],

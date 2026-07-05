@@ -1,12 +1,17 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 
-import { channelKey, getDiscordDirectory } from "@/server/discord-directory";
+import {
+  channelKey,
+  getDiscordDirectory,
+  resetDiscordDirectoryCacheForTests,
+} from "@/server/discord-directory";
 
 describe("dashboard Discord directory", () => {
   const previousToken = process.env.TOKEN;
 
   afterEach(() => {
     vi.restoreAllMocks();
+    resetDiscordDirectoryCacheForTests();
 
     if (previousToken === undefined) {
       delete process.env.TOKEN;
@@ -44,6 +49,68 @@ describe("dashboard Discord directory", () => {
     expect(calls).toEqual(["/api/v10/guilds/guild-1", "/api/v10/channels/log-1"]);
     expect(calls).not.toContain("/api/v10/guilds/guild-1/channels");
     expect(calls).not.toContain("/api/v10/guilds/guild-1/roles");
+  });
+
+  test("reuses cached lookups for identical directory requests", async () => {
+    process.env.TOKEN = `test-token-${crypto.randomUUID()}`;
+    const calls: string[] = [];
+
+    vi.stubGlobal("fetch", async (input: string | URL | Request) => {
+      const url = new URL(input.toString());
+      calls.push(url.pathname);
+
+      if (url.pathname === "/api/v10/guilds/guild-1") {
+        return jsonResponse({ id: "guild-1", name: "Guild One", icon: null });
+      }
+
+      if (url.pathname === "/api/v10/channels/log-1") {
+        return jsonResponse({ id: "log-1", name: "mod-log" });
+      }
+
+      throw new Error(`Unexpected Discord fetch: ${url.pathname}`);
+    });
+
+    const input = [
+      ["guild-1"],
+      [],
+      [{ guildId: "guild-1", logChannelId: "log-1", muteRoleId: null }],
+    ] as const;
+
+    await getDiscordDirectory(...input);
+    await getDiscordDirectory(...input);
+
+    expect(calls).toEqual(["/api/v10/guilds/guild-1", "/api/v10/channels/log-1"]);
+  });
+
+  test("coalesces concurrent identical directory requests", async () => {
+    process.env.TOKEN = `test-token-${crypto.randomUUID()}`;
+    const calls: string[] = [];
+
+    vi.stubGlobal("fetch", async (input: string | URL | Request) => {
+      const url = new URL(input.toString());
+      calls.push(url.pathname);
+      await Promise.resolve();
+
+      if (url.pathname === "/api/v10/guilds/guild-1") {
+        return jsonResponse({ id: "guild-1", name: "Guild One", icon: null });
+      }
+
+      if (url.pathname === "/api/v10/channels/log-1") {
+        return jsonResponse({ id: "log-1", name: "mod-log" });
+      }
+
+      throw new Error(`Unexpected Discord fetch: ${url.pathname}`);
+    });
+
+    const input = [
+      ["guild-1"],
+      [],
+      [{ guildId: "guild-1", logChannelId: "log-1", muteRoleId: null }],
+    ] as const;
+
+    await Promise.all([getDiscordDirectory(...input), getDiscordDirectory(...input)]);
+
+    expect(calls).toEqual(["/api/v10/guilds/guild-1", "/api/v10/channels/log-1"]);
   });
 
   test("includes Discord retry-after detail when lookups are rate limited", async () => {
