@@ -54,6 +54,7 @@ import { readableError } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import { ConfirmActionButton } from "@/components/dashboard/components/confirm-action-button";
 import { Field, SwitchField } from "@/components/dashboard/components/fields";
+import { Metric } from "@/components/dashboard/components/metric";
 import { EmptyPanel, ErrorPanel, LoadingPanel } from "@/components/dashboard/components/panels";
 import { DashboardOnboardingScreen } from "@/components/dashboard/dashboard-onboarding-screen";
 import { useLoadState } from "@/components/dashboard/hooks/use-load-state";
@@ -523,16 +524,6 @@ function Overview({
           <RuntimeDetail label="Version" value={status.data.botVersion} />
         </div>
       </section>
-    </div>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="p-4">
-      <p className="text-sm text-muted-foreground">{label}</p>
-      <p className="mt-2 text-3xl font-semibold tracking-normal">{formatCount(value)}</p>
-      <p className="mt-1 h-5 text-sm text-muted-foreground" aria-hidden="true" />
     </div>
   );
 }
