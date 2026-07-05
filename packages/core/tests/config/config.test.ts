@@ -7,6 +7,7 @@ import {
   isGuildAllowed,
   loadRuntimeJsonConfig,
   parseRuntimeJsonConfig,
+  resolveDatabasePath,
 } from "@aripabot/core/config/config.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
@@ -137,6 +138,24 @@ describe("loadRuntimeJsonConfig", () => {
     await expect(
       loadRuntimeJsonConfig(join(repositoryRoot, ".missing-config.json")),
     ).resolves.toEqual(DEFAULT_RUNTIME_CONFIG);
+  });
+});
+
+describe("resolveDatabasePath", () => {
+  test("uses DATABASE_PATH when configured", () => {
+    expect(resolveDatabasePath({ DATABASE_PATH: "  /tmp/aripa.sqlite  " }, () => true)).toBe(
+      "/tmp/aripa.sqlite",
+    );
+  });
+
+  test("defaults to the repository root database path when no database exists", () => {
+    expect(resolveDatabasePath({}, () => false)).toBe(join(repositoryRoot, "aripa.sqlite"));
+  });
+
+  test("prefers an existing legacy bot database", () => {
+    const legacyBotPath = join(repositoryRoot, "apps", "bot", "aripa.sqlite");
+
+    expect(resolveDatabasePath({}, (path) => path === legacyBotPath)).toBe(legacyBotPath);
   });
 });
 

@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -35,6 +36,10 @@ export {
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 const defaultRuntimeConfigPath = join(repositoryRoot, "config.json");
 const defaultDatabasePath = join(repositoryRoot, "aripa.sqlite");
+const legacyDatabasePaths = [
+  join(repositoryRoot, "apps", "bot", "aripa.sqlite"),
+  join(repositoryRoot, "packages", "core", "aripa.sqlite"),
+] as const;
 
 const runtimeConfig = await loadRuntimeJsonConfig();
 
@@ -42,7 +47,7 @@ export const config = {
   token: process.env.TOKEN,
   prefix: process.env.PREFIX?.trim() || "-",
   logLevel: process.env.LOG_LEVEL || "info",
-  databasePath: process.env.DATABASE_PATH?.trim() || defaultDatabasePath,
+  databasePath: resolveDatabasePath(),
   name: runtimeConfig.name,
   operatorUserId: runtimeConfig.operatorUserId,
   stylePrompt: runtimeConfig.stylePrompt,
@@ -70,6 +75,19 @@ export function isGuildAllowed(
   allowlistedServerIds: readonly string[] = config.allowlistedServerIds,
 ): boolean {
   return typeof guildId === "string" && allowlistedServerIds.includes(guildId);
+}
+
+export function resolveDatabasePath(
+  env: Record<string, string | undefined> = process.env,
+  fileExists: (path: string) => boolean = existsSync,
+): string {
+  const configuredPath = env.DATABASE_PATH?.trim();
+
+  if (configuredPath) {
+    return configuredPath;
+  }
+
+  return [defaultDatabasePath, ...legacyDatabasePaths].find(fileExists) ?? defaultDatabasePath;
 }
 
 export async function loadRuntimeJsonConfig(
