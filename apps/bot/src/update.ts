@@ -22,6 +22,7 @@ import {
 } from "@aripabot/core/update/release-updater.ts";
 import type { MinimalKeyEvent } from "@aripabot/core/onboarding-wizard/types.ts";
 import {
+  clearRendererRoot,
   createRenderableFactories,
   isExitKey,
   parseMinimalKey,
@@ -175,7 +176,7 @@ function render(): void {
     return;
   }
 
-  clearRoot();
+  clearRendererRoot(renderer);
   currentSelect = null;
   currentSelectHandler = null;
   focusCurrentControl = null;
@@ -675,16 +676,6 @@ function handleKeyPress(key: MinimalKeyEvent): boolean {
   }
 
   return false;
-}
-
-function clearRoot(): void {
-  if (!renderer) {
-    return;
-  }
-
-  for (const child of renderer.root.getChildren()) {
-    renderer.root.remove(child.id);
-  }
 }
 
 function finish(output: string): void {

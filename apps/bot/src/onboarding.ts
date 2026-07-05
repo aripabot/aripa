@@ -57,6 +57,7 @@ import type {
   Step,
 } from "@aripabot/core/onboarding-wizard/types.ts";
 import {
+  clearRendererRoot,
   createRenderableFactories,
   isExitKey,
   parseMinimalKey,
@@ -117,7 +118,7 @@ function render(): void {
     return;
   }
 
-  clearRoot();
+  clearRendererRoot(renderer);
   focusCurrentControl = null;
   currentControlKind = null;
   currentInput = null;
@@ -1206,16 +1207,6 @@ function goBack(): void {
 
   step = previousStep;
   render();
-}
-
-function clearRoot(): void {
-  if (!renderer) {
-    return;
-  }
-
-  for (const child of renderer.root.getChildren()) {
-    renderer.root.remove(child.id);
-  }
 }
 
 function finish(message: string): void {

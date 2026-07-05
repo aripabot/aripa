@@ -58,3 +58,13 @@ export function isExitKey(key: MinimalKeyEvent): boolean {
     (key.ctrl && (key.name === "c" || key.name === "C" || key.name === "\u0003"))
   );
 }
+
+export function clearRendererRoot(renderer: CliRenderer | null): void {
+  if (!renderer) {
+    return;
+  }
+
+  for (const child of renderer.root.getChildren()) {
+    renderer.root.remove(child.id);
+  }
+}
