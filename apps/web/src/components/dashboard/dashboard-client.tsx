@@ -66,6 +66,7 @@ import {
 import { readableError } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import { DashboardOnboardingScreen } from "@/components/dashboard/dashboard-onboarding-screen";
+import { useLoadState } from "@/components/dashboard/hooks/use-load-state";
 import {
   formatCount,
   formatDate,
@@ -114,18 +115,21 @@ export function Dashboard({
   const pathname = usePathname();
   const router = useRouter();
   const [pendingHref, setPendingHref] = useState<string | null>(null);
-  const [statusState, setStatusState] = useState<LoadState<DashboardStatus>>(
-    () => initialData.status ?? initialLoadState(),
+  const {
+    state: statusState,
+    refresh: refreshStatus,
+    setState: setStatusState,
+  } = useLoadState(getStatus, initialData.status);
+  const { state: logsState, refresh: refreshLogs } = useLoadState(getLogs, initialData.logs);
+  const { state: releasesState, refresh: refreshReleases } = useLoadState(
+    getReleases,
+    initialData.releases,
   );
-  const [logsState, setLogsState] = useState<LoadState<LogsResponse>>(
-    () => initialData.logs ?? initialLoadState(),
-  );
-  const [releasesState, setReleasesState] = useState<LoadState<ReleasesResponse>>(
-    () => initialData.releases ?? initialLoadState(),
-  );
-  const [dockerState, setDockerState] = useState<LoadState<DockerDeploymentStatus>>(
-    () => initialData.dockerDeployment ?? initialLoadState(),
-  );
+  const {
+    state: dockerState,
+    refresh: refreshDockerDeployment,
+    setState: setDockerState,
+  } = useLoadState(getDockerDeploymentStatus, initialData.dockerDeployment);
   const [themeMode, setThemeMode] = useState<ThemeMode>("system");
   const [systemTheme, setSystemTheme] = useState<ResolvedTheme>("light");
   const resolvedTheme = themeMode === "system" ? systemTheme : themeMode;
@@ -150,61 +154,6 @@ export function Dashboard({
     document.documentElement.classList.toggle("dark", resolvedTheme === "dark");
     document.documentElement.style.colorScheme = resolvedTheme;
   }, [resolvedTheme]);
-
-  useEffect(() => {
-    if (statusState.status === "loading") {
-      void refreshStatus();
-    }
-  }, [statusState.status]);
-
-  useEffect(() => {
-    if (view === "logs" && logsState.status === "loading") {
-      void refreshLogs();
-    }
-    if (view === "updates" && releasesState.status === "loading") {
-      void refreshReleases();
-    }
-    if (view === "docker-deployments" && dockerState.status === "loading") {
-      void refreshDockerDeployment();
-    }
-  }, [view, logsState.status, releasesState.status, dockerState.status]);
-
-  async function refreshStatus() {
-    setStatusState(initialLoadState());
-    try {
-      setStatusState({ status: "ready", data: await getStatus(), error: null });
-    } catch (error) {
-      setStatusState({ status: "error", data: null, error: readableError(error) });
-    }
-  }
-
-  async function refreshLogs() {
-    setLogsState(initialLoadState());
-    try {
-      const logs = await getLogs();
-      setLogsState({ status: "ready", data: logs, error: null });
-    } catch (error) {
-      setLogsState({ status: "error", data: null, error: readableError(error) });
-    }
-  }
-
-  async function refreshReleases() {
-    setReleasesState(initialLoadState());
-    try {
-      setReleasesState({ status: "ready", data: await getReleases(), error: null });
-    } catch (error) {
-      setReleasesState({ status: "error", data: null, error: readableError(error) });
-    }
-  }
-
-  async function refreshDockerDeployment() {
-    setDockerState(initialLoadState());
-    try {
-      setDockerState({ status: "ready", data: await getDockerDeploymentStatus(), error: null });
-    } catch (error) {
-      setDockerState({ status: "error", data: null, error: readableError(error) });
-    }
-  }
 
   async function signOut() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -2382,8 +2331,4 @@ function themeButtonLabel(themeMode: ThemeMode, resolvedTheme: ResolvedTheme): s
     case "light":
       return "Using light appearance. Use system appearance";
   }
-}
-
-function initialLoadState<T>(): LoadState<T> {
-  return { status: "loading", data: null, error: null };
 }
