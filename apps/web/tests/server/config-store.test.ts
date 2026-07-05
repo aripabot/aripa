@@ -4,10 +4,10 @@ import { join } from "node:path";
 
 import { describe, expect, test } from "vitest";
 
-import { readConfig, saveConfig } from "@/server/config-service";
+import { readConfig, saveConfig } from "@/server/config-store";
 import { cloneDefaultRuntimeConfig } from "@aripabot/core/config/config.ts";
 
-describe("dashboard config service", () => {
+describe("dashboard config store", () => {
   test("reads missing config files as runtime defaults", async () => {
     await withTempConfig(async (configPath) => {
       Bun.env.CONFIG_PATH = configPath;

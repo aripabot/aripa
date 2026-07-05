@@ -1,6 +1,6 @@
 import type { SaveConfigRequest } from "@/lib/api-types";
 import { json, jsonError } from "@/app/api/_utils/json";
-import { readConfig, saveConfig } from "@/server/config-service";
+import { readConfig, saveConfig } from "@/server/config-store";
 import { requireDashboardApiAuth } from "@/server/dashboard-auth-next";
 
 export const dynamic = "force-dynamic";

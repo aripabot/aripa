@@ -1,5 +1,5 @@
 import { json, jsonError } from "@/app/api/_utils/json";
-import { createReleaseSigningKeyPair } from "@/server/config-service";
+import { createReleaseSigningKeyPair } from "@/server/config-store";
 import { requireDashboardApiAuth } from "@/server/dashboard-auth-next";
 
 export const dynamic = "force-dynamic";

@@ -1,8 +1,8 @@
 import { fetchGitHubReleases } from "@aripabot/core/update/release-updater.ts";
 
 import type { ReleasesResponse } from "@/lib/api-types";
+import { readConfig } from "@/server/config-store";
 import { getEnv } from "@/server/env";
-import { readConfig } from "@/server/config-service";
 
 export async function listReleases(): Promise<ReleasesResponse> {
   const { config } = await readConfig();

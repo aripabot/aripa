@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { applyReleaseUpdate, fetchGitHubReleases } from "@aripabot/core/update/release-updater.ts";
 
 import type { UpdateInstallResponse } from "@/lib/api-types";
-import { readConfig } from "@/server/config-service";
+import { readConfig } from "@/server/config-store";
 
 const repositoryRoot = join(/* turbopackIgnore: true */ process.cwd(), "../..");
 

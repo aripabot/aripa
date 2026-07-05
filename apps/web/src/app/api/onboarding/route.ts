@@ -1,6 +1,7 @@
 import type { CompleteOnboardingRequest } from "@/lib/api-types";
 import { json, jsonError } from "@/app/api/_utils/json";
-import { completeOnboarding, getOnboardingOptions } from "@/server/config-service";
+import { getOnboardingOptions } from "@/server/config-service";
+import { completeOnboarding } from "@/server/config-store";
 import { requireDashboardApiAuth } from "@/server/dashboard-auth-next";
 
 export const dynamic = "force-dynamic";
