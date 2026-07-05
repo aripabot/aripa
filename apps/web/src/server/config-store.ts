@@ -51,18 +51,17 @@ export async function readConfig(): Promise<ConfigResponse> {
 
 export async function saveConfig(config: RuntimeJsonConfig): Promise<SaveConfigResponse> {
   const pathOrUrl = resolveConfigPath();
-  const parsedConfig = parseRuntimeJsonConfig(config);
   const existing = await readExistingJsonObject(pathOrUrl);
-  const mergedConfig = { ...existing, ...parsedConfig };
-  const savedConfig = parseRuntimeJsonConfig(mergedConfig);
+  const savedConfig = parseRuntimeJsonConfig({ ...existing, ...config });
+  const rawConfig = { ...existing, ...savedConfig };
 
-  await writeFile(pathOrUrl, `${JSON.stringify(mergedConfig, null, 2)}\n`);
+  await writeFile(pathOrUrl, `${JSON.stringify(rawConfig, null, 2)}\n`);
   await requestBotRuntimeConfigReload();
 
   return {
     path: formatPath(pathOrUrl),
     exists: true,
-    raw: mergedConfig,
+    raw: rawConfig,
     config: savedConfig,
     savedAt: new Date().toISOString(),
   };
