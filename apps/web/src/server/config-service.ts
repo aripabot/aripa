@@ -69,6 +69,7 @@ const execFileAsync = promisify(execFile);
 const LOG_TAIL_LINE_COUNT = 500;
 const LOG_FILE_TAIL_LINE_COUNT = 150;
 const LOG_FILE_TAIL_BYTES = 256 * 1024;
+const LOCAL_OPERATIONS_CACHE_TTL_MS = 10_000;
 const LOG_ENTRY_LEVELS = new Set<LogEntryLevel>([
   "trace",
   "debug",
@@ -79,6 +80,11 @@ const LOG_ENTRY_LEVELS = new Set<LogEntryLevel>([
   "unknown",
 ]);
 const ANSI_ESCAPE_PATTERN = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "g");
+const localOperationsCache = new Map<
+  string,
+  { expiresAtMs: number; state: LocalOperationsState }
+>();
+const localOperationsInflight = new Map<string, Promise<LocalOperationsState>>();
 
 function getEnv(name: string): string | undefined {
   return process.env[name] ?? rootEnv[name];
@@ -437,6 +443,35 @@ async function getDashboardOperations(
 }
 
 async function readLocalOperations(databasePath: string): Promise<LocalOperationsState> {
+  const cached = localOperationsCache.get(databasePath);
+  if (cached && cached.expiresAtMs > Date.now()) {
+    return cached.state;
+  }
+
+  const inflight = localOperationsInflight.get(databasePath);
+  if (inflight) {
+    return inflight;
+  }
+
+  const promise = readLocalOperationsFromDatabase(databasePath).then((state) => {
+    localOperationsCache.set(databasePath, {
+      expiresAtMs: Date.now() + LOCAL_OPERATIONS_CACHE_TTL_MS,
+      state,
+    });
+    return state;
+  });
+  localOperationsInflight.set(databasePath, promise);
+
+  try {
+    return await promise;
+  } finally {
+    localOperationsInflight.delete(databasePath);
+  }
+}
+
+async function readLocalOperationsFromDatabase(
+  databasePath: string,
+): Promise<LocalOperationsState> {
   const script = `
     import { GuildConfigStore } from "@aripabot/core/config/guild-config-store.ts";
     import { ActiveMuteStore } from "@aripabot/core/moderation/active-mute-store.ts";
