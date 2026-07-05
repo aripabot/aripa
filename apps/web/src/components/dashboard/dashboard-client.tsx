@@ -29,17 +29,6 @@ import {
   UserRound,
 } from "lucide-react";
 
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -63,6 +52,7 @@ import {
 } from "@/lib/api";
 import { readableError } from "@/lib/errors";
 import { cn } from "@/lib/utils";
+import { ConfirmActionButton } from "@/components/dashboard/components/confirm-action-button";
 import { Field, SwitchField } from "@/components/dashboard/components/fields";
 import { EmptyPanel, ErrorPanel, LoadingPanel } from "@/components/dashboard/components/panels";
 import { DashboardOnboardingScreen } from "@/components/dashboard/dashboard-onboarding-screen";
@@ -1365,40 +1355,6 @@ function DockerCommandOutput({ result }: { result: DockerDeploymentCommandRespon
         )}
       </CardContent>
     </Card>
-  );
-}
-
-function ConfirmActionButton({
-  title,
-  description,
-  confirmLabel,
-  disabled,
-  onConfirm,
-  trigger,
-}: {
-  title: string;
-  description: string;
-  confirmLabel: string;
-  disabled?: boolean;
-  onConfirm: () => void;
-  trigger: React.ReactElement;
-}) {
-  return (
-    <AlertDialog>
-      <AlertDialogTrigger asChild disabled={disabled}>
-        {trigger}
-      </AlertDialogTrigger>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>{title}</AlertDialogTitle>
-          <AlertDialogDescription>{description}</AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction onClick={onConfirm}>{confirmLabel}</AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
   );
 }
 
