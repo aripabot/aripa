@@ -223,3 +223,97 @@ export function closeTuiRenderer(
   renderer?.destroy();
   return null;
 }
+
+export function createWizardShell({
+  backgroundColor,
+  rendererName,
+  onKeyPress,
+  onRawInput,
+}: {
+  backgroundColor: string;
+  rendererName: string;
+  onKeyPress: (key: MinimalKeyEvent) => boolean;
+  onRawInput: RawInputHandler;
+}): ReturnType<typeof createRenderableFactories> & {
+  controls: TuiControlState;
+  destroy: () => void;
+  finish: (output: string) => void;
+  isFinished: () => boolean;
+  renderFrame: (...children: Renderable[]) => void;
+  requireRenderer: () => CliRenderer;
+  start: (render: () => void) => Promise<void>;
+} {
+  let renderer: CliRenderer | null = null;
+  let rawInputHandler: RawInputHandler | null = null;
+  let finished = false;
+  const controls = new TuiControlState();
+
+  function requireRenderer(): CliRenderer {
+    if (!renderer) {
+      throw new Error(`${rendererName} renderer has not been created.`);
+    }
+
+    return renderer;
+  }
+
+  const factories = createRenderableFactories(requireRenderer);
+
+  return {
+    ...factories,
+    controls,
+    destroy() {
+      rawInputHandler = closeTuiRenderer(renderer, rawInputHandler);
+      renderer = null;
+    },
+    finish(output: string): void {
+      if (finished) {
+        return;
+      }
+
+      finished = true;
+      rawInputHandler = closeTuiRenderer(renderer, rawInputHandler);
+      renderer = null;
+      console.log(output);
+    },
+    isFinished() {
+      return finished;
+    },
+    renderFrame(...children: Renderable[]): void {
+      if (!renderer || finished) {
+        return;
+      }
+
+      clearRendererRoot(renderer);
+      controls.reset();
+
+      renderer.root.add(
+        factories.Box(
+          {
+            width: "100%",
+            height: "100%",
+            backgroundColor,
+            paddingX: 2,
+            paddingY: 1,
+            flexDirection: "column",
+            gap: 1,
+          },
+          ...children,
+        ),
+      );
+
+      controls.focus();
+      renderer.requestRender();
+    },
+    requireRenderer,
+    async start(render: () => void): Promise<void> {
+      renderer = await createTuiRenderer({
+        backgroundColor,
+        onKeyPress,
+      });
+
+      rawInputHandler = onRawInput;
+      renderer.stdin.prependListener("data", rawInputHandler);
+      render();
+    },
+  };
+}

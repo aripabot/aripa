@@ -51,16 +51,10 @@ import type {
   Step,
 } from "@aripabot/core/onboarding-wizard/types.ts";
 import {
-  clearRendererRoot,
-  closeTuiRenderer,
-  createRenderableFactories,
   createSelectControlFactory,
-  createTuiRenderer,
+  createWizardShell,
   isExitKey,
   parseMinimalKey,
-  TuiControlState,
-  type CliRenderer,
-  type RawInputHandler,
 } from "./tui/kit.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../..", import.meta.url));
@@ -70,68 +64,30 @@ const existingConfig = await loadExistingRuntimeConfig(CONFIG_PATH);
 const state: OnboardingState = createInitialOnboardingState(CONFIG_PATH, existingConfig);
 
 let step: Step = initialStepForState(state);
-let renderer: CliRenderer | null = null;
-const controls = new TuiControlState();
-let finished = false;
-let rawExitHandler: RawInputHandler | null = null;
 let generatedPrivateKeySecret: string | null = null;
 let generatedKeyMessage: string | null = null;
 
 const STYLE_PROMPTS = await loadStylePrompts(state.stylePrompt);
 const MODEL_OPTIONS = await loadWizardModelOptions();
 const SELECTABLE_MODEL_PROVIDERS = selectableProvidersFromModelOptions(MODEL_OPTIONS);
-const { Box, Text, Input, Select } = createRenderableFactories(requireRenderer);
+const shell = createWizardShell({
+  backgroundColor: colors.background,
+  rendererName: "Onboarding",
+  onKeyPress: handleKeyPress,
+  onRawInput: handleRawExitInput,
+});
+const { Box, Text, Input, Select, controls } = shell;
 const selectControl = createSelectControlFactory({ Select, controls, colors });
 
 try {
-  renderer = await createTuiRenderer({
-    backgroundColor: colors.background,
-    onKeyPress: handleKeyPress,
-  });
-
-  rawExitHandler = handleRawExitInput;
-  renderer.stdin.prependListener("data", rawExitHandler);
-  render();
+  await shell.start(render);
 } catch (error) {
-  renderer?.destroy();
+  shell.destroy();
   throw error;
 }
 
 function render(): void {
-  if (!renderer || finished) {
-    return;
-  }
-
-  clearRendererRoot(renderer);
-  controls.reset();
-
-  renderer.root.add(
-    Box(
-      {
-        width: "100%",
-        height: "100%",
-        backgroundColor: colors.background,
-        paddingX: 2,
-        paddingY: 1,
-        flexDirection: "column",
-        gap: 1,
-      },
-      header(),
-      body(),
-      footer(),
-    ),
-  );
-
-  controls.focus();
-  renderer.requestRender();
-}
-
-function requireRenderer(): CliRenderer {
-  if (!renderer) {
-    throw new Error("Onboarding renderer has not been created.");
-  }
-
-  return renderer;
+  shell.renderFrame(header(), body(), footer());
 }
 
 function header() {
@@ -1118,13 +1074,7 @@ function goBack(): void {
 }
 
 function finish(message: string): void {
-  if (finished) {
-    return;
-  }
-
-  finished = true;
-  rawExitHandler = closeTuiRenderer(renderer, rawExitHandler);
-  console.log(message);
+  shell.finish(message);
 }
 
 function handleRawExitInput(chunk: Buffer | string): void {

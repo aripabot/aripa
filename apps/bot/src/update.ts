@@ -15,16 +15,10 @@ import {
 } from "@aripabot/core/update/release-updater.ts";
 import type { MinimalKeyEvent } from "@aripabot/core/onboarding-wizard/types.ts";
 import {
-  clearRendererRoot,
-  closeTuiRenderer,
-  createRenderableFactories,
   createSelectControlFactory,
-  createTuiRenderer,
+  createWizardShell,
   isExitKey,
   parseMinimalKey,
-  TuiControlState,
-  type CliRenderer,
-  type RawInputHandler,
 } from "./tui/kit.ts";
 
 type View = "loading" | "select" | "confirm" | "updating" | "done" | "error";
@@ -49,11 +43,7 @@ const isOfficialUpdateRepo = updateConfig.githubRepo === DEFAULT_GITHUB_REPO;
 const dryRunUpdates = Bun.env.DRY_RUN_UPDATES?.trim() === "true";
 const updateLatest = Bun.argv.slice(2).includes("--latest");
 
-let renderer: CliRenderer | null = null;
-const controls = new TuiControlState();
-let rawExitHandler: RawInputHandler | null = null;
 let spinnerTimer: ReturnType<typeof setInterval> | null = null;
-let finished = false;
 
 let view: View = "loading";
 let releases: GitHubRelease[] = [];
@@ -62,7 +52,13 @@ let message = "Scanning GitHub releases...";
 let errorMessage: string | null = null;
 let detectedDefaultDockerContainer = false;
 let spinnerIndex = 0;
-const { Box, Text, Select } = createRenderableFactories(requireRenderer);
+const shell = createWizardShell({
+  backgroundColor: colors.background,
+  rendererName: "Update",
+  onKeyPress: handleKeyPress,
+  onRawInput: handleRawExitInput,
+});
+const { Box, Text, Select, controls } = shell;
 const selectControl = createSelectControlFactory({ Select, controls, colors });
 
 if (updateLatest) {
@@ -71,18 +67,11 @@ if (updateLatest) {
 }
 
 try {
-  renderer = await createTuiRenderer({
-    backgroundColor: colors.background,
-    onKeyPress: handleKeyPress,
-  });
-
-  rawExitHandler = handleRawExitInput;
-  renderer.stdin.prependListener("data", rawExitHandler);
-  render();
+  await shell.start(render);
   void detectDefaultDockerContainer();
   void loadReleases();
 } catch (error) {
-  renderer?.destroy();
+  shell.destroy();
   throw error;
 }
 
@@ -161,40 +150,7 @@ async function loadReleases(): Promise<void> {
 }
 
 function render(): void {
-  if (!renderer || finished) {
-    return;
-  }
-
-  clearRendererRoot(renderer);
-  controls.reset();
-
-  renderer.root.add(
-    Box(
-      {
-        width: "100%",
-        height: "100%",
-        backgroundColor: colors.background,
-        paddingX: 2,
-        paddingY: 1,
-        flexDirection: "column",
-        gap: 1,
-      },
-      header(),
-      body(),
-      footer(),
-    ),
-  );
-
-  controls.focus();
-  renderer.requestRender();
-}
-
-function requireRenderer(): CliRenderer {
-  if (!renderer) {
-    throw new Error("Update renderer has not been created.");
-  }
-
-  return renderer;
+  shell.renderFrame(header(), body(), footer());
 }
 
 function header() {
@@ -627,14 +583,12 @@ function handleKeyPress(key: MinimalKeyEvent): boolean {
 }
 
 function finish(output: string): void {
-  if (finished) {
+  if (shell.isFinished()) {
     return;
   }
 
-  finished = true;
   stopSpinner();
-  rawExitHandler = closeTuiRenderer(renderer, rawExitHandler);
-  console.log(output);
+  shell.finish(output);
 }
 
 function handleRawExitInput(chunk: Buffer | string): void {
