@@ -718,20 +718,16 @@ function LogsPage({ logs, onRefresh }: { logs: LoadState<LogsResponse>; onRefres
     "idle",
   );
 
-  if (entryKeysRef.current === null) {
-    entryKeysRef.current = new Set();
-  }
-  const entryKeys = entryKeysRef.current;
-
   useEffect(() => {
     if (logs.status === "ready") {
       setEntries(logs.data.entries);
+      const entryKeys = ensureEntryKeys(entryKeysRef);
       entryKeys.clear();
       for (const entry of logs.data.entries) {
         entryKeys.add(logEntryKey(entry));
       }
     }
-  }, [entryKeys, logs]);
+  }, [logs]);
 
   const dockerSourceId = useMemo(() => {
     if (logs.status !== "ready") {
@@ -761,7 +757,7 @@ function LogsPage({ logs, onRefresh }: { logs: LoadState<LogsResponse>; onRefres
     eventSource.addEventListener("open", () => setStreamState("live"));
     eventSource.addEventListener("log", (event) => {
       const entry = JSON.parse(event.data) as DashboardLogEntry;
-      setEntries((current) => appendLogEntry(current, entry, entryKeys));
+      setEntries((current) => appendLogEntry(current, entry, ensureEntryKeys(entryKeysRef)));
     });
     eventSource.addEventListener("stream-error", () => setStreamState("reconnecting"));
     eventSource.addEventListener("done", () => setStreamState("reconnecting"));
@@ -770,7 +766,7 @@ function LogsPage({ logs, onRefresh }: { logs: LoadState<LogsResponse>; onRefres
     return () => {
       eventSource.close();
     };
-  }, [dockerSourceId, entryKeys, liveTail]);
+  }, [dockerSourceId, liveTail]);
 
   const availableSources = useMemo(
     () => (logs.status === "ready" ? logs.data.sources.filter((source) => source.available) : []),
@@ -2131,6 +2127,11 @@ function appendLogEntry(
   }
 
   return nextEntries;
+}
+
+function ensureEntryKeys(ref: React.MutableRefObject<Set<string> | null>): Set<string> {
+  ref.current ??= new Set();
+  return ref.current;
 }
 
 function newestFirstLogEntries(entries: readonly DashboardLogEntry[]): DashboardLogEntry[] {
