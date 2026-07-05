@@ -2,7 +2,6 @@ import {
   SelectRenderable,
   SelectRenderableEvents,
   createCliRenderer,
-  parseKeypress,
   type BoxRenderable,
   type Renderable,
   type SelectOption,
@@ -22,7 +21,12 @@ import {
   type GitHubRelease,
 } from "@aripabot/core/update/release-updater.ts";
 import type { MinimalKeyEvent } from "@aripabot/core/onboarding-wizard/types.ts";
-import { createRenderableFactories, type CliRenderer } from "./tui/kit.ts";
+import {
+  createRenderableFactories,
+  isExitKey,
+  parseMinimalKey,
+  type CliRenderer,
+} from "./tui/kit.ts";
 
 type View = "loading" | "select" | "confirm" | "updating" | "done" | "error";
 
@@ -76,7 +80,7 @@ try {
     openConsoleOnError: false,
     prependInputHandlers: [
       (sequence) => {
-        const key = parseUpdateKey(sequence);
+        const key = parseMinimalKey(sequence);
         return key ? handleKeyPress(key) : false;
       },
     ],
@@ -714,7 +718,7 @@ function handleRawExitInput(chunk: Buffer | string): void {
     return;
   }
 
-  const key = parseUpdateKey(sequence);
+  const key = parseMinimalKey(sequence);
   if (key && isExitKey(key)) {
     if (view === "updating") {
       return;
@@ -727,21 +731,4 @@ function handleRawExitInput(chunk: Buffer | string): void {
 
     finish("No changes made.");
   }
-}
-
-function parseUpdateKey(sequence: string): MinimalKeyEvent | null {
-  const key = parseKeypress(sequence);
-  if (key?.name) {
-    return key;
-  }
-
-  const kittyKey = parseKeypress(sequence, { useKittyKeyboard: true });
-  return kittyKey?.name ? kittyKey : null;
-}
-
-function isExitKey(key: MinimalKeyEvent): boolean {
-  return (
-    key.name === "escape" ||
-    (key.ctrl && (key.name === "c" || key.name === "C" || key.name === "\u0003"))
-  );
 }

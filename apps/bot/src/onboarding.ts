@@ -4,7 +4,6 @@ import {
   SelectRenderableEvents,
   SelectRenderable,
   createCliRenderer,
-  parseKeypress,
   type SelectOption,
 } from "@opentui/core";
 import { fileURLToPath } from "node:url";
@@ -57,7 +56,12 @@ import type {
   OnboardingState,
   Step,
 } from "@aripabot/core/onboarding-wizard/types.ts";
-import { createRenderableFactories, type CliRenderer } from "./tui/kit.ts";
+import {
+  createRenderableFactories,
+  isExitKey,
+  parseMinimalKey,
+  type CliRenderer,
+} from "./tui/kit.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../..", import.meta.url));
 const CONFIG_PATH = Bun.env.CONFIG_PATH?.trim() || new URL("../../../config.json", import.meta.url);
@@ -90,7 +94,7 @@ try {
     openConsoleOnError: false,
     prependInputHandlers: [
       (sequence) => {
-        const key = parseWizardKey(sequence);
+        const key = parseMinimalKey(sequence);
         if (key) {
           return handleKeyPress(key);
         }
@@ -1235,27 +1239,10 @@ function handleRawExitInput(chunk: Buffer | string): void {
     return;
   }
 
-  const key = parseWizardKey(sequence);
+  const key = parseMinimalKey(sequence);
   if (key && isExitKey(key)) {
     finish("No changes made.");
   }
-}
-
-function parseWizardKey(sequence: string): MinimalKeyEvent | null {
-  const key = parseKeypress(sequence);
-  if (key?.name) {
-    return key;
-  }
-
-  const kittyKey = parseKeypress(sequence, { useKittyKeyboard: true });
-  return kittyKey?.name ? kittyKey : null;
-}
-
-function isExitKey(key: MinimalKeyEvent): boolean {
-  return (
-    key.name === "escape" ||
-    (key.ctrl && (key.name === "c" || key.name === "C" || key.name === "\u0003"))
-  );
 }
 
 function footerText(): string {
