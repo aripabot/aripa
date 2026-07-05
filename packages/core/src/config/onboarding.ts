@@ -12,6 +12,7 @@ import {
   validateOperatorUserId,
 } from "@aripabot/core/config/onboarding-validation.ts";
 import { generateKeyPairSync } from "node:crypto";
+import { access, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -139,12 +140,13 @@ export function buildRuntimeConfig(
 export async function loadExistingRuntimeConfig(
   pathOrUrl: string | URL,
 ): Promise<Record<string, unknown> | null> {
-  const file = Bun.file(pathOrUrl);
-  if (!(await file.exists())) {
+  try {
+    await access(pathOrUrl);
+  } catch {
     return null;
   }
 
-  const rawConfig = await file.json();
+  const rawConfig = JSON.parse(await readFile(pathOrUrl, "utf8")) as unknown;
   if (!rawConfig || typeof rawConfig !== "object" || Array.isArray(rawConfig)) {
     throw new Error("Existing config.json must contain a JSON object.");
   }
@@ -167,7 +169,7 @@ export async function writeRuntimeConfig({
   }
 
   const config = buildRuntimeConfig(input, existingConfig ?? {});
-  await Bun.write(pathOrUrl, `${JSON.stringify(config, null, 2)}\n`);
+  await writeFile(pathOrUrl, `${JSON.stringify(config, null, 2)}\n`);
 
   return {
     path: formatConfigPath(pathOrUrl),
