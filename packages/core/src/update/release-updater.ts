@@ -102,14 +102,6 @@ export interface ApplyReleaseResult {
   installedDependencies: boolean;
 }
 
-export async function getVersionByTagName(
-  tagName: string,
-  options: FetchReleasesOptions = {},
-): Promise<string> {
-  const release = await fetchGitHubReleaseByTagName(tagName, options);
-  return release.tagName;
-}
-
 export async function compareCurrentPackageVersionWithLatestReleaseVersion(
   options: CompareCurrentVersionOptions = {},
 ): Promise<{

@@ -13,7 +13,6 @@ import {
   formatReleaseName,
   removeManagedAutoUpdateCronContent,
   removeAutoUpdateCron,
-  getVersionByTagName,
   shouldPreserveUpdatePath,
   syncSourceTree,
   updateManagedAutoUpdateCronContent,
@@ -141,18 +140,6 @@ describe("release version comparison", () => {
     } finally {
       await rm(root, { recursive: true, force: true });
     }
-  });
-
-  test("fetches a release version by tag name", async () => {
-    await expect(
-      getVersionByTagName("v1.0.0", {
-        repo: "Owner/repo",
-        fetchImpl: createVersionFetch({
-          currentTagName: "v1.0.0",
-          latestTagName: "v2.0.0",
-        }),
-      }),
-    ).resolves.toBe("v1.0.0");
   });
 });
 

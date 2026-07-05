@@ -1,6 +1,14 @@
-import { createHmac, randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
+import {
+  createHmac,
+  randomBytes,
+  scrypt as scryptCallback,
+  timingSafeEqual,
+  type BinaryLike,
+  type ScryptOptions,
+} from "node:crypto";
 import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, normalize } from "node:path";
+import { promisify } from "node:util";
 
 export const DASHBOARD_SESSION_COOKIE = "aripa_dashboard_session";
 
@@ -14,6 +22,12 @@ const scryptParameters = {
   p: 1,
   keyLength: 64,
 } as const;
+const scryptAsync: (
+  password: BinaryLike,
+  salt: BinaryLike,
+  keyLength: number,
+  options: ScryptOptions,
+) => Promise<Buffer> = promisify(scryptCallback);
 
 export type DashboardAuthState =
   | { status: "not_configured"; authPath: string }
@@ -179,39 +193,11 @@ async function deriveScryptKey(
   salt: Uint8Array,
   keyLength: number,
 ): Promise<Uint8Array> {
-  const key = await new Promise<Buffer>((resolve, reject) => {
-    const scryptWithOptions = scryptCallback as unknown as (
-      password: string,
-      salt: Uint8Array,
-      keyLength: number,
-      options: {
-        N: number;
-        r: number;
-        p: number;
-        maxmem: number;
-      },
-      callback: (error: Error | null, derivedKey: Buffer) => void,
-    ) => void;
-
-    scryptWithOptions(
-      password,
-      salt,
-      keyLength,
-      {
-        N: scryptParameters.N,
-        r: scryptParameters.r,
-        p: scryptParameters.p,
-        maxmem: 64 * 1024 * 1024,
-      },
-      (error, derivedKey) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-
-        resolve(derivedKey);
-      },
-    );
+  const key = await scryptAsync(password, salt, keyLength, {
+    N: scryptParameters.N,
+    r: scryptParameters.r,
+    p: scryptParameters.p,
+    maxmem: 64 * 1024 * 1024,
   });
 
   return new Uint8Array(key);

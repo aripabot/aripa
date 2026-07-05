@@ -22,7 +22,6 @@ import {
   fetchGitHubReleases,
   installAutoUpdateCron,
   removeAutoUpdateCron,
-  type GitHubRelease,
 } from "@aripabot/core/update/release-updater.ts";
 
 import type {
@@ -140,6 +139,7 @@ export async function saveConfig(config: RuntimeJsonConfig): Promise<SaveConfigR
   const parsedConfig = parseRuntimeJsonConfig(config);
   const existing = await readExistingJsonObject(pathOrUrl);
   const mergedConfig = { ...existing, ...parsedConfig };
+  const savedConfig = parseRuntimeJsonConfig(mergedConfig);
 
   await writeFile(pathOrUrl, `${JSON.stringify(mergedConfig, null, 2)}\n`);
   await requestBotRuntimeConfigReload();
@@ -148,7 +148,7 @@ export async function saveConfig(config: RuntimeJsonConfig): Promise<SaveConfigR
     path: formatPath(pathOrUrl),
     exists: true,
     raw: mergedConfig,
-    config: parseRuntimeJsonConfig(mergedConfig),
+    config: savedConfig,
     savedAt: new Date().toISOString(),
   };
 }
@@ -1341,10 +1341,6 @@ function toTitleCase(value: string): string {
     .filter(Boolean)
     .map((word) => `${word.slice(0, 1).toUpperCase()}${word.slice(1)}`)
     .join(" ");
-}
-
-export function latestReleaseTag(releases: readonly GitHubRelease[]): string | null {
-  return releases[0]?.tagName ?? null;
 }
 
 async function readExistingJsonObject(
