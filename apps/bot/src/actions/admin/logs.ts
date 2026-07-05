@@ -1,6 +1,7 @@
 import {
   EmbedBuilder,
   type BaseMessageOptions,
+  type Guild,
   type GuildBasedChannel,
   type PermissionResolvable,
 } from "discord.js";
@@ -43,15 +44,16 @@ export async function configureLogs(
   }
 
   const guildId = context.message.guildId;
+  const guild = context.message.guild;
   const subaction = context.args[0]?.toLowerCase();
 
   switch (subaction) {
     case "enable":
-      return enableLogs(context, store, guildId);
+      return enableLogs(context, store, guild, guildId);
     case "disable":
       return disableLogs(context, store, guildId);
     case "setchannel":
-      return setLogChannel(context, store, guildId);
+      return setLogChannel(context, store, guild, guildId);
     case "getchannel":
       return getLogChannel(context, store, guildId);
     default:
@@ -62,6 +64,7 @@ export async function configureLogs(
 async function enableLogs(
   context: ActionContext,
   store: GuildConfigStore,
+  guild: Guild,
   guildId: string,
 ): Promise<ActionReply> {
   const config = store.getGuildConfig(guildId);
@@ -74,6 +77,8 @@ async function enableLogs(
 
   const validation = await validateLogChannel(
     context,
+    guild,
+    guildId,
     config.logChannelId,
     REQUIRED_BOT_CONFIRMATION_PERMISSIONS,
   );
@@ -109,6 +114,7 @@ async function disableLogs(
 async function setLogChannel(
   context: ActionContext,
   store: GuildConfigStore,
+  guild: Guild,
   guildId: string,
 ): Promise<ActionReply> {
   const rawChannel = context.args[1];
@@ -131,7 +137,7 @@ async function setLogChannel(
     return context.reply(resolvedChannel.error.message);
   }
 
-  const validation = await validateLogChannel(context, resolvedChannel.value.id);
+  const validation = await validateLogChannel(context, guild, guildId, resolvedChannel.value.id);
 
   if (!validation.ok) {
     return context.reply(validation.message);
@@ -165,10 +171,12 @@ async function getLogChannel(
 
 async function validateLogChannel(
   context: ActionContext,
+  guild: Guild,
+  guildId: string,
   channelId: string,
   requiredPermissions: readonly PermissionResolvable[] = REQUIRED_BOT_CHANNEL_PERMISSIONS,
 ): Promise<{ ok: true; channel: GuildBasedChannel } | { ok: false; message: string }> {
-  const channel = await fetchGuildChannel(context, channelId);
+  const channel = await fetchGuildChannel(guild, guildId, channelId);
 
   if (!channel) {
     return { ok: false, message: "I could not find that channel in this server." };
@@ -231,18 +239,19 @@ async function sendLogEnableConfirmation(
 }
 
 async function fetchGuildChannel(
-  context: ActionContext,
+  guild: Guild,
+  guildId: string,
   channelId: string,
 ): Promise<GuildBasedChannel | null> {
-  const cachedChannel = context.message.guild?.channels.cache.get(channelId);
+  const cachedChannel = guild.channels.cache.get(channelId);
 
   if (cachedChannel) {
     return cachedChannel;
   }
 
-  const fetchedChannel = await context.message.guild?.channels.fetch(channelId).catch(() => null);
+  const fetchedChannel = await guild.channels.fetch(channelId).catch(() => null);
 
-  if (!fetchedChannel || fetchedChannel.guildId !== context.message.guildId) {
+  if (!fetchedChannel || fetchedChannel.guildId !== guildId) {
     return null;
   }
 
