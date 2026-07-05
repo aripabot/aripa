@@ -2,11 +2,8 @@
 
 import { useEffect, useState } from "react";
 import type * as React from "react";
-import { LogOut, Save, Sparkles } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { OnboardingProgress } from "@/components/dashboard/dashboard-onboarding-controls";
+import { DashboardOnboardingLayout } from "@/components/dashboard/dashboard-onboarding-layout";
 import {
   CustomRateLimitStep,
   GeneratedUpdateKeyStep,
@@ -400,371 +397,345 @@ export function DashboardOnboardingScreen({
   }
 
   return (
-    <main id="main-content" className="min-h-screen bg-background">
-      <div className="grid min-h-screen lg:grid-cols-[17rem_1fr]">
-        <aside className="border-b bg-card/70 lg:border-b-0 lg:border-r">
-          <div className="flex h-full flex-col gap-5 p-4">
-            <div className="flex items-center gap-3">
-              <picture>
-                <img
-                  src="/aripa-mark-light.svg"
-                  alt=""
-                  width="40"
-                  height="40"
-                  fetchPriority="high"
-                  className="size-10 rounded-lg dark:hidden"
-                />
-                <img
-                  src="/aripa-mark-dark.svg"
-                  alt=""
-                  width="40"
-                  height="40"
-                  fetchPriority="high"
-                  className="hidden size-10 rounded-lg dark:block"
-                />
-              </picture>
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold">Aripa</p>
-                <p className="text-xs text-muted-foreground">First-Run Setup</p>
-              </div>
-            </div>
-
-            <OnboardingProgress activeProgressIndex={activeProgressIndex} />
-
-            <div className="mt-auto">
-              <Button type="button" variant="outline" className="w-full" onClick={onSignOut}>
-                <LogOut aria-hidden="true" />
-                Sign Out
-              </Button>
-            </div>
-          </div>
-        </aside>
-
-        <section className="flex min-w-0 flex-col gap-5 p-4 sm:p-6">
-          <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
-            <div className="min-w-0">
-              <p className="text-sm text-muted-foreground">No config.json was found.</p>
-              <h1 className="text-2xl font-semibold tracking-normal text-pretty">
-                Configure Aripa
-              </h1>
-              <p className="mt-1 max-w-2xl text-sm text-muted-foreground text-pretty"></p>
-            </div>
-            <div className="rounded-md border bg-card px-3 py-2 text-sm text-muted-foreground">
-              <span className="break-all">{initialStatus.configPath}</span>
-            </div>
-          </div>
-
-          <Card>
-            <CardHeader>
-              <div className="mb-2 flex size-10 items-center justify-center rounded-md bg-muted">
-                <Sparkles aria-hidden="true" />
-              </div>
-              <CardTitle>{stepTitle(step)}</CardTitle>
-              <CardDescription>{stepDescription(step)}</CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-5">
-              {loadingOptions ? (
-                <p className="text-sm text-muted-foreground" aria-live="polite">
-                  Loading setup options…
-                </p>
-              ) : (
-                renderStep()
-              )}
-
-              {error ? (
-                <p className="rounded-md border bg-muted px-3 py-2 text-sm" aria-live="polite">
-                  {error}
-                </p>
-              ) : null}
-              {message ? (
-                <p className="rounded-md border bg-muted px-3 py-2 text-sm" aria-live="polite">
-                  {message}
-                </p>
-              ) : null}
-
-              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={goBack}
-                  disabled={!canGoBack || submitting || loadingOptions}
-                >
-                  Back
-                </Button>
-                <Button
-                  type="button"
-                  onClick={() => void advance()}
-                  disabled={submitting || loadingOptions || step === "update-key"}
-                >
-                  {step === "review" ? <Save aria-hidden="true" /> : null}
-                  {submitButtonLabel(step, submitting)}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </section>
-      </div>
-    </main>
+    <DashboardOnboardingLayout
+      activeProgressIndex={activeProgressIndex}
+      canGoBack={canGoBack && !submitting && !loadingOptions}
+      configPath={initialStatus.configPath}
+      description={stepDescription(step)}
+      error={error}
+      loadingOptions={loadingOptions}
+      message={message}
+      onBack={goBack}
+      onContinue={() => void advance()}
+      onSignOut={onSignOut}
+      primaryDisabled={submitting || loadingOptions || step === "update-key"}
+      primaryLabel={submitButtonLabel(step, submitting)}
+      showPrimarySaveIcon={step === "review"}
+      stepContent={
+        <DashboardOnboardingStepContent
+          allowlistInput={allowlistInput}
+          config={config}
+          customRateLimitInput={customRateLimitInput}
+          generatedPrivateKey={generatedPrivateKey}
+          modelMode={modelMode}
+          options={options}
+          setAllowlistInput={setAllowlistInput}
+          setConfig={setConfig}
+          setCustomRateLimitInput={setCustomRateLimitInput}
+          setGeneratedPrivateKey={setGeneratedPrivateKey}
+          setModelMode={setModelMode}
+          setStepWithReset={setStepWithReset}
+          setUpdateSource={setUpdateSource}
+          step={step}
+          updateConfig={updateConfig}
+          updateModel={updateModel}
+          updateSource={updateSource}
+          onCopyGeneratedKey={() => void copyGeneratedKey()}
+          onGenerateKeyPair={() => void generateKeyPair()}
+        />
+      }
+      title={stepTitle(step)}
+    />
   );
+}
 
-  function renderStep(): React.ReactNode {
-    if (!options) {
-      return null;
-    }
+function DashboardOnboardingStepContent({
+  allowlistInput,
+  config,
+  customRateLimitInput,
+  generatedPrivateKey,
+  modelMode,
+  onCopyGeneratedKey,
+  onGenerateKeyPair,
+  options,
+  setAllowlistInput,
+  setConfig,
+  setCustomRateLimitInput,
+  setGeneratedPrivateKey,
+  setModelMode,
+  setStepWithReset,
+  setUpdateSource,
+  step,
+  updateConfig,
+  updateModel,
+  updateSource,
+}: {
+  allowlistInput: string;
+  config: RuntimeJsonConfig;
+  customRateLimitInput: string;
+  generatedPrivateKey: string | null;
+  modelMode: "defaults" | "customize";
+  onCopyGeneratedKey: () => void;
+  onGenerateKeyPair: () => void;
+  options: OnboardingOptionsResponse | null;
+  setAllowlistInput: React.Dispatch<React.SetStateAction<string>>;
+  setConfig: React.Dispatch<React.SetStateAction<RuntimeJsonConfig>>;
+  setCustomRateLimitInput: React.Dispatch<React.SetStateAction<string>>;
+  setGeneratedPrivateKey: React.Dispatch<React.SetStateAction<string | null>>;
+  setModelMode: React.Dispatch<React.SetStateAction<"defaults" | "customize">>;
+  setStepWithReset: (nextStep: Step) => void;
+  setUpdateSource: React.Dispatch<React.SetStateAction<UpdateSource>>;
+  step: Step;
+  updateConfig: (patch: Partial<RuntimeJsonConfig>) => void;
+  updateModel: (role: "agent" | "summarizer", patch: Partial<RuntimeModelSelection>) => void;
+  updateSource: UpdateSource;
+}) {
+  if (!options) {
+    return null;
+  }
 
-    switch (step) {
-      case "name":
-        return <NameStep value={config.name} onChange={(name) => updateConfig({ name })} />;
-      case "operator":
-        return (
-          <OperatorStep
-            value={config.operatorUserId}
-            onChange={(operatorUserId) => updateConfig({ operatorUserId })}
-          />
-        );
-      case "style":
-        return (
-          <StyleStep
-            styles={options.styles}
-            value={config.stylePrompt}
-            onChange={(stylePrompt) => updateConfig({ stylePrompt })}
-          />
-        );
-      case "servers":
-        return <ServerAllowlistStep value={allowlistInput} onChange={setAllowlistInput} />;
-      case "rate-limit":
-        return (
-          <RateLimitPresetStep
-            value={config.agentRateLimitMessagesPerMinute}
-            onChange={(value) => {
-              if (value === "custom") {
-                setStepWithReset("rate-limit-custom");
-                return;
-              }
-              updateConfig({
-                agentRateLimitMessagesPerMinute: value === "off" ? null : Number(value),
-              });
-            }}
-          />
-        );
-      case "rate-limit-custom":
-        return (
-          <CustomRateLimitStep value={customRateLimitInput} onChange={setCustomRateLimitInput} />
-        );
-      case "log-privacy":
-        return (
-          <LogPrivacyStep
-            checked={config.logPrivacy}
-            onCheckedChange={(logPrivacy) => updateConfig({ logPrivacy })}
-          />
-        );
-      case "models":
-        return (
-          <ModelModeStep
-            value={modelMode}
-            defaultSummary={defaultModelSummary(config)}
-            onChange={(value) => setModelMode(value as "defaults" | "customize")}
-          />
-        );
-      case "agent-provider":
-        return (
-          <ModelProviderStep
-            id="onboarding-agent-provider"
-            label="Agent Provider"
-            modelOptions={options.modelOptions}
-            value={config.models.agent.provider as ConfigurableRuntimeModelProvider}
-            onValueChange={(provider) => {
-              updateModel("agent", {
-                provider,
-                model: defaultModelForProvider(options, provider, "agent"),
-              });
-            }}
-          />
-        );
-      case "agent-model":
-        return (
-          <ModelSelectionStep
-            id="onboarding-agent-model"
-            label="Agent Model"
-            options={modelOptionsForProvider(
-              options,
-              config.models.agent.provider as ConfigurableRuntimeModelProvider,
-              "agent",
-              config.models.agent.model,
-            )}
-            value={config.models.agent.model}
-            onValueChange={(model) => updateModel("agent", { model })}
-          />
-        );
-      case "summarizer-provider":
-        return (
-          <ModelProviderStep
-            id="onboarding-summarizer-provider"
-            label="Summarizer Provider"
-            modelOptions={options.modelOptions}
-            value={config.models.summarizer.provider as ConfigurableRuntimeModelProvider}
-            onValueChange={(provider) => {
-              updateModel("summarizer", {
-                provider,
-                model: defaultModelForProvider(options, provider, "summarizer"),
-              });
-            }}
-          />
-        );
-      case "summarizer-model":
-        return (
-          <ModelSelectionStep
-            id="onboarding-summarizer-model"
-            label="Summarizer Model"
-            options={modelOptionsForProvider(
-              options,
-              config.models.summarizer.provider as ConfigurableRuntimeModelProvider,
-              "summarizer",
-              config.models.summarizer.model,
-            )}
-            value={config.models.summarizer.model}
-            onValueChange={(model) => updateModel("summarizer", { model })}
-          />
-        );
-      case "web-capability":
-        return (
-          <WebCapabilityStep
-            checked={config.models.web.enabled}
-            onCheckedChange={(enabled) =>
-              setConfig({
-                ...config,
-                models: { ...config.models, web: { ...config.models.web, enabled } },
-              })
+  switch (step) {
+    case "name":
+      return <NameStep value={config.name} onChange={(name) => updateConfig({ name })} />;
+    case "operator":
+      return (
+        <OperatorStep
+          value={config.operatorUserId}
+          onChange={(operatorUserId) => updateConfig({ operatorUserId })}
+        />
+      );
+    case "style":
+      return (
+        <StyleStep
+          styles={options.styles}
+          value={config.stylePrompt}
+          onChange={(stylePrompt) => updateConfig({ stylePrompt })}
+        />
+      );
+    case "servers":
+      return <ServerAllowlistStep value={allowlistInput} onChange={setAllowlistInput} />;
+    case "rate-limit":
+      return (
+        <RateLimitPresetStep
+          value={config.agentRateLimitMessagesPerMinute}
+          onChange={(value) => {
+            if (value === "custom") {
+              setStepWithReset("rate-limit-custom");
+              return;
             }
-          />
-        );
-      case "web-model":
-        return (
-          <ModelSelectionStep
-            id="onboarding-web-model"
-            label="Web Search Model"
-            options={options.modelOptions.web}
-            value={config.models.web.model}
-            onValueChange={(model) =>
-              setConfig({
-                ...config,
-                models: { ...config.models, web: { ...config.models.web, model } },
-              })
-            }
-          />
-        );
-      case "update-source":
-        return (
-          <UpdateSourceStep
-            value={updateSource}
-            defaultUpdateRepo={options.defaultUpdateRepo}
-            onChange={(value) => setUpdateSource(value as UpdateSource)}
-          />
-        );
-      case "update-repo":
-        return (
-          <UpdateRepoStep
-            value={config.updates.githubRepo}
-            onChange={(githubRepo) =>
-              setConfig({
-                ...config,
-                updates: { ...config.updates, githubRepo },
-              })
-            }
-          />
-        );
-      case "update-key":
-        return (
-          <UpdateKeyChoiceStep
-            onGenerate={() => void generateKeyPair()}
-            onPaste={() => setStepWithReset("update-key-paste")}
-            onUseEnvironmentVariable={() => {
-              const updates = { ...config.updates };
-              delete updates.releasePublicKeyPem;
-              delete updates.releasePublicKeyPemBase64;
-              setConfig({ ...config, updates });
-              setGeneratedPrivateKey(null);
-              setStepWithReset("update-schedule");
-            }}
-          />
-        );
-      case "update-key-paste":
-        return (
-          <UpdateKeyPasteStep
-            value={config.updates.releasePublicKeyPemBase64 ?? ""}
-            onChange={(key) => {
-              const updates = { ...config.updates };
-              delete updates.releasePublicKeyPem;
-              setConfig({
-                ...config,
-                updates: {
-                  ...updates,
-                  ...(key ? { releasePublicKeyPemBase64: key } : {}),
-                },
-              });
-            }}
-          />
-        );
-      case "update-key-generated":
-        return (
-          <GeneratedUpdateKeyStep
-            privateKey={generatedPrivateKey}
-            onCopy={() => void copyGeneratedKey()}
-            onRegenerate={() => void generateKeyPair()}
-          />
-        );
-      case "update-schedule":
-        return (
-          <UpdateScheduleStep
-            autoInstall={config.updates.autoInstall}
-            presets={options.autoUpdateCronPresets}
-            onChange={(value) => {
-              if (value === "disabled") {
-                setConfig({
-                  ...config,
-                  updates: {
-                    ...config.updates,
-                    autoInstall: { ...config.updates.autoInstall, enabled: false },
-                  },
-                });
-                return;
-              }
-
-              const preset = options.autoUpdateCronPresets.find(
-                (candidate) => candidate.id === value,
-              );
-              if (!preset) {
-                return;
-              }
-
+            updateConfig({
+              agentRateLimitMessagesPerMinute: value === "off" ? null : Number(value),
+            });
+          }}
+        />
+      );
+    case "rate-limit-custom":
+      return (
+        <CustomRateLimitStep value={customRateLimitInput} onChange={setCustomRateLimitInput} />
+      );
+    case "log-privacy":
+      return (
+        <LogPrivacyStep
+          checked={config.logPrivacy}
+          onCheckedChange={(logPrivacy) => updateConfig({ logPrivacy })}
+        />
+      );
+    case "models":
+      return (
+        <ModelModeStep
+          value={modelMode}
+          defaultSummary={defaultModelSummary(config)}
+          onChange={(value) => setModelMode(value as "defaults" | "customize")}
+        />
+      );
+    case "agent-provider":
+      return (
+        <ModelProviderStep
+          id="onboarding-agent-provider"
+          label="Agent Provider"
+          modelOptions={options.modelOptions}
+          value={config.models.agent.provider as ConfigurableRuntimeModelProvider}
+          onValueChange={(provider) => {
+            updateModel("agent", {
+              provider,
+              model: defaultModelForProvider(options, provider, "agent"),
+            });
+          }}
+        />
+      );
+    case "agent-model":
+      return (
+        <ModelSelectionStep
+          id="onboarding-agent-model"
+          label="Agent Model"
+          options={modelOptionsForProvider(
+            options,
+            config.models.agent.provider as ConfigurableRuntimeModelProvider,
+            "agent",
+            config.models.agent.model,
+          )}
+          value={config.models.agent.model}
+          onValueChange={(model) => updateModel("agent", { model })}
+        />
+      );
+    case "summarizer-provider":
+      return (
+        <ModelProviderStep
+          id="onboarding-summarizer-provider"
+          label="Summarizer Provider"
+          modelOptions={options.modelOptions}
+          value={config.models.summarizer.provider as ConfigurableRuntimeModelProvider}
+          onValueChange={(provider) => {
+            updateModel("summarizer", {
+              provider,
+              model: defaultModelForProvider(options, provider, "summarizer"),
+            });
+          }}
+        />
+      );
+    case "summarizer-model":
+      return (
+        <ModelSelectionStep
+          id="onboarding-summarizer-model"
+          label="Summarizer Model"
+          options={modelOptionsForProvider(
+            options,
+            config.models.summarizer.provider as ConfigurableRuntimeModelProvider,
+            "summarizer",
+            config.models.summarizer.model,
+          )}
+          value={config.models.summarizer.model}
+          onValueChange={(model) => updateModel("summarizer", { model })}
+        />
+      );
+    case "web-capability":
+      return (
+        <WebCapabilityStep
+          checked={config.models.web.enabled}
+          onCheckedChange={(enabled) =>
+            setConfig({
+              ...config,
+              models: { ...config.models, web: { ...config.models.web, enabled } },
+            })
+          }
+        />
+      );
+    case "web-model":
+      return (
+        <ModelSelectionStep
+          id="onboarding-web-model"
+          label="Web Search Model"
+          options={options.modelOptions.web}
+          value={config.models.web.model}
+          onValueChange={(model) =>
+            setConfig({
+              ...config,
+              models: { ...config.models, web: { ...config.models.web, model } },
+            })
+          }
+        />
+      );
+    case "update-source":
+      return (
+        <UpdateSourceStep
+          value={updateSource}
+          defaultUpdateRepo={options.defaultUpdateRepo}
+          onChange={(value) => setUpdateSource(value as UpdateSource)}
+        />
+      );
+    case "update-repo":
+      return (
+        <UpdateRepoStep
+          value={config.updates.githubRepo}
+          onChange={(githubRepo) =>
+            setConfig({
+              ...config,
+              updates: { ...config.updates, githubRepo },
+            })
+          }
+        />
+      );
+    case "update-key":
+      return (
+        <UpdateKeyChoiceStep
+          onGenerate={onGenerateKeyPair}
+          onPaste={() => setStepWithReset("update-key-paste")}
+          onUseEnvironmentVariable={() => {
+            const updates = { ...config.updates };
+            delete updates.releasePublicKeyPem;
+            delete updates.releasePublicKeyPemBase64;
+            setConfig({ ...config, updates });
+            setGeneratedPrivateKey(null);
+            setStepWithReset("update-schedule");
+          }}
+        />
+      );
+    case "update-key-paste":
+      return (
+        <UpdateKeyPasteStep
+          value={config.updates.releasePublicKeyPemBase64 ?? ""}
+          onChange={(key) => {
+            const updates = { ...config.updates };
+            delete updates.releasePublicKeyPem;
+            setConfig({
+              ...config,
+              updates: {
+                ...updates,
+                ...(key ? { releasePublicKeyPemBase64: key } : {}),
+              },
+            });
+          }}
+        />
+      );
+    case "update-key-generated":
+      return (
+        <GeneratedUpdateKeyStep
+          privateKey={generatedPrivateKey}
+          onCopy={onCopyGeneratedKey}
+          onRegenerate={onGenerateKeyPair}
+        />
+      );
+    case "update-schedule":
+      return (
+        <UpdateScheduleStep
+          autoInstall={config.updates.autoInstall}
+          presets={options.autoUpdateCronPresets}
+          onChange={(value) => {
+            if (value === "disabled") {
               setConfig({
                 ...config,
                 updates: {
                   ...config.updates,
-                  autoInstall: {
-                    enabled: true,
-                    preset: preset.id,
-                    cronExpression: preset.cronExpression,
-                  },
+                  autoInstall: { ...config.updates.autoInstall, enabled: false },
                 },
               });
-            }}
-          />
-        );
-      case "review":
-        return (
-          <ReviewStep>
-            {JSON.stringify(
-              {
-                ...config,
-                allowlistedServerIds: parseAllowlistedServerIds(allowlistInput),
+              return;
+            }
+
+            const preset = options.autoUpdateCronPresets.find(
+              (candidate) => candidate.id === value,
+            );
+            if (!preset) {
+              return;
+            }
+
+            setConfig({
+              ...config,
+              updates: {
+                ...config.updates,
+                autoInstall: {
+                  enabled: true,
+                  preset: preset.id,
+                  cronExpression: preset.cronExpression,
+                },
               },
-              null,
-              2,
-            )}
-          </ReviewStep>
-        );
-    }
+            });
+          }}
+        />
+      );
+    case "review":
+      return (
+        <ReviewStep>
+          {JSON.stringify(
+            {
+              ...config,
+              allowlistedServerIds: parseAllowlistedServerIds(allowlistInput),
+            },
+            null,
+            2,
+          )}
+        </ReviewStep>
+      );
   }
 }
 
