@@ -12,9 +12,14 @@ const discordDirectoryInflight = new Map<string, Promise<DiscordDirectory>>();
 export async function getDiscordDirectory(
   guildIds: readonly string[],
   activeMutes: readonly { guildId: string; userId: string; muteRoleId: string }[],
+  guildConfigs: readonly {
+    guildId: string;
+    logChannelId: string | null;
+    muteRoleId: string | null;
+  }[],
 ): Promise<DiscordDirectory> {
   const token = getEnv("TOKEN")?.trim();
-  const cacheKey = discordDirectoryCacheKey(token, guildIds, activeMutes);
+  const cacheKey = discordDirectoryCacheKey(token, guildIds, activeMutes, guildConfigs);
   const cached = discordDirectoryCache.get(cacheKey);
   if (cached && cached.expiresAtMs > Date.now()) {
     return cached.directory;
@@ -25,13 +30,15 @@ export async function getDiscordDirectory(
     return inflight;
   }
 
-  const promise = fetchDiscordDirectory(token, guildIds, activeMutes).then((directory) => {
-    discordDirectoryCache.set(cacheKey, {
-      expiresAtMs: Date.now() + DISCORD_DIRECTORY_CACHE_TTL_MS,
-      directory,
-    });
-    return directory;
-  });
+  const promise = fetchDiscordDirectory(token, guildIds, activeMutes, guildConfigs).then(
+    (directory) => {
+      discordDirectoryCache.set(cacheKey, {
+        expiresAtMs: Date.now() + DISCORD_DIRECTORY_CACHE_TTL_MS,
+        directory,
+      });
+      return directory;
+    },
+  );
   discordDirectoryInflight.set(cacheKey, promise);
 
   try {
@@ -45,6 +52,11 @@ async function fetchDiscordDirectory(
   token: string | undefined,
   guildIds: readonly string[],
   activeMutes: readonly { guildId: string; userId: string; muteRoleId: string }[],
+  guildConfigs: readonly {
+    guildId: string;
+    logChannelId: string | null;
+    muteRoleId: string | null;
+  }[],
 ): Promise<DiscordDirectory> {
   const output = {
     lookup: {
@@ -64,14 +76,33 @@ async function fetchDiscordDirectory(
   }
 
   try {
+    const logChannelIdsByGuild = groupConfiguredIds(
+      guildConfigs,
+      (guildConfig) => guildConfig.logChannelId,
+    );
+    const roleIdsByGuild = groupConfiguredIds(
+      [
+        ...guildConfigs.map((guildConfig) => ({
+          guildId: guildConfig.guildId,
+          id: guildConfig.muteRoleId,
+        })),
+        ...activeMutes.map((mute) => ({ guildId: mute.guildId, id: mute.muteRoleId })),
+      ],
+      (entry) => entry.id,
+    );
+
     await Promise.all(
       guildIds.map(async (guildId) => {
         const [guild, channels, roles] = await Promise.all([
           discordGet<DiscordGuildResponse>(`/guilds/${guildId}`, token),
-          discordGet<DiscordChannelResponse[]>(`/guilds/${guildId}/channels`, token).catch(
-            () => [],
+          Promise.all(
+            [...(logChannelIdsByGuild.get(guildId) ?? [])].map((channelId) =>
+              discordGet<DiscordChannelResponse>(`/channels/${channelId}`, token).catch(() => null),
+            ),
           ),
-          discordGet<DiscordRoleResponse[]>(`/guilds/${guildId}/roles`, token).catch(() => []),
+          roleIdsByGuild.has(guildId)
+            ? discordGet<DiscordRoleResponse[]>(`/guilds/${guildId}/roles`, token).catch(() => [])
+            : [],
         ]);
 
         output.guilds.set(guildId, {
@@ -83,6 +114,10 @@ async function fetchDiscordDirectory(
         });
 
         for (const channel of channels) {
+          if (!channel) {
+            continue;
+          }
+
           output.channels.set(channelKey(guildId, channel.id), {
             id: channel.id,
             name: channel.name,
@@ -133,14 +168,26 @@ function discordDirectoryCacheKey(
   token: string | undefined,
   guildIds: readonly string[],
   activeMutes: readonly { guildId: string; userId: string; muteRoleId: string }[],
+  guildConfigs: readonly {
+    guildId: string;
+    logChannelId: string | null;
+    muteRoleId: string | null;
+  }[],
 ): string {
   const guildKey = [...guildIds].sort().join(",");
   const muteKey = activeMutes
     .map((mute) => `${mute.guildId}:${mute.userId}:${mute.muteRoleId}`)
     .sort()
     .join(",");
+  const configKey = guildConfigs
+    .map(
+      (guildConfig) =>
+        `${guildConfig.guildId}:${guildConfig.logChannelId ?? ""}:${guildConfig.muteRoleId ?? ""}`,
+    )
+    .sort()
+    .join(",");
 
-  return `${token ? hashString(token) : "no-token"}|${guildKey}|${muteKey}`;
+  return `${token ? hashString(token) : "no-token"}|${guildKey}|${muteKey}|${configKey}`;
 }
 
 async function discordGet<T>(path: string, token: string): Promise<T> {
@@ -152,10 +199,45 @@ async function discordGet<T>(path: string, token: string): Promise<T> {
   });
 
   if (!response.ok) {
+    if (response.status === 429) {
+      const retryAfterSeconds =
+        response.headers.get("retry-after") ?? response.headers.get("x-ratelimit-reset-after");
+      const retryDetail = retryAfterSeconds
+        ? ` Retry after ${retryAfterSeconds} seconds.`
+        : " Retry after Discord's rate limit resets.";
+      throw new Error(
+        `Discord lookup rate limited: ${response.status} ${response.statusText}.${retryDetail}`,
+      );
+    }
+
     throw new Error(`Discord lookup failed: ${response.status} ${response.statusText}`);
   }
 
   return (await response.json()) as T;
+}
+
+function groupConfiguredIds<T extends { guildId: string }>(
+  items: readonly T[],
+  getId: (item: T) => string | null,
+): Map<string, Set<string>> {
+  const idsByGuild = new Map<string, Set<string>>();
+
+  for (const item of items) {
+    const id = getId(item);
+    if (!id) {
+      continue;
+    }
+
+    const existing = idsByGuild.get(item.guildId);
+    if (existing) {
+      existing.add(id);
+      continue;
+    }
+
+    idsByGuild.set(item.guildId, new Set([id]));
+  }
+
+  return idsByGuild;
 }
 
 export function channelKey(guildId: string, channelId: string): string {

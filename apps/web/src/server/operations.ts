@@ -44,7 +44,7 @@ export async function getDashboardOperations(
       ...tags.map((tag) => tag.guildId),
     ]),
   ].sort();
-  const discord = await getDiscordDirectory(guildIds, activeMutes);
+  const discord = await getDiscordDirectory(guildIds, activeMutes, guildConfigs);
   const tagCountByGuild = countBy(tags, (tag) => tag.guildId);
   const activeMuteCountByGuild = countBy(activeMutes, (mute) => mute.guildId);
   const configByGuild = new Map(
