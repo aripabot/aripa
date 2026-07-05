@@ -105,6 +105,20 @@ export function rateLimitPresetIndex(value: number | null): number {
   }
 }
 
+export function rateLimitPresetValue(value: number | null): string {
+  switch (value) {
+    case 10:
+    case 20:
+    case 5:
+    case 3:
+      return String(value);
+    case null:
+      return "off";
+    default:
+      return "custom";
+  }
+}
+
 export function formatRateLimitInputValue(value: number | null): string {
   return value === null ? "off" : String(value);
 }

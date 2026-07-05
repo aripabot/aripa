@@ -41,6 +41,7 @@ import {
   validateOperatorUserId,
 } from "@aripabot/core/config/onboarding-validation.ts";
 import { selectableProvidersFromModelOptions } from "@aripabot/core/onboarding-wizard/model-option-selection.ts";
+import { rateLimitPresetValue } from "@aripabot/core/onboarding-wizard/navigation.ts";
 import type {
   ConfigurableRuntimeModelProvider,
   RuntimeJsonConfig,
@@ -624,7 +625,7 @@ export function DashboardOnboardingScreen({
       case "rate-limit":
         return (
           <ChoiceList
-            value={rateLimitChoice(config.agentRateLimitMessagesPerMinute)}
+            value={rateLimitPresetValue(config.agentRateLimitMessagesPerMinute)}
             onChange={(value) => {
               if (value === "custom") {
                 setStepWithReset("rate-limit-custom");
@@ -1132,10 +1133,6 @@ function defaultModelForProvider(
   role: "agent" | "summarizer",
 ): string {
   return options.modelOptions[role][provider]?.[0]?.value ?? "";
-}
-
-function rateLimitChoice(value: number | null): string {
-  return [10, 20, 5, 3].includes(value ?? -1) ? String(value) : value === null ? "off" : "custom";
 }
 
 function progressIndex(step: Step): number {
