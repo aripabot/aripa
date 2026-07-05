@@ -36,6 +36,7 @@ import {
   selectableProvidersFromModelOptions,
   selectedModelIndex,
 } from "@aripabot/core/onboarding-wizard/model-options.ts";
+import { RATE_LIMIT_PRESET_OPTIONS } from "@aripabot/core/onboarding-wizard/display.ts";
 import {
   formatRateLimitInputValue,
   previousStepFor,
@@ -373,34 +374,11 @@ function stepContent() {
           fg: colors.muted,
         }),
         selectControl(
-          [
-            {
-              name: "Standard - 10/min",
-              description: "Good default for regular server use.",
-              value: "10",
-            },
-            {
-              name: "Relaxed - 20/min",
-              description: "Most permissive preset before turning limits off.",
-              value: "20",
-            },
-            {
-              name: "Moderate - 5/min",
-              description: "Lower spend and less spam tolerance.",
-              value: "5",
-            },
-            {
-              name: "Strict - 3/min",
-              description: "Tightest preset for careful rollout.",
-              value: "3",
-            },
-            {
-              name: "Custom",
-              description: "Enter any whole number of messages per minute.",
-              value: "custom",
-            },
-            { name: "Off", description: "Disable agent mention rate limiting.", value: "off" },
-          ],
+          RATE_LIMIT_PRESET_OPTIONS.map((option) => ({
+            name: option.label,
+            description: option.description,
+            value: option.value,
+          })),
           (option) => {
             const value = String(option.value);
 

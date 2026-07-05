@@ -25,6 +25,7 @@ import type {
   ConfigurableRuntimeModelProvider,
   RuntimeJsonConfig,
 } from "@aripabot/core/config/config.ts";
+import { RATE_LIMIT_PRESET_OPTIONS } from "@aripabot/core/onboarding-wizard/display.ts";
 import { selectableProvidersFromModelOptions } from "@aripabot/core/onboarding-wizard/model-option-selection.ts";
 import { rateLimitPresetValue } from "@aripabot/core/onboarding-wizard/navigation.ts";
 
@@ -158,14 +159,11 @@ export function RateLimitPresetStep({
     <ChoiceList
       value={rateLimitPresetValue(value)}
       onChange={onChange}
-      options={[
-        ["10", "Standard - 10/min", "Good default for regular server use."],
-        ["20", "Relaxed - 20/min", "Most permissive preset before turning limits off."],
-        ["5", "Moderate - 5/min", "Lower spend and less spam tolerance."],
-        ["3", "Strict - 3/min", "Tightest preset for careful rollout."],
-        ["custom", "Custom", "Enter any whole number of messages per minute."],
-        ["off", "Off", "Disable agent mention rate limiting."],
-      ]}
+      options={RATE_LIMIT_PRESET_OPTIONS.map((option) => [
+        option.value,
+        option.label,
+        option.description,
+      ])}
     />
   );
 }

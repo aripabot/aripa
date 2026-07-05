@@ -14,6 +14,43 @@ export const ONBOARDING_PROGRESS_STEPS: Array<{ step: DisplayStep; label: string
   { step: "review", label: "Review" },
 ];
 
+export const RATE_LIMIT_PRESET_OPTIONS: Array<{
+  value: string;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "10",
+    label: "Standard - 10/min",
+    description: "Good default for regular server use.",
+  },
+  {
+    value: "20",
+    label: "Relaxed - 20/min",
+    description: "Most permissive preset before turning limits off.",
+  },
+  {
+    value: "5",
+    label: "Moderate - 5/min",
+    description: "Lower spend and less spam tolerance.",
+  },
+  {
+    value: "3",
+    label: "Strict - 3/min",
+    description: "Tightest preset for careful rollout.",
+  },
+  {
+    value: "custom",
+    label: "Custom",
+    description: "Enter any whole number of messages per minute.",
+  },
+  {
+    value: "off",
+    label: "Off",
+    description: "Disable agent mention rate limiting.",
+  },
+];
+
 export function stepTitle(step: DisplayStep): string {
   switch (step) {
     case "name":

@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 
 import {
   ONBOARDING_PROGRESS_STEPS,
+  RATE_LIMIT_PRESET_OPTIONS,
   stepDescription,
   stepTitle,
   submitButtonLabel,
@@ -19,6 +20,41 @@ describe("onboarding display metadata", () => {
       { step: "models", label: "Models" },
       { step: "update-source", label: "Updates" },
       { step: "review", label: "Review" },
+    ]);
+  });
+
+  test("keeps rate limit preset options stable", () => {
+    expect(RATE_LIMIT_PRESET_OPTIONS).toEqual([
+      {
+        value: "10",
+        label: "Standard - 10/min",
+        description: "Good default for regular server use.",
+      },
+      {
+        value: "20",
+        label: "Relaxed - 20/min",
+        description: "Most permissive preset before turning limits off.",
+      },
+      {
+        value: "5",
+        label: "Moderate - 5/min",
+        description: "Lower spend and less spam tolerance.",
+      },
+      {
+        value: "3",
+        label: "Strict - 3/min",
+        description: "Tightest preset for careful rollout.",
+      },
+      {
+        value: "custom",
+        label: "Custom",
+        description: "Enter any whole number of messages per minute.",
+      },
+      {
+        value: "off",
+        label: "Off",
+        description: "Disable agent mention rate limiting.",
+      },
     ]);
   });
 
