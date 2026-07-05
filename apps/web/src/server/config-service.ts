@@ -47,16 +47,18 @@ export async function getOnboardingOptions(): Promise<OnboardingOptionsResponse>
 
 export async function getDashboardStatus(): Promise<DashboardStatus> {
   const configResponse = await readConfig();
-  const [styles, botPackageJson, webPackageJson, botRuntime, providers, databasePath] =
+  const [styles, botPackageJson, webPackageJson, botRuntime, providers, databaseSummary] =
     await Promise.all([
       getStylePromptOptions(configResponse.config.stylePrompt),
       readJson<{ version?: string }>(packageJsonPath),
       readJson<{ version?: string }>(webPackageJsonPath),
       getBotRuntimeStatus(),
       getSelectableModelProviders(),
-      resolveDatabasePath(),
+      resolveDatabasePath().then(async (databasePath) => ({
+        databasePath,
+        operations: await getDashboardOperations(configResponse.config, databasePath),
+      })),
     ]);
-  const operations = await getDashboardOperations(configResponse.config, databasePath);
 
   return {
     appName: configResponse.config.name,
@@ -64,11 +66,11 @@ export async function getDashboardStatus(): Promise<DashboardStatus> {
     webVersion: webPackageJson.version ?? "unknown",
     configPath: configResponse.path,
     configExists: configResponse.exists,
-    databasePath,
+    databasePath: databaseSummary.databasePath,
     tokenConfigured: Boolean(getEnv("TOKEN")?.trim()),
     prefix: getEnv("PREFIX")?.trim() || "-",
     botRuntime,
-    operations,
+    operations: databaseSummary.operations,
     styles,
     providers,
     reasoningEfforts: [...REASONING_EFFORTS],
