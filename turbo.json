@@ -5,15 +5,34 @@
       "cache": false,
       "persistent": true
     },
-    "lint": {},
+    "build": {
+      "dependsOn": ["^build"],
+      "inputs": [
+        "src/**",
+        "app/**",
+        "components/**",
+        "public/**",
+        "next.config.*",
+        "postcss.config.*",
+        "tsconfig.json",
+        "package.json"
+      ],
+      "outputs": [".next/**", "!.next/cache/**", "dist/**"]
+    },
+    "lint": {
+      "inputs": ["src/**", "tests/**", "tsconfig.json", "package.json"]
+    },
     "format": {
       "cache": false
     },
     "test": {
-      "dependsOn": ["^typecheck"]
+      "dependsOn": ["^typecheck"],
+      "inputs": ["src/**", "tests/**", "tsconfig.json", "package.json"],
+      "outputs": []
     },
     "typecheck": {
-      "dependsOn": ["^typecheck"]
+      "dependsOn": ["^typecheck"],
+      "inputs": ["src/**", "tests/**", "tsconfig.json", "package.json"]
     }
   }
 }
