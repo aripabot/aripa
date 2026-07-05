@@ -64,6 +64,7 @@ import {
   saveConfig,
 } from "@/lib/api";
 import { readableError } from "@/lib/errors";
+import { cn } from "@/lib/utils";
 import { DashboardOnboardingScreen } from "@/components/dashboard/dashboard-onboarding-screen";
 import type {
   CompleteOnboardingResponse,
@@ -289,16 +290,11 @@ export function Dashboard({
                     href={item.href}
                     prefetch={true}
                     aria-current={active ? "page" : undefined}
-                    className="inline-flex h-10 items-center justify-start gap-2 rounded-md px-4 py-2 text-sm font-medium transition-[background-color,color] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                    className={cn(
+                      "inline-flex h-10 items-center justify-start gap-2 rounded-md px-4 py-2 text-sm font-medium transition-[background-color,color] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                      active ? "bg-foreground text-background" : "text-foreground",
+                    )}
                     onClick={(event) => markNavigationPending(item.href, event)}
-                    style={
-                      active
-                        ? {
-                            backgroundColor: "hsl(var(--foreground))",
-                            color: "hsl(var(--background))",
-                          }
-                        : { color: "hsl(var(--foreground))" }
-                    }
                   >
                     <Icon aria-hidden="true" className="size-4" />
                     {item.label}
