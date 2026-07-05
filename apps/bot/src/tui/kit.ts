@@ -270,7 +270,7 @@ export function createWizardShell({
   finish: (output: string) => void;
   handleControlKey: (key: MinimalKeyEvent, options?: { onBack?: () => boolean }) => boolean;
   isFinished: () => boolean;
-  renderFrame: (...children: Renderable[]) => void;
+  renderFrame: (buildChildren: () => Renderable[]) => void;
   requireRenderer: () => CliRenderer;
   start: (render: () => void) => Promise<void>;
 } {
@@ -351,12 +351,14 @@ export function createWizardShell({
     isFinished() {
       return finished;
     },
-    renderFrame(...children: Renderable[]): void {
+    renderFrame(buildChildren: () => Renderable[]): void {
       if (!renderer || finished) {
         return;
       }
 
       clearRendererRoot(renderer);
+      // Reset before building children: building the frame is what registers
+      // the step's focusable control on `controls`.
       controls.reset();
 
       renderer.root.add(
@@ -370,7 +372,7 @@ export function createWizardShell({
             flexDirection: "column",
             gap: 1,
           },
-          ...children,
+          ...buildChildren(),
         ),
       );
 

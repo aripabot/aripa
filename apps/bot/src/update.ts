@@ -152,7 +152,7 @@ async function loadReleases(): Promise<void> {
 }
 
 function render(): void {
-  shell.renderFrame(header(), body(), footer());
+  shell.renderFrame(() => [header(), body(), footer()]);
 }
 
 function header() {
