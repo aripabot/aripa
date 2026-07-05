@@ -641,12 +641,12 @@ function GuildRow({ guild }: { guild: DashboardStatus["operations"]["guilds"][nu
       <ResponsiveDatum
         label="Mod Logs"
         value={logStatus}
-        tone={guild.modLogsEnabled ? "good" : "muted"}
+        tone={guild.modLogsEnabled ? "default" : "muted"}
       />
       <ResponsiveDatum
         label="Mute Mode"
         value={muteStatus}
-        tone={guild.muteMode === "none" ? "muted" : "good"}
+        tone={guild.muteMode === "none" ? "muted" : "default"}
       />
       <ResponsiveDatum label="Active Mutes" value={formatCount(guild.activeMuteCount)} />
       <ResponsiveDatum label="Tags" value={formatCount(guild.tagCount)} icon={Tags} />
@@ -706,7 +706,7 @@ function ResponsiveDatum({
 }: {
   label: string;
   value: string;
-  tone?: "default" | "good" | "muted";
+  tone?: "default" | "muted";
   icon?: typeof Tags;
 }) {
   return (
@@ -2117,7 +2117,7 @@ function muteStatusClass(status: DashboardStatus["operations"]["activeMutes"][nu
   }
 }
 
-function datumToneClass(tone: "default" | "good" | "muted"): string {
+function datumToneClass(tone: "default" | "muted"): string {
   if (tone === "muted") {
     return "text-muted-foreground";
   }
