@@ -54,6 +54,7 @@ import { readableError } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import { ConfirmActionButton } from "@/components/dashboard/components/confirm-action-button";
 import { Field, SwitchField } from "@/components/dashboard/components/fields";
+import { LogEntryRow } from "@/components/dashboard/components/log-entry-row";
 import { LogMetric } from "@/components/dashboard/components/log-metric";
 import { Metric } from "@/components/dashboard/components/metric";
 import { ModelCard } from "@/components/dashboard/components/model-card";
@@ -873,44 +874,6 @@ function LogsPage({ logs, onRefresh }: { logs: LoadState<LogsResponse>; onRefres
         </section>
       )}
     </div>
-  );
-}
-
-function LogEntryRow({ entry }: { entry: DashboardLogEntry }) {
-  const metadata = entry.metadata ? JSON.stringify(entry.metadata, null, 2) : null;
-
-  return (
-    <article className="grid grid-cols-[9rem_5.5rem_8rem_minmax(0,1fr)] gap-3 px-4 py-3 text-sm [contain-intrinsic-size:88px] [content-visibility:auto]">
-      <time className="text-xs text-muted-foreground" dateTime={entry.timestamp ?? undefined}>
-        {entry.timestamp ? formatTime(entry.timestamp) : "No Time"}
-      </time>
-      <div>
-        <span
-          className={`rounded-sm px-1.5 py-0.5 text-xs font-medium ${logLevelClass(entry.level)}`}
-        >
-          {levelLabel(entry.level)}
-        </span>
-      </div>
-      <p className="truncate text-xs text-muted-foreground">{entry.sourceName}</p>
-      <div className="min-w-0">
-        <p className="break-words font-mono text-xs leading-5" translate="no">
-          {entry.message}
-        </p>
-        {metadata ? (
-          <details className="mt-2">
-            <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
-              Details
-            </summary>
-            <pre
-              className="mt-2 overflow-auto rounded-md bg-background p-3 text-xs leading-5"
-              translate="no"
-            >
-              {metadata}
-            </pre>
-          </details>
-        ) : null}
-      </div>
-    </article>
   );
 }
 
@@ -1869,23 +1832,6 @@ function sourceTabLabel(name: string): string {
   }
 
   return name.split("/").at(-1) ?? name;
-}
-
-function logLevelClass(level: LogEntryLevel): string {
-  switch (level) {
-    case "fatal":
-    case "error":
-      return badgeToneClass("danger");
-    case "warn":
-      return badgeToneClass("warning");
-    case "info":
-      return badgeToneClass("info");
-    case "debug":
-    case "trace":
-      return badgeToneClass("muted");
-    case "unknown":
-      return "bg-background text-muted-foreground";
-  }
 }
 
 function formatModel(model: RuntimeModelSelection): string {
