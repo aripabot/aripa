@@ -1,15 +1,29 @@
 import { cp, mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { createHash, createPublicKey, verify as verifySignature } from "node:crypto";
-import { basename, dirname, resolve, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 
 import { AUTO_UPDATE_CRON_PRESETS } from "@aripabot/core/update/auto-update-cron.ts";
+import {
+  buildAutoUpdateCronEntry,
+  removeManagedAutoUpdateCronContent,
+  updateManagedAutoUpdateCronContent,
+} from "@aripabot/core/update/auto-update-cron-content.ts";
 
 export {
   AUTO_UPDATE_CRON_PRESETS,
   type AutoUpdateCronExpression,
   type AutoUpdateCronPresetId,
 } from "@aripabot/core/update/auto-update-cron.ts";
+export {
+  AUTO_UPDATE_CRON_BEGIN,
+  AUTO_UPDATE_CRON_END,
+  buildAutoUpdateCronEntry,
+  removeManagedAutoUpdateCronContent,
+  shellQuote,
+  updateManagedAutoUpdateCronContent,
+  type AutoUpdateCronEntryOptions,
+} from "@aripabot/core/update/auto-update-cron-content.ts";
 
 export const DEFAULT_GITHUB_REPO = "aripabot/aripa";
 export const DEFAULT_RELEASE_PUBLIC_KEY_PEM_B64 =
@@ -314,39 +328,10 @@ export async function removeAutoUpdateCron(
   const read = options.crontabRead ?? readUserCrontab;
   const write = options.crontabWrite ?? writeUserCrontab;
   const existingCrontab = await read();
-  await write(removeManagedAutoUpdateCronContent(existingCrontab));
-}
-
-export function buildAutoUpdateCronEntry(options: AutoUpdateCronInstallOptions): string {
-  const cwd = resolve(options.cwd ?? process.cwd());
-  const configPath = formatCronPath(options.configPath ?? join(cwd, "config.json"));
-  const bunExecutable = options.bunExecutable ?? process.execPath;
-  const logPath = options.logPath ?? join(cwd, "aripa-update.log");
-  const command = [
-    `cd ${shellQuote(cwd)}`,
-    `CONFIG_PATH=${shellQuote(configPath)} ${shellQuote(bunExecutable)} run update --latest >> ${shellQuote(logPath)} 2>&1`,
-  ].join(" && ");
-
-  return `${options.cronExpression} ${command}`;
-}
-
-export function updateManagedAutoUpdateCronContent(
-  existingCrontab: string,
-  cronEntry: string,
-): string {
-  const unmanagedCrontab = removeManagedAutoUpdateCronContent(existingCrontab).trimEnd();
-  const managedBlock = `${AUTO_UPDATE_CRON_BEGIN}\n${cronEntry}\n${AUTO_UPDATE_CRON_END}`;
-
-  return `${unmanagedCrontab ? `${unmanagedCrontab}\n\n` : ""}${managedBlock}\n`;
-}
-
-export function removeManagedAutoUpdateCronContent(existingCrontab: string): string {
-  const withoutManagedBlock = existingCrontab
-    .replace(AUTO_UPDATE_CRON_BLOCK_PATTERN, "")
-    .replace(/\n{3,}/g, "\n\n")
-    .trimEnd();
-
-  return withoutManagedBlock ? `${withoutManagedBlock}\n` : "";
+  const updatedCrontab = removeManagedAutoUpdateCronContent(existingCrontab);
+  if (updatedCrontab !== existingCrontab) {
+    await write(updatedCrontab);
+  }
 }
 
 export async function syncSourceTree(sourceRoot: string, destinationRoot: string): Promise<void> {
@@ -625,13 +610,6 @@ async function syncDirectory(
   }
 }
 
-const AUTO_UPDATE_CRON_BEGIN = "# BEGIN ARIPA AUTO UPDATE";
-const AUTO_UPDATE_CRON_END = "# END ARIPA AUTO UPDATE";
-const AUTO_UPDATE_CRON_BLOCK_PATTERN = new RegExp(
-  `${escapeRegExp(AUTO_UPDATE_CRON_BEGIN)}\\n[\\s\\S]*?\\n${escapeRegExp(AUTO_UPDATE_CRON_END)}\\n?`,
-  "g",
-);
-
 async function readUserCrontab(): Promise<string> {
   const subprocess = Bun.spawn(["crontab", "-l"], {
     stdout: "pipe",
@@ -672,22 +650,6 @@ async function writeUserCrontab(content: string): Promise<void> {
     const output = [stderr.trim(), stdout.trim()].filter(Boolean).join("\n");
     throw new Error(output || `crontab update failed with exit code ${exitCode}.`);
   }
-}
-
-function formatCronPath(pathOrUrl: string | URL): string {
-  if (pathOrUrl instanceof URL) {
-    return pathOrUrl.pathname;
-  }
-
-  return resolve(pathOrUrl);
-}
-
-function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", "'\\''")}'`;
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function githubHeaders(

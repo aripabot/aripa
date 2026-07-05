@@ -12,6 +12,7 @@ import {
   fetchGitHubReleases,
   formatReleaseName,
   removeManagedAutoUpdateCronContent,
+  removeAutoUpdateCron,
   getVersionByTagName,
   shouldPreserveUpdatePath,
   syncSourceTree,
@@ -557,6 +558,18 @@ describe("auto-update cron helpers", () => {
     );
   });
 
+  test("resolves cron paths and defaults to the current Bun executable", () => {
+    expect(
+      buildAutoUpdateCronEntry({
+        cwd: "/opt/aripa",
+        configPath: "config.json",
+        cronExpression: "0 4 * * 0",
+      }),
+    ).toBe(
+      `0 4 * * 0 cd '/opt/aripa' && CONFIG_PATH='${process.cwd()}/config.json' '${process.execPath}' run update --latest >> '/opt/aripa/aripa-update.log' 2>&1`,
+    );
+  });
+
   test("replaces an existing managed cron block without touching other jobs", () => {
     const existing = [
       "15 2 * * * /usr/bin/true",
@@ -590,5 +603,18 @@ describe("auto-update cron helpers", () => {
     ].join("\n");
 
     expect(removeManagedAutoUpdateCronContent(existing)).toBe("15 2 * * * /usr/bin/true\n");
+  });
+
+  test("skips writing when no managed cron block exists", async () => {
+    let writes = 0;
+
+    await removeAutoUpdateCron({
+      crontabRead: async () => "15 2 * * * /usr/bin/true\n",
+      crontabWrite: async () => {
+        writes += 1;
+      },
+    });
+
+    expect(writes).toBe(0);
   });
 });

@@ -18,7 +18,11 @@ import {
 import { loadWizardModelOptions } from "@aripabot/core/onboarding-wizard/model-options.ts";
 import { getSelectableModelProviders } from "@aripabot/core/onboarding-wizard/provider-availability.ts";
 import { AUTO_UPDATE_CRON_PRESETS } from "@aripabot/core/update/auto-update-cron.ts";
-import type { GitHubRelease } from "@aripabot/core/update/release-updater.ts";
+import {
+  installAutoUpdateCron,
+  removeAutoUpdateCron,
+  type GitHubRelease,
+} from "@aripabot/core/update/release-updater.ts";
 
 import type {
   ActiveMuteSummary,
@@ -59,12 +63,6 @@ const rootEnv = readRootEnv();
 const STYLE_PROMPTS = ["match", "concise", "formal", "friendly", "original", "playful"] as const;
 const execFileAsync = promisify(execFile);
 const LOG_TAIL_LINE_COUNT = 500;
-const AUTO_UPDATE_CRON_BEGIN = "# BEGIN ARIPA AUTO UPDATE";
-const AUTO_UPDATE_CRON_END = "# END ARIPA AUTO UPDATE";
-const AUTO_UPDATE_CRON_BLOCK_PATTERN = new RegExp(
-  `${escapeRegExp(AUTO_UPDATE_CRON_BEGIN)}\\n[\\s\\S]*?\\n${escapeRegExp(AUTO_UPDATE_CRON_END)}\\n?`,
-  "g",
-);
 
 function getEnv(name: string): string | undefined {
   return process.env[name] ?? rootEnv[name];
@@ -204,49 +202,22 @@ async function syncAutoUpdateCron(
   config: RuntimeJsonConfig,
   configPath: string | URL,
 ): Promise<string> {
-  const existingCrontab = await readUserCrontab();
-
   if (!config.updates.enabled || !config.updates.autoInstall.enabled) {
-    const updatedCrontab = removeManagedAutoUpdateCronContent(existingCrontab);
-    if (updatedCrontab !== existingCrontab) {
-      await writeUserCrontab(updatedCrontab);
-    }
+    await removeAutoUpdateCron({
+      crontabRead: readUserCrontab,
+      crontabWrite: writeUserCrontab,
+    });
     return "Automatic update cron is disabled.";
   }
 
-  const cronEntry = buildAutoUpdateCronEntry(configPath, config.updates.autoInstall.cronExpression);
-  await writeUserCrontab(updateManagedAutoUpdateCronContent(existingCrontab, cronEntry));
+  await installAutoUpdateCron({
+    cwd: repositoryRoot,
+    configPath,
+    cronExpression: config.updates.autoInstall.cronExpression,
+    crontabRead: readUserCrontab,
+    crontabWrite: writeUserCrontab,
+  });
   return `Automatic update cron installed for ${config.updates.autoInstall.cronExpression}.`;
-}
-
-function buildAutoUpdateCronEntry(configPath: string | URL, cronExpression: string): string {
-  const formattedConfigPath = formatCronPath(configPath);
-  const bunExecutable = process.env.BUN_EXECUTABLE?.trim() || "bun";
-  const logPath = join(repositoryRoot, "aripa-update.log");
-  const command = [
-    `cd ${shellQuote(repositoryRoot)}`,
-    `CONFIG_PATH=${shellQuote(formattedConfigPath)} ${shellQuote(
-      bunExecutable,
-    )} run update --latest >> ${shellQuote(logPath)} 2>&1`,
-  ].join(" && ");
-
-  return `${cronExpression} ${command}`;
-}
-
-function updateManagedAutoUpdateCronContent(existingCrontab: string, cronEntry: string): string {
-  const unmanagedCrontab = removeManagedAutoUpdateCronContent(existingCrontab).trimEnd();
-  const managedBlock = `${AUTO_UPDATE_CRON_BEGIN}\n${cronEntry}\n${AUTO_UPDATE_CRON_END}`;
-
-  return `${unmanagedCrontab ? `${unmanagedCrontab}\n\n` : ""}${managedBlock}\n`;
-}
-
-function removeManagedAutoUpdateCronContent(existingCrontab: string): string {
-  const withoutManagedBlock = existingCrontab
-    .replace(AUTO_UPDATE_CRON_BLOCK_PATTERN, "")
-    .replace(/\n{3,}/g, "\n\n")
-    .trimEnd();
-
-  return withoutManagedBlock ? `${withoutManagedBlock}\n` : "";
 }
 
 async function readUserCrontab(): Promise<string> {
@@ -1360,22 +1331,6 @@ async function readJson<T>(pathOrUrl: string | URL): Promise<T> {
 
 function formatPath(pathOrUrl: string | URL): string {
   return pathOrUrl instanceof URL ? pathOrUrl.pathname : pathOrUrl;
-}
-
-function formatCronPath(pathOrUrl: string | URL): string {
-  if (pathOrUrl instanceof URL) {
-    return pathOrUrl.pathname;
-  }
-
-  return pathOrUrl;
-}
-
-function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", "'\\''")}'`;
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function toTitleCase(value: string): string {
