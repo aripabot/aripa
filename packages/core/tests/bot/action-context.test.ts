@@ -30,7 +30,7 @@ describe("safeReply", () => {
 
     const result = await safeReply(message, "@everyone <@123> <@&456>", log);
 
-    expect(result as unknown).toEqual({
+    expect(result).toEqual({
       content: "@everyone <@123> <@&456>",
       allowedMentions: {
         parse: [],
@@ -67,7 +67,7 @@ describe("safeReply", () => {
       log,
     );
 
-    expect(result as unknown).toEqual({
+    expect(result).toEqual({
       embeds: [{ title: "Test Embed" }],
       allowedMentions: {
         parse: [],
