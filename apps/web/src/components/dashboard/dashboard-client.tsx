@@ -2123,14 +2123,11 @@ function muteStatusClass(status: DashboardStatus["operations"]["activeMutes"][nu
 }
 
 function datumToneClass(tone: "default" | "good" | "muted"): string {
-  switch (tone) {
-    case "good":
-      return "text-foreground";
-    case "muted":
-      return "text-muted-foreground";
-    case "default":
-      return "text-foreground";
+  if (tone === "muted") {
+    return "text-muted-foreground";
   }
+
+  return "text-foreground";
 }
 
 const logLevels: LogEntryLevel[] = ["trace", "debug", "info", "warn", "error", "fatal", "unknown"];
