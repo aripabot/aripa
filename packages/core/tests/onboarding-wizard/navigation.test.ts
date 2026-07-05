@@ -9,6 +9,42 @@ import {
 } from "@aripabot/core/onboarding-wizard/navigation.ts";
 
 describe("previousStepFor", () => {
+  test("keeps the full web-enabled custom update path stable", () => {
+    const options = { webEnabled: true, updateKeyRequired: true, updatesEnabled: true };
+    const path: string[] = [];
+    let step = "review" as Parameters<typeof previousStepFor>[0];
+
+    while (step) {
+      path.unshift(step);
+      const previousStep = previousStepFor(step, options);
+      if (!previousStep) {
+        break;
+      }
+      step = previousStep;
+    }
+
+    expect(path).toEqual([
+      "name",
+      "operator",
+      "style",
+      "servers",
+      "rate-limit",
+      "log-privacy",
+      "models",
+      "agent-provider",
+      "agent-model",
+      "summarizer-provider",
+      "summarizer-model",
+      "web-capability",
+      "web-model",
+      "update-source",
+      "update-repo",
+      "update-key",
+      "update-schedule",
+      "review",
+    ]);
+  });
+
   test("follows the custom update repository signing path", () => {
     const options = { webEnabled: true, updateKeyRequired: true, updatesEnabled: true };
 
