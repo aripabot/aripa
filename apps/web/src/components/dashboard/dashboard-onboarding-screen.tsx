@@ -6,24 +6,26 @@ import { LogOut, Save, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  ChoiceList,
-  ModelSelect,
-  OnboardingProgress,
-  ProviderSelect,
-  SwitchField,
-} from "@/components/dashboard/dashboard-onboarding-controls";
+import { OnboardingProgress } from "@/components/dashboard/dashboard-onboarding-controls";
 import {
   CustomRateLimitStep,
   GeneratedUpdateKeyStep,
+  LogPrivacyStep,
+  ModelModeStep,
+  ModelProviderStep,
+  ModelSelectionStep,
   NameStep,
   OperatorStep,
+  RateLimitPresetStep,
   ReviewStep,
   ServerAllowlistStep,
   StyleStep,
+  UpdateScheduleStep,
   UpdateKeyChoiceStep,
   UpdateKeyPasteStep,
   UpdateRepoStep,
+  UpdateSourceStep,
+  WebCapabilityStep,
 } from "@/components/dashboard/dashboard-onboarding-steps";
 import { completeOnboarding, generateSigningKey, getOnboardingOptions } from "@/lib/api";
 import { readableError } from "@/lib/errors";
@@ -40,12 +42,7 @@ import {
   validateGitHubRepo,
   validateOperatorUserId,
 } from "@aripabot/core/config/onboarding-validation.ts";
-import { selectableProvidersFromModelOptions } from "@aripabot/core/onboarding-wizard/model-option-selection.ts";
-import {
-  previousStepFor,
-  rateLimitPresetValue,
-  stepIndex,
-} from "@aripabot/core/onboarding-wizard/navigation.ts";
+import { previousStepFor, stepIndex } from "@aripabot/core/onboarding-wizard/navigation.ts";
 import type { Step as WizardStep } from "@aripabot/core/onboarding-wizard/types.ts";
 import type {
   ConfigurableRuntimeModelProvider,
@@ -532,8 +529,8 @@ export function DashboardOnboardingScreen({
         return <ServerAllowlistStep value={allowlistInput} onChange={setAllowlistInput} />;
       case "rate-limit":
         return (
-          <ChoiceList
-            value={rateLimitPresetValue(config.agentRateLimitMessagesPerMinute)}
+          <RateLimitPresetStep
+            value={config.agentRateLimitMessagesPerMinute}
             onChange={(value) => {
               if (value === "custom") {
                 setStepWithReset("rate-limit-custom");
@@ -543,14 +540,6 @@ export function DashboardOnboardingScreen({
                 agentRateLimitMessagesPerMinute: value === "off" ? null : Number(value),
               });
             }}
-            options={[
-              ["10", "Standard - 10/min", "Good default for regular server use."],
-              ["20", "Relaxed - 20/min", "Most permissive preset before turning limits off."],
-              ["5", "Moderate - 5/min", "Lower spend and less spam tolerance."],
-              ["3", "Strict - 3/min", "Tightest preset for careful rollout."],
-              ["custom", "Custom", "Enter any whole number of messages per minute."],
-              ["off", "Off", "Disable agent mention rate limiting."],
-            ]}
           />
         );
       case "rate-limit-custom":
@@ -559,33 +548,25 @@ export function DashboardOnboardingScreen({
         );
       case "log-privacy":
         return (
-          <SwitchField
-            label="Private Logs"
-            description="Hide channel context and tool payloads from logs."
+          <LogPrivacyStep
             checked={config.logPrivacy}
             onCheckedChange={(logPrivacy) => updateConfig({ logPrivacy })}
           />
         );
       case "models":
         return (
-          <ChoiceList
+          <ModelModeStep
             value={modelMode}
+            defaultSummary={defaultModelSummary(config)}
             onChange={(value) => setModelMode(value as "defaults" | "customize")}
-            options={[
-              ["defaults", "Keep Defaults", defaultModelSummary(config)],
-              ["customize", "Customize", "Pick providers, models, and web search behavior."],
-            ]}
           />
         );
       case "agent-provider":
         return (
-          <ProviderSelect
+          <ModelProviderStep
             id="onboarding-agent-provider"
             label="Agent Provider"
-            providers={selectableProvidersFromModelOptions(
-              options.modelOptions,
-              config.models.agent.provider as ConfigurableRuntimeModelProvider,
-            )}
+            modelOptions={options.modelOptions}
             value={config.models.agent.provider as ConfigurableRuntimeModelProvider}
             onValueChange={(provider) => {
               updateModel("agent", {
@@ -597,7 +578,7 @@ export function DashboardOnboardingScreen({
         );
       case "agent-model":
         return (
-          <ModelSelect
+          <ModelSelectionStep
             id="onboarding-agent-model"
             label="Agent Model"
             options={modelOptionsForProvider(
@@ -612,13 +593,10 @@ export function DashboardOnboardingScreen({
         );
       case "summarizer-provider":
         return (
-          <ProviderSelect
+          <ModelProviderStep
             id="onboarding-summarizer-provider"
             label="Summarizer Provider"
-            providers={selectableProvidersFromModelOptions(
-              options.modelOptions,
-              config.models.summarizer.provider as ConfigurableRuntimeModelProvider,
-            )}
+            modelOptions={options.modelOptions}
             value={config.models.summarizer.provider as ConfigurableRuntimeModelProvider}
             onValueChange={(provider) => {
               updateModel("summarizer", {
@@ -630,7 +608,7 @@ export function DashboardOnboardingScreen({
         );
       case "summarizer-model":
         return (
-          <ModelSelect
+          <ModelSelectionStep
             id="onboarding-summarizer-model"
             label="Summarizer Model"
             options={modelOptionsForProvider(
@@ -645,9 +623,7 @@ export function DashboardOnboardingScreen({
         );
       case "web-capability":
         return (
-          <SwitchField
-            label="Web Search"
-            description="Register the search tool and use Gemini grounding."
+          <WebCapabilityStep
             checked={config.models.web.enabled}
             onCheckedChange={(enabled) =>
               setConfig({
@@ -659,7 +635,7 @@ export function DashboardOnboardingScreen({
         );
       case "web-model":
         return (
-          <ModelSelect
+          <ModelSelectionStep
             id="onboarding-web-model"
             label="Web Search Model"
             options={options.modelOptions.web}
@@ -674,14 +650,10 @@ export function DashboardOnboardingScreen({
         );
       case "update-source":
         return (
-          <ChoiceList
+          <UpdateSourceStep
             value={updateSource}
+            defaultUpdateRepo={options.defaultUpdateRepo}
             onChange={(value) => setUpdateSource(value as UpdateSource)}
-            options={[
-              ["official", "Official Aripa", `Use ${options.defaultUpdateRepo}.`],
-              ["custom", "Custom Repository", "Enter an owner/repo release source for this fork."],
-              ["disabled", "Disabled", "Keep manual and automatic updater commands unavailable."],
-            ]}
           />
         );
       case "update-repo":
@@ -738,10 +710,9 @@ export function DashboardOnboardingScreen({
         );
       case "update-schedule":
         return (
-          <ChoiceList
-            value={
-              config.updates.autoInstall.enabled ? config.updates.autoInstall.preset : "disabled"
-            }
+          <UpdateScheduleStep
+            autoInstall={config.updates.autoInstall}
+            presets={options.autoUpdateCronPresets}
             onChange={(value) => {
               if (value === "disabled") {
                 setConfig({
@@ -773,21 +744,6 @@ export function DashboardOnboardingScreen({
                 },
               });
             }}
-            options={[
-              [
-                "disabled",
-                "Disabled",
-                "Only install updates when the update command is run manually.",
-              ],
-              ...options.autoUpdateCronPresets.map(
-                (preset) =>
-                  [preset.id, preset.name, `${preset.cronExpression} - ${preset.description}`] as [
-                    string,
-                    string,
-                    string,
-                  ],
-              ),
-            ]}
           />
         );
       case "review":

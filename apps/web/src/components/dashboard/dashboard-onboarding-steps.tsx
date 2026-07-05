@@ -3,7 +3,13 @@
 import type { ReactNode } from "react";
 import { Clipboard, KeyRound, ShieldCheck } from "lucide-react";
 
-import { Field } from "@/components/dashboard/dashboard-onboarding-controls";
+import {
+  ChoiceList,
+  Field,
+  ModelSelect,
+  ProviderSelect,
+  SwitchField,
+} from "@/components/dashboard/dashboard-onboarding-controls";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -15,8 +21,15 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import type { OnboardingOptionsResponse } from "@/lib/api-types";
+import type {
+  ConfigurableRuntimeModelProvider,
+  RuntimeJsonConfig,
+} from "@aripabot/core/config/config.ts";
+import { selectableProvidersFromModelOptions } from "@aripabot/core/onboarding-wizard/model-option-selection.ts";
+import { rateLimitPresetValue } from "@aripabot/core/onboarding-wizard/navigation.ts";
 
 type StyleOption = OnboardingOptionsResponse["styles"][number];
+type ModelOption = { name: string; description: string; value: string };
 
 export function NameStep({
   value,
@@ -134,6 +147,154 @@ export function CustomRateLimitStep({
   );
 }
 
+export function RateLimitPresetStep({
+  value,
+  onChange,
+}: {
+  value: number | null;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <ChoiceList
+      value={rateLimitPresetValue(value)}
+      onChange={onChange}
+      options={[
+        ["10", "Standard - 10/min", "Good default for regular server use."],
+        ["20", "Relaxed - 20/min", "Most permissive preset before turning limits off."],
+        ["5", "Moderate - 5/min", "Lower spend and less spam tolerance."],
+        ["3", "Strict - 3/min", "Tightest preset for careful rollout."],
+        ["custom", "Custom", "Enter any whole number of messages per minute."],
+        ["off", "Off", "Disable agent mention rate limiting."],
+      ]}
+    />
+  );
+}
+
+export function LogPrivacyStep({
+  checked,
+  onCheckedChange,
+}: {
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+}) {
+  return (
+    <SwitchField
+      label="Private Logs"
+      description="Hide channel context and tool payloads from logs."
+      checked={checked}
+      onCheckedChange={onCheckedChange}
+    />
+  );
+}
+
+export function ModelModeStep({
+  value,
+  defaultSummary,
+  onChange,
+}: {
+  value: "defaults" | "customize";
+  defaultSummary: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <ChoiceList
+      value={value}
+      onChange={onChange}
+      options={[
+        ["defaults", "Keep Defaults", defaultSummary],
+        ["customize", "Customize", "Pick providers, models, and web search behavior."],
+      ]}
+    />
+  );
+}
+
+export function ModelProviderStep({
+  id,
+  label,
+  modelOptions,
+  value,
+  onValueChange,
+}: {
+  id: string;
+  label: string;
+  modelOptions: OnboardingOptionsResponse["modelOptions"];
+  value: ConfigurableRuntimeModelProvider;
+  onValueChange: (value: ConfigurableRuntimeModelProvider) => void;
+}) {
+  return (
+    <ProviderSelect
+      id={id}
+      label={label}
+      providers={selectableProvidersFromModelOptions(modelOptions, value)}
+      value={value}
+      onValueChange={onValueChange}
+    />
+  );
+}
+
+export function ModelSelectionStep({
+  id,
+  label,
+  options,
+  value,
+  onValueChange,
+}: {
+  id: string;
+  label: string;
+  options: ModelOption[];
+  value: string;
+  onValueChange: (value: string) => void;
+}) {
+  return (
+    <ModelSelect
+      id={id}
+      label={label}
+      options={options}
+      value={value}
+      onValueChange={onValueChange}
+    />
+  );
+}
+
+export function WebCapabilityStep({
+  checked,
+  onCheckedChange,
+}: {
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+}) {
+  return (
+    <SwitchField
+      label="Web Search"
+      description="Register the search tool and use Gemini grounding."
+      checked={checked}
+      onCheckedChange={onCheckedChange}
+    />
+  );
+}
+
+export function UpdateSourceStep({
+  value,
+  defaultUpdateRepo,
+  onChange,
+}: {
+  value: "official" | "custom" | "disabled";
+  defaultUpdateRepo: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <ChoiceList
+      value={value}
+      onChange={onChange}
+      options={[
+        ["official", "Official Aripa", `Use ${defaultUpdateRepo}.`],
+        ["custom", "Custom Repository", "Enter an owner/repo release source for this fork."],
+        ["disabled", "Disabled", "Keep manual and automatic updater commands unavailable."],
+      ]}
+    />
+  );
+}
+
 export function UpdateRepoStep({
   value,
   onChange,
@@ -153,6 +314,34 @@ export function UpdateRepoStep({
         spellCheck={false}
       />
     </Field>
+  );
+}
+
+export function UpdateScheduleStep({
+  autoInstall,
+  presets,
+  onChange,
+}: {
+  autoInstall: RuntimeJsonConfig["updates"]["autoInstall"];
+  presets: OnboardingOptionsResponse["autoUpdateCronPresets"];
+  onChange: (value: string) => void;
+}) {
+  return (
+    <ChoiceList
+      value={autoInstall.enabled ? autoInstall.preset : "disabled"}
+      onChange={onChange}
+      options={[
+        ["disabled", "Disabled", "Only install updates when the update command is run manually."],
+        ...presets.map(
+          (preset) =>
+            [preset.id, preset.name, `${preset.cronExpression} - ${preset.description}`] as [
+              string,
+              string,
+              string,
+            ],
+        ),
+      ]}
+    />
   );
 }
 
