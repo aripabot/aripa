@@ -70,6 +70,7 @@ const LOG_TAIL_LINE_COUNT = 500;
 const LOG_FILE_TAIL_LINE_COUNT = 150;
 const LOG_FILE_TAIL_BYTES = 256 * 1024;
 const LOCAL_OPERATIONS_CACHE_TTL_MS = 10_000;
+const DISCORD_DIRECTORY_CACHE_TTL_MS = 45_000;
 const LOG_ENTRY_LEVELS = new Set<LogEntryLevel>([
   "trace",
   "debug",
@@ -85,6 +86,11 @@ const localOperationsCache = new Map<
   { expiresAtMs: number; state: LocalOperationsState }
 >();
 const localOperationsInflight = new Map<string, Promise<LocalOperationsState>>();
+const discordDirectoryCache = new Map<
+  string,
+  { expiresAtMs: number; directory: DiscordDirectory }
+>();
+const discordDirectoryInflight = new Map<string, Promise<DiscordDirectory>>();
 
 function getEnv(name: string): string | undefined {
   return process.env[name] ?? rootEnv[name];
@@ -571,14 +577,40 @@ async function isBotProcessRunning(): Promise<boolean> {
 async function getDiscordDirectory(
   guildIds: readonly string[],
   activeMutes: readonly { guildId: string; userId: string; muteRoleId: string }[],
-): Promise<{
-  lookup: DiscordLookupStatus;
-  guilds: Map<string, DiscordGuildSummary>;
-  channels: Map<string, DiscordNamedResource>;
-  roles: Map<string, DiscordNamedResource>;
-  members: Map<string, DiscordMemberSummary>;
-}> {
+): Promise<DiscordDirectory> {
   const token = getEnv("TOKEN")?.trim();
+  const cacheKey = discordDirectoryCacheKey(token, guildIds, activeMutes);
+  const cached = discordDirectoryCache.get(cacheKey);
+  if (cached && cached.expiresAtMs > Date.now()) {
+    return cached.directory;
+  }
+
+  const inflight = discordDirectoryInflight.get(cacheKey);
+  if (inflight) {
+    return inflight;
+  }
+
+  const promise = fetchDiscordDirectory(token, guildIds, activeMutes).then((directory) => {
+    discordDirectoryCache.set(cacheKey, {
+      expiresAtMs: Date.now() + DISCORD_DIRECTORY_CACHE_TTL_MS,
+      directory,
+    });
+    return directory;
+  });
+  discordDirectoryInflight.set(cacheKey, promise);
+
+  try {
+    return await promise;
+  } finally {
+    discordDirectoryInflight.delete(cacheKey);
+  }
+}
+
+async function fetchDiscordDirectory(
+  token: string | undefined,
+  guildIds: readonly string[],
+  activeMutes: readonly { guildId: string; userId: string; muteRoleId: string }[],
+): Promise<DiscordDirectory> {
   const output = {
     lookup: {
       available: Boolean(token),
@@ -660,6 +692,20 @@ async function getDiscordDirectory(
   }
 
   return output;
+}
+
+function discordDirectoryCacheKey(
+  token: string | undefined,
+  guildIds: readonly string[],
+  activeMutes: readonly { guildId: string; userId: string; muteRoleId: string }[],
+): string {
+  const guildKey = [...guildIds].sort().join(",");
+  const muteKey = activeMutes
+    .map((mute) => `${mute.guildId}:${mute.userId}:${mute.muteRoleId}`)
+    .sort()
+    .join(",");
+
+  return `${token ? hashString(token) : "no-token"}|${guildKey}|${muteKey}`;
 }
 
 async function discordGet<T>(path: string, token: string): Promise<T> {
@@ -1464,6 +1510,14 @@ interface DiscordMemberSummary {
   username: string | null;
   displayName: string | null;
   avatarUrl: string | null;
+}
+
+interface DiscordDirectory {
+  lookup: DiscordLookupStatus;
+  guilds: Map<string, DiscordGuildSummary>;
+  channels: Map<string, DiscordNamedResource>;
+  roles: Map<string, DiscordNamedResource>;
+  members: Map<string, DiscordMemberSummary>;
 }
 
 interface DiscordGuildResponse {
