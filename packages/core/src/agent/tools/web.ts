@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { google } from "@ai-sdk/google";
 import type { LanguageModelV3 } from "@ai-sdk/provider";
 import { generateText, tool } from "ai";
@@ -150,9 +151,7 @@ function createWebSearchQuestionLogMetadata(
 }
 
 export function loadWebPrompt(): Promise<string> {
-  cachedWebPromptPromise ??= Bun.file(webToolPromptUrl)
-    .text()
-    .then((content) => content.trim());
+  cachedWebPromptPromise ??= readFile(webToolPromptUrl, "utf8").then((content) => content.trim());
 
   return cachedWebPromptPromise;
 }

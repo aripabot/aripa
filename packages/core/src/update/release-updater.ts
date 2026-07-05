@@ -1,3 +1,4 @@
+// @bun-only: release installation uses Bun file, environment, and process APIs.
 import { cp, mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { createHash, createPublicKey, verify as verifySignature } from "node:crypto";
 import { basename, dirname, join } from "node:path";

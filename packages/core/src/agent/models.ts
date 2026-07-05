@@ -137,5 +137,5 @@ function readConfiguredApiKey(
   fallbackEnvName?: string,
 ): string | undefined {
   const envName = settings?.apiKeyEnv ?? fallbackEnvName;
-  return envName ? Bun.env[envName]?.trim() || undefined : undefined;
+  return envName ? process.env[envName]?.trim() || undefined : undefined;
 }

@@ -1,3 +1,4 @@
+// @bun-only: persistent guild config storage uses Bun's built-in SQLite driver.
 import { Database } from "bun:sqlite";
 import { dirname } from "node:path";
 import { mkdirSync } from "node:fs";

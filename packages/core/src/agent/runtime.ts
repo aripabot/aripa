@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { openai, type OpenAILanguageModelResponsesOptions } from "@ai-sdk/openai";
 import type { LanguageModelV3 } from "@ai-sdk/provider";
 import { generateText, stepCountIs } from "ai";
@@ -625,9 +626,7 @@ async function runAgentTextGeneration(
 }
 
 async function readPromptFile(url: URL): Promise<string> {
-  return Bun.file(url)
-    .text()
-    .then((content) => content.trim());
+  return readFile(url, "utf8").then((content) => content.trim());
 }
 
 function getStylePromptUrl(stylePromptName: string): URL {
