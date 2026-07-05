@@ -283,14 +283,15 @@ async function writeUserCrontab(content: string): Promise<void> {
 
 export async function getDashboardStatus(): Promise<DashboardStatus> {
   const configResponse = await readConfig();
-  const [styles, botPackageJson, webPackageJson, botRuntime, providers] = await Promise.all([
-    getStylePromptOptions(configResponse.config.stylePrompt),
-    readJson<{ version?: string }>(packageJsonPath),
-    readJson<{ version?: string }>(webPackageJsonPath),
-    getBotRuntimeStatus(),
-    getSelectableModelProviders(),
-  ]);
-  const databasePath = await resolveDatabasePath();
+  const [styles, botPackageJson, webPackageJson, botRuntime, providers, databasePath] =
+    await Promise.all([
+      getStylePromptOptions(configResponse.config.stylePrompt),
+      readJson<{ version?: string }>(packageJsonPath),
+      readJson<{ version?: string }>(webPackageJsonPath),
+      getBotRuntimeStatus(),
+      getSelectableModelProviders(),
+      resolveDatabasePath(),
+    ]);
   const operations = await getDashboardOperations(configResponse.config, databasePath);
 
   return {
