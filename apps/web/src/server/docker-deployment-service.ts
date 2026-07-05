@@ -9,6 +9,7 @@ import type {
   DockerDeploymentScript,
   DockerDeploymentStatus,
 } from "@/lib/api-types";
+import { readableError } from "@/lib/errors";
 import { DOCKER_CONTAINER_NAME, isInsideDockerRuntime } from "@/server/docker-runtime";
 
 const execFileAsync = promisify(execFile);
@@ -201,7 +202,7 @@ async function inspectContainer(): Promise<{
       containerId: null,
       startedAt: null,
       finishedAt: null,
-      error: readableError(error),
+      error: readableError(error, "Docker is unavailable."),
     };
   }
 }
@@ -235,8 +236,4 @@ function normalizeDockerTime(value: string | undefined): string | null {
 
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? new Date(parsed).toISOString() : value;
-}
-
-function readableError(error: unknown): string {
-  return error instanceof Error ? error.message : "Docker is unavailable.";
 }

@@ -4,6 +4,7 @@ import type {
   LogsResponse,
   ReleasesResponse,
 } from "@/lib/api-types";
+import { readableError } from "@/lib/errors";
 import { getDockerDeploymentStatus } from "@/server/docker-deployment-service";
 import { getDashboardStatus, listReleases, readLocalLogs } from "@/server/config-service";
 
@@ -39,10 +40,6 @@ async function loadState<T>(loader: () => Promise<T>): Promise<LoadState<T>> {
   try {
     return { status: "ready", data: await loader(), error: null };
   } catch (error) {
-    return { status: "error", data: null, error: readableError(error) };
+    return { status: "error", data: null, error: readableError(error, "Request failed.") };
   }
-}
-
-function readableError(error: unknown): string {
-  return error instanceof Error ? error.message : "Request failed.";
 }

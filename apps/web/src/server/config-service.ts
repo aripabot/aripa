@@ -54,6 +54,7 @@ import {
   isInsideDockerRuntime,
 } from "@/server/docker-runtime";
 import { requestBotRuntimeConfigReload } from "@/server/bot-runtime-control";
+import { readableError } from "@/lib/errors";
 
 const appRoot = process.cwd();
 const repositoryRoot = join(/* turbopackIgnore: true */ appRoot, "../..");
@@ -748,10 +749,6 @@ function roleKey(guildId: string, roleId: string): string {
 
 function memberKey(guildId: string, userId: string): string {
   return `${guildId}:${userId}`;
-}
-
-function readableError(error: unknown): string {
-  return error instanceof Error ? error.message : "Something went wrong.";
 }
 
 export async function readLocalLogs(): Promise<LogsResponse> {

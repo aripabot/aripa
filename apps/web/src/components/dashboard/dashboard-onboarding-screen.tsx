@@ -26,6 +26,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { completeOnboarding, generateSigningKey, getOnboardingOptions } from "@/lib/api";
+import { readableError } from "@/lib/errors";
 import type {
   CompleteOnboardingResponse,
   DashboardStatus,
@@ -143,7 +144,7 @@ export function DashboardOnboardingScreen({
         );
       } catch (loadError) {
         if (!cancelled) {
-          setError(readableError(loadError));
+          setError(readableError(loadError, "Request failed."));
         }
       } finally {
         if (!cancelled) {
@@ -363,7 +364,7 @@ export function DashboardOnboardingScreen({
       setGeneratedPrivateKey(keyPair.privateKeyPemBase64);
       setStep("update-key-generated");
     } catch (generateError) {
-      setError(readableError(generateError));
+      setError(readableError(generateError, "Request failed."));
     } finally {
       setSubmitting(false);
     }
@@ -416,7 +417,7 @@ export function DashboardOnboardingScreen({
       });
       onComplete(result);
     } catch (submitError) {
-      setError(readableError(submitError));
+      setError(readableError(submitError, "Request failed."));
     } finally {
       setSubmitting(false);
     }
@@ -1311,8 +1312,4 @@ function submitButtonLabel(step: Step, submitting: boolean): string {
 
 function defaultModelSummary(config: RuntimeJsonConfig): string {
   return `${config.models.agent.provider}/${config.models.agent.model}, ${config.models.summarizer.provider}/${config.models.summarizer.model}`;
-}
-
-function readableError(error: unknown): string {
-  return error instanceof Error ? error.message : "Request failed.";
 }

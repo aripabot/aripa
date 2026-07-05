@@ -63,6 +63,7 @@ import {
   runDockerDeploymentCommand,
   saveConfig,
 } from "@/lib/api";
+import { readableError } from "@/lib/errors";
 import { DashboardOnboardingScreen } from "@/components/dashboard/dashboard-onboarding-screen";
 import type {
   CompleteOnboardingResponse,
@@ -2325,10 +2326,6 @@ function themeButtonLabel(themeMode: ThemeMode, resolvedTheme: ResolvedTheme): s
 
 function initialLoadState<T>(): LoadState<T> {
   return { status: "loading", data: null, error: null };
-}
-
-function readableError(error: unknown): string {
-  return error instanceof Error ? error.message : "Something went wrong.";
 }
 
 function formatDate(input: string): string {
