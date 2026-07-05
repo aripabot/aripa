@@ -59,7 +59,7 @@ describe("MuteScheduler", () => {
   test("reports failed automatic unmutes to mod logs and keeps the record for retry", async () => {
     const store = new ActiveMuteStore(":memory:");
     const guildConfigStore = new GuildConfigStore(":memory:");
-    const modLogMessages: unknown[] = [];
+    const modLogMessages: CapturedEmbedMessage[] = [];
 
     try {
       guildConfigStore.setLogChannel("guild-1", "log-1");
@@ -98,7 +98,7 @@ describe("MuteScheduler", () => {
         channels: {
           fetch: async () => ({
             isTextBased: () => true,
-            send: async (message: unknown) => {
+            send: async (message: CapturedEmbedMessage) => {
               modLogMessages.push(message);
               return message;
             },
@@ -152,7 +152,7 @@ describe("MuteScheduler", () => {
   test("suppresses duplicate automatic-unmute failure reports during retry window", async () => {
     const store = new ActiveMuteStore(":memory:");
     const guildConfigStore = new GuildConfigStore(":memory:");
-    const modLogMessages: unknown[] = [];
+    const modLogMessages: CapturedEmbedMessage[] = [];
 
     try {
       guildConfigStore.setLogChannel("guild-1", "log-1");
@@ -191,7 +191,7 @@ describe("MuteScheduler", () => {
   test("backs off automatic-unmute retry delays after repeated failures", async () => {
     const store = new ActiveMuteStore(":memory:");
     const guildConfigStore = new GuildConfigStore(":memory:");
-    const modLogMessages: unknown[] = [];
+    const modLogMessages: CapturedEmbedMessage[] = [];
 
     try {
       guildConfigStore.setLogChannel("guild-1", "log-1");
@@ -286,7 +286,7 @@ describe("MuteScheduler", () => {
   });
 });
 
-function createFailingUnmuteClient(modLogMessages: unknown[]) {
+function createFailingUnmuteClient(modLogMessages: CapturedEmbedMessage[]) {
   return {
     guilds: {
       fetch: async () => ({
@@ -311,7 +311,7 @@ function createFailingUnmuteClient(modLogMessages: unknown[]) {
     channels: {
       fetch: async () => ({
         isTextBased: () => true,
-        send: async (message: unknown) => {
+        send: async (message: CapturedEmbedMessage) => {
           modLogMessages.push(message);
           return message;
         },
@@ -320,10 +320,19 @@ function createFailingUnmuteClient(modLogMessages: unknown[]) {
   } as never;
 }
 
-function fieldValue(message: unknown, name: string): string | undefined {
-  const field = (message as any).embeds?.[0]?.data?.fields?.find(
-    (entry: { name?: string }) => entry.name === name,
-  );
+interface CapturedEmbedMessage {
+  embeds?: readonly {
+    data?: {
+      fields?: readonly {
+        name?: string;
+        value?: string;
+      }[];
+    };
+  }[];
+}
+
+function fieldValue(message: CapturedEmbedMessage, name: string): string | undefined {
+  const field = message.embeds?.[0]?.data?.fields?.find((entry) => entry.name === name);
 
   return field?.value;
 }
