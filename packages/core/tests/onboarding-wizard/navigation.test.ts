@@ -5,6 +5,7 @@ import {
   previousStepFor,
   rateLimitPresetIndex,
   rateLimitPresetValue,
+  stepIndex,
 } from "@aripabot/core/onboarding-wizard/navigation.ts";
 
 describe("previousStepFor", () => {
@@ -32,6 +33,43 @@ describe("previousStepFor", () => {
         updatesEnabled: false,
       }),
     ).toBe("update-source");
+  });
+
+  test("returns to the web model before update setup when web search is enabled", () => {
+    expect(
+      previousStepFor("update-source", {
+        webEnabled: true,
+        updateKeyRequired: false,
+        updatesEnabled: true,
+      }),
+    ).toBe("web-model");
+  });
+
+  test("skips the web model before update setup when web search is disabled", () => {
+    expect(
+      previousStepFor("update-source", {
+        webEnabled: false,
+        updateKeyRequired: false,
+        updatesEnabled: true,
+      }),
+    ).toBe("web-capability");
+  });
+});
+
+describe("stepIndex", () => {
+  test("groups detailed wizard branches into shared progress milestones", () => {
+    expect(stepIndex("rate-limit-custom")).toBe(stepIndex("rate-limit"));
+    expect(stepIndex("agent-provider")).toBe(stepIndex("models"));
+    expect(stepIndex("agent-model")).toBe(stepIndex("models"));
+    expect(stepIndex("summarizer-provider")).toBe(stepIndex("models"));
+    expect(stepIndex("summarizer-model")).toBe(stepIndex("models"));
+    expect(stepIndex("web-capability")).toBe(stepIndex("models"));
+    expect(stepIndex("web-model")).toBe(stepIndex("models"));
+    expect(stepIndex("update-source")).toBe(stepIndex("update-repo"));
+    expect(stepIndex("update-key")).toBe(stepIndex("update-repo"));
+    expect(stepIndex("update-key-paste")).toBe(stepIndex("update-repo"));
+    expect(stepIndex("update-key-generated")).toBe(stepIndex("update-repo"));
+    expect(stepIndex("update-schedule")).toBe(stepIndex("update-repo"));
   });
 });
 
