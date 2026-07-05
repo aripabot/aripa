@@ -1,5 +1,4 @@
-import type { UpdateInstallRequest } from "@/lib/api-types";
-import { json, jsonError } from "@/app/api/_utils/json";
+import { json, jsonError, parseJsonObject, readStringField } from "@/app/api/_utils/json";
 import { requireDashboardApiAuth } from "@/server/dashboard-auth-next";
 import { installRelease } from "@/server/update-service";
 
@@ -13,8 +12,8 @@ export async function POST(request: Request) {
   }
 
   try {
-    const body = (await request.json()) as UpdateInstallRequest;
-    return json(await installRelease(body.tagName));
+    const body = await parseJsonObject(request);
+    return json(await installRelease(readStringField(body, "tagName")));
   } catch (error) {
     return jsonError(error);
   }
