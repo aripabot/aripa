@@ -1,6 +1,4 @@
 import {
-  SelectRenderable,
-  SelectRenderableEvents,
   createCliRenderer,
   type BoxRenderable,
   type Renderable,
@@ -25,6 +23,7 @@ import {
   clearRendererRoot,
   closeTuiRenderer,
   createRenderableFactories,
+  createSelectControlFactory,
   isExitKey,
   parseMinimalKey,
   TuiControlState,
@@ -68,6 +67,7 @@ let errorMessage: string | null = null;
 let detectedDefaultDockerContainer = false;
 let spinnerIndex = 0;
 const { Box, Text, Select } = createRenderableFactories(requireRenderer);
+const selectControl = createSelectControlFactory({ Select, controls, colors });
 
 if (updateLatest) {
   await runLatestUpdate();
@@ -401,37 +401,6 @@ function confirmOptions(): SelectOption[] {
     { name: "Back", description: "Return to the release list.", value: "back" },
     { name: "Exit", description: "Leave this instance unchanged.", value: "exit" },
   ];
-}
-
-function selectControl(
-  options: SelectOption[],
-  onSelected: (option: SelectOption) => void,
-  height: number,
-  selectedIndex = 0,
-): SelectRenderable {
-  const select = Select({
-    width: "100%",
-    height,
-    options,
-    selectedIndex: Math.max(0, selectedIndex),
-    backgroundColor: colors.input,
-    textColor: colors.text,
-    focusedBackgroundColor: colors.input,
-    focusedTextColor: colors.text,
-    selectedBackgroundColor: colors.accentMuted,
-    selectedTextColor: colors.accent,
-    descriptionColor: colors.muted,
-    selectedDescriptionColor: colors.text,
-    showScrollIndicator: true,
-    showDescription: true,
-    wrapSelection: true,
-  });
-
-  select.on(SelectRenderableEvents.ITEM_SELECTED, (_index: number, option: SelectOption) =>
-    onSelected(option),
-  );
-  controls.registerSelect(select, onSelected);
-  return select;
 }
 
 function handleReleaseSelection(option: SelectOption): void {

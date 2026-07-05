@@ -2,6 +2,7 @@ import {
   BoxRenderable,
   InputRenderable,
   SelectRenderable,
+  SelectRenderableEvents,
   TextRenderable,
   createCliRenderer,
   parseKeypress,
@@ -41,6 +42,53 @@ export function createRenderableFactories(requireRenderer: () => CliRenderer): {
     Select(options) {
       return new SelectRenderable(requireRenderer(), options);
     },
+  };
+}
+
+export function createSelectControlFactory({
+  Select,
+  controls,
+  colors,
+}: {
+  Select: (options: SelectRenderableOptions) => SelectRenderable;
+  controls: TuiControlState;
+  colors: {
+    input: string;
+    text: string;
+    accentMuted: string;
+    accent: string;
+    muted: string;
+  };
+}): (
+  options: SelectOption[],
+  onSelected: (option: SelectOption) => void,
+  height: number,
+  selectedIndex?: number,
+) => SelectRenderable {
+  return (options, onSelected, height, selectedIndex = 0) => {
+    const select = Select({
+      width: "100%",
+      height,
+      options,
+      selectedIndex: Math.max(0, selectedIndex),
+      backgroundColor: colors.input,
+      textColor: colors.text,
+      focusedBackgroundColor: colors.input,
+      focusedTextColor: colors.text,
+      selectedBackgroundColor: colors.accentMuted,
+      selectedTextColor: colors.accent,
+      descriptionColor: colors.muted,
+      selectedDescriptionColor: colors.text,
+      showScrollIndicator: true,
+      showDescription: true,
+      wrapSelection: true,
+    });
+
+    select.on(SelectRenderableEvents.ITEM_SELECTED, (_index: number, option: SelectOption) =>
+      onSelected(option),
+    );
+    controls.registerSelect(select, onSelected);
+    return select;
   };
 }
 

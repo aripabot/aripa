@@ -1,9 +1,4 @@
-import {
-  InputRenderableEvents,
-  SelectRenderableEvents,
-  createCliRenderer,
-  type SelectOption,
-} from "@opentui/core";
+import { InputRenderableEvents, createCliRenderer, type SelectOption } from "@opentui/core";
 import { fileURLToPath } from "node:url";
 
 import {
@@ -59,6 +54,7 @@ import {
   clearRendererRoot,
   closeTuiRenderer,
   createRenderableFactories,
+  createSelectControlFactory,
   isExitKey,
   parseMinimalKey,
   TuiControlState,
@@ -84,6 +80,7 @@ const STYLE_PROMPTS = await loadStylePrompts(state.stylePrompt);
 const MODEL_OPTIONS = await loadWizardModelOptions();
 const SELECTABLE_MODEL_PROVIDERS = selectableProvidersFromModelOptions(MODEL_OPTIONS);
 const { Box, Text, Input, Select } = createRenderableFactories(requireRenderer);
+const selectControl = createSelectControlFactory({ Select, controls, colors });
 
 try {
   renderer = await createCliRenderer({
@@ -1010,37 +1007,6 @@ function inputControl(value: string, placeholder: string, onSubmit: (value: stri
     },
     input,
   );
-}
-
-function selectControl(
-  options: SelectOption[],
-  onSelected: (option: SelectOption) => void,
-  height: number,
-  selectedIndex = 0,
-) {
-  const select = Select({
-    width: "100%",
-    height,
-    options,
-    selectedIndex: Math.max(0, selectedIndex),
-    backgroundColor: colors.input,
-    textColor: colors.text,
-    focusedBackgroundColor: colors.input,
-    focusedTextColor: colors.text,
-    selectedBackgroundColor: colors.accentMuted,
-    selectedTextColor: colors.accent,
-    descriptionColor: colors.muted,
-    selectedDescriptionColor: colors.text,
-    showScrollIndicator: true,
-    showDescription: true,
-    wrapSelection: true,
-  });
-  select.on(SelectRenderableEvents.ITEM_SELECTED, (_index: number, option: SelectOption) =>
-    onSelected(option),
-  );
-  controls.registerSelect(select, onSelected);
-
-  return select;
 }
 
 async function handleGeneratedKeySelection(value: string): Promise<void> {
