@@ -1,4 +1,4 @@
-import type { PermissionResolvable, Role } from "discord.js";
+import type { Guild, PermissionResolvable, Role } from "discord.js";
 import type { Action, ActionContext, ActionReply } from "@aripabot/core/bot/action.ts";
 import { resolveRoleReference } from "@aripabot/core/commands/command-resolvers.ts";
 import {
@@ -42,6 +42,7 @@ export async function configureMuteRole(
   if (context.args.length === 0) {
     const content = await formatUsageWithCurrent(
       context,
+      context.message.guild,
       store.getGuildConfig(context.message.guildId),
     );
     return context.reply(content);
@@ -74,7 +75,11 @@ export async function configureMuteRole(
     return context.reply(resolvedRole.error.message);
   }
 
-  const role = await fetchGuildRole(context, resolvedRole.value.id);
+  const role = await fetchGuildRole(
+    context.message.guild,
+    context.message.guildId,
+    resolvedRole.value.id,
+  );
 
   if (!role) {
     return context.reply("I could not find that role in this server.");
@@ -92,16 +97,16 @@ export async function configureMuteRole(
   return context.reply(`Mute configuration set to role <@&${role.id}> (\`${role.id}\`).`);
 }
 
-async function fetchGuildRole(context: ActionContext, roleId: string): Promise<Role | null> {
-  const cachedRole = context.message.guild?.roles.cache.get(roleId);
+async function fetchGuildRole(guild: Guild, guildId: string, roleId: string): Promise<Role | null> {
+  const cachedRole = guild.roles.cache.get(roleId);
 
   if (cachedRole) {
     return cachedRole;
   }
 
-  const fetchedRole = await context.message.guild?.roles.fetch(roleId).catch(() => null);
+  const fetchedRole = await guild.roles.fetch(roleId).catch(() => null);
 
-  if (!fetchedRole || fetchedRole.guild.id !== context.message.guildId) {
+  if (!fetchedRole || fetchedRole.guild.id !== guildId) {
     return null;
   }
 
@@ -110,6 +115,7 @@ async function fetchGuildRole(context: ActionContext, roleId: string): Promise<R
 
 async function formatUsageWithCurrent(
   context: ActionContext,
+  guild: Guild,
   config: GuildConfig | null,
 ): Promise<string> {
   const lines = [
@@ -126,7 +132,7 @@ async function formatUsageWithCurrent(
   }
 
   if (config.muteRoleId) {
-    const role = await fetchGuildRole(context, config.muteRoleId);
+    const role = await fetchGuildRole(guild, config.guildId, config.muteRoleId);
     const roleLabel = role ? `@${role.name}` : `Role ID \`${config.muteRoleId}\``;
     const roleSummary = role ? `${roleLabel} (\`${config.muteRoleId}\`)` : roleLabel;
     lines.push(`Current mute configuration:\n${roleSummary}`);
