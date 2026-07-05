@@ -290,17 +290,7 @@ export function Dashboard({
                     prefetch={true}
                     aria-current={active ? "page" : undefined}
                     className="inline-flex h-10 items-center justify-start gap-2 rounded-md px-4 py-2 text-sm font-medium transition-[background-color,color] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                    onFocus={() => {
-                      if (!active) {
-                        router.prefetch(item.href);
-                      }
-                    }}
                     onClick={(event) => markNavigationPending(item.href, event)}
-                    onPointerEnter={() => {
-                      if (!active) {
-                        router.prefetch(item.href);
-                      }
-                    }}
                     style={
                       active
                         ? {
@@ -1475,6 +1465,14 @@ function UpdateSettingsPanel({
     }
   }, [status]);
 
+  const dirty = useMemo(() => {
+    if (status.status !== "ready" || config === null) {
+      return false;
+    }
+
+    return JSON.stringify(config.updates) !== JSON.stringify(status.data.config.updates);
+  }, [config, status]);
+
   if (status.status === "loading" || config === null) {
     return <LoadingPanel label="Loading update settings" />;
   }
@@ -1484,8 +1482,6 @@ function UpdateSettingsPanel({
       <ErrorPanel title="Update settings unavailable" message={status.error} onRetry={onRetry} />
     );
   }
-
-  const dirty = JSON.stringify(config.updates) !== JSON.stringify(status.data.config.updates);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
