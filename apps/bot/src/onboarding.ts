@@ -1297,7 +1297,10 @@ function selectProviderControl(
   selectedProvider: ConfigurableProvider,
   onSelected: (provider: ConfigurableProvider) => void,
 ) {
-  const options: SelectOption[] = SELECTABLE_MODEL_PROVIDERS.map(providerOptionFor);
+  const options: SelectOption[] = SELECTABLE_MODEL_PROVIDERS.map((provider) => ({
+    ...providerDisplayFor(provider),
+    value: provider,
+  }));
 
   return selectControl(
     options,
@@ -1308,13 +1311,6 @@ function selectProviderControl(
       options.findIndex((option) => option.value === selectedProvider),
     ),
   );
-}
-
-function providerOptionFor(provider: ConfigurableProvider): SelectOption {
-  return {
-    ...providerDisplayFor(provider),
-    value: provider,
-  };
 }
 
 function selectModelControl(

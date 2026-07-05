@@ -44,6 +44,7 @@ import { selectableProvidersFromModelOptions } from "@aripabot/core/onboarding-w
 import {
   previousStepFor,
   rateLimitPresetValue,
+  stepIndex,
 } from "@aripabot/core/onboarding-wizard/navigation.ts";
 import type { Step as WizardStep } from "@aripabot/core/onboarding-wizard/types.ts";
 import type {
@@ -157,7 +158,7 @@ export function DashboardOnboardingScreen({
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [submitting]);
 
-  const activeProgressIndex = progressIndex(step);
+  const activeProgressIndex = stepIndex(step);
   const canGoBack = previousStep(step, config) !== null;
 
   function updateConfig(patch: Partial<RuntimeJsonConfig>): void {
@@ -440,8 +441,9 @@ export function DashboardOnboardingScreen({
 
             <nav aria-label="Onboarding progress" className="flex flex-col gap-1">
               {progressSteps.map((item, index) => {
-                const active = progressIndex(item.step) === activeProgressIndex;
-                const completed = progressIndex(item.step) < activeProgressIndex;
+                const itemProgressIndex = stepIndex(item.step);
+                const active = itemProgressIndex === activeProgressIndex;
+                const completed = itemProgressIndex < activeProgressIndex;
                 return (
                   <div
                     key={item.step}
@@ -1116,33 +1118,6 @@ function defaultModelForProvider(
   role: "agent" | "summarizer",
 ): string {
   return options.modelOptions[role][provider]?.[0]?.value ?? "";
-}
-
-function progressIndex(step: Step): number {
-  const normalized =
-    step === "rate-limit-custom"
-      ? "rate-limit"
-      : [
-            "agent-provider",
-            "agent-model",
-            "summarizer-provider",
-            "summarizer-model",
-            "web-capability",
-            "web-model",
-          ].includes(step)
-        ? "models"
-        : [
-              "update-source",
-              "update-repo",
-              "update-key",
-              "update-key-paste",
-              "update-key-generated",
-              "update-schedule",
-            ].includes(step)
-          ? "update-source"
-          : step;
-
-  return progressSteps.findIndex((item) => item.step === normalized);
 }
 
 function previousStep(step: Step, config: RuntimeJsonConfig): Step | null {
