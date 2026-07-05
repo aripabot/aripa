@@ -54,7 +54,7 @@ export async function readLocalLogs(): Promise<LogsResponse> {
   const entries = [
     ...dockerSource.entries,
     ...processSources.flatMap((source) => source.entries),
-    ...files.flatMap((file) => logFileToEntries(file)),
+    ...fileSources.flatMap((source) => source.entries),
   ]
     .sort(compareLogEntries)
     .slice(-LOG_TAIL_LINE_COUNT);
@@ -274,13 +274,8 @@ function logFileToSource(file: LocalLogFile): LogSourceWithEntries {
 
   return {
     ...source,
-    entries: logFileToEntries(file),
+    entries: file.lines.map((line, index) => parseLogLine(line, source, index)),
   };
-}
-
-function logFileToEntries(file: LocalLogFile): DashboardLogEntry[] {
-  const source = logFileToSourceMetadata(file);
-  return file.lines.map((line, index) => parseLogLine(line, source, index));
 }
 
 function logFileToSourceMetadata(file: LocalLogFile): DashboardLogSource {
