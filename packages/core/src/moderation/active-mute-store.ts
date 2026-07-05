@@ -1,4 +1,4 @@
-// @bun-only: active mute persistence uses Bun's built-in SQLite driver.
+// Bun-only module: active mute persistence uses Bun's built-in SQLite driver.
 import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
