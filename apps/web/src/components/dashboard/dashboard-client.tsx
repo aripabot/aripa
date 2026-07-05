@@ -65,6 +65,7 @@ import {
 } from "@/lib/api";
 import { readableError } from "@/lib/errors";
 import { cn } from "@/lib/utils";
+import { EmptyPanel, ErrorPanel, LoadingPanel } from "@/components/dashboard/components/panels";
 import { DashboardOnboardingScreen } from "@/components/dashboard/dashboard-onboarding-screen";
 import { useLoadState } from "@/components/dashboard/hooks/use-load-state";
 import {
@@ -1957,54 +1958,6 @@ function SwitchField({
       <Label htmlFor={id}>{label}</Label>
       <Switch id={id} checked={checked} onCheckedChange={onCheckedChange} />
     </div>
-  );
-}
-
-function LoadingPanel({ label }: { label: string }) {
-  return (
-    <Card>
-      <CardContent className="flex min-h-48 items-center justify-center p-6">
-        <p className="text-sm text-muted-foreground" aria-live="polite">
-          {label}…
-        </p>
-      </CardContent>
-    </Card>
-  );
-}
-
-function ErrorPanel({
-  title,
-  message,
-  onRetry,
-}: {
-  title: string;
-  message: string;
-  onRetry: () => void;
-}) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        <CardDescription>{message}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Button type="button" variant="outline" onClick={onRetry}>
-          <RefreshCw aria-hidden="true" />
-          Try again
-        </Button>
-      </CardContent>
-    </Card>
-  );
-}
-
-function EmptyPanel({ title, message }: { title: string; message: string }) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        <CardDescription>{message}</CardDescription>
-      </CardHeader>
-    </Card>
   );
 }
 
