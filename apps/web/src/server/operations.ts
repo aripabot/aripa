@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { access } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import type { Database as SQLiteDatabase } from "bun:sqlite";
 
 import type { RuntimeJsonConfig } from "@aripabot/core/config/runtime-config.ts";
 
@@ -15,7 +16,7 @@ import type {
 } from "@/lib/api-types";
 import { DOCKER_CONTAINER_NAME, isInsideDockerRuntime } from "@/server/docker-runtime";
 import { readableError } from "@/lib/errors";
-import { getEnv, getRootEnv } from "@/server/env";
+import { getEnv } from "@/server/env";
 import { channelKey, getDiscordDirectory, memberKey, roleKey } from "@/server/discord-directory";
 
 const appRoot = process.cwd();
@@ -188,101 +189,15 @@ async function readLocalOperationsFromDatabase(
     return { guildConfigs: [], tags: [], activeMutes: [] };
   }
 
-  const script = `
-    import { Database } from "bun:sqlite";
-
-    const databasePath = process.env.ARIPA_DASHBOARD_DATABASE_PATH;
+  try {
+    const { Database } = await import(/* turbopackIgnore: true */ "bun:sqlite");
     const db = new Database(databasePath, { readonly: true });
 
-    function tableExists(name) {
-      return Boolean(
-        db.query("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(name),
-      );
-    }
-
-    function normalizeMuteMode(value) {
-      return value === "role" || value === "timeout" ? value : "none";
-    }
-
-    function mapGuildConfig(row) {
-      return {
-        guildId: row.guild_id,
-        logChannelId: row.log_channel_id,
-        modLogsEnabled: row.mod_logs_enabled === 1,
-        banMessage: row.ban_message,
-        muteRoleId: row.mute_role_id,
-        muteMode: normalizeMuteMode(row.mute_mode),
-        createdAt: row.created_at,
-        updatedAt: row.updated_at,
-      };
-    }
-
-    function mapGuildTag(row) {
-      return {
-        guildId: row.guild_id,
-        name: row.tag_name,
-        content: row.content,
-        createdAt: row.created_at,
-        updatedAt: row.updated_at,
-      };
-    }
-
-    function mapActiveMute(row) {
-      if (row.mute_mode !== "role") {
-        throw new Error(\`Unsupported mute mode in active_mute: \${row.mute_mode}\`);
-      }
-
-      return {
-        guildId: row.guild_id,
-        userId: row.user_id,
-        muteMode: "role",
-        muteRoleId: row.mute_role_id,
-        expiresAt: row.expires_at,
-        createdAt: row.created_at,
-        updatedAt: row.updated_at,
-      };
-    }
-
     try {
-      console.log(JSON.stringify({
-        guildConfigs: tableExists("guild_config")
-          ? db.query(\`
-              SELECT guild_id, log_channel_id, mod_logs_enabled, ban_message, mute_role_id, mute_mode, created_at, updated_at
-              FROM guild_config
-              ORDER BY updated_at DESC, guild_id ASC
-            \`).all().map(mapGuildConfig)
-          : [],
-        tags: tableExists("guild_tag")
-          ? db.query(\`
-              SELECT guild_id, tag_name, content, created_at, updated_at
-              FROM guild_tag
-              ORDER BY guild_id ASC, tag_name ASC
-            \`).all().map(mapGuildTag)
-          : [],
-        activeMutes: tableExists("active_mute")
-          ? db.query(\`
-              SELECT guild_id, user_id, mute_mode, mute_role_id, expires_at, created_at, updated_at
-              FROM active_mute
-            \`).all().map(mapActiveMute)
-          : [],
-      }));
+      return readLocalOperationsFromSqlite(db);
     } finally {
       db.close();
     }
-  `;
-
-  try {
-    const { stdout } = await execFileAsync("bun", ["--eval", script], {
-      cwd: repositoryRoot,
-      env: {
-        ...getRootEnv(),
-        ...process.env,
-        ARIPA_DASHBOARD_DATABASE_PATH: databasePath,
-        DATABASE_PATH: databasePath,
-      },
-      timeout: 5_000,
-    });
-    return JSON.parse(stdout) as LocalOperationsState;
   } catch (error) {
     return {
       guildConfigs: [],
@@ -291,6 +206,50 @@ async function readLocalOperationsFromDatabase(
       error: readableError(error),
     };
   }
+}
+
+function readLocalOperationsFromSqlite(db: SQLiteDatabase): LocalOperationsState {
+  return {
+    guildConfigs: tableExists(db, "guild_config")
+      ? db
+          .query<GuildConfigRow, []>(
+            `SELECT guild_id, log_channel_id, mod_logs_enabled, ban_message, mute_role_id, mute_mode, created_at, updated_at
+             FROM guild_config
+             ORDER BY updated_at DESC, guild_id ASC`,
+          )
+          .all()
+          .map(mapGuildConfigRow)
+      : [],
+    tags: tableExists(db, "guild_tag")
+      ? db
+          .query<GuildTagRow, []>(
+            `SELECT guild_id, tag_name, content, created_at, updated_at
+             FROM guild_tag
+             ORDER BY guild_id ASC, tag_name ASC`,
+          )
+          .all()
+          .map(mapGuildTagRow)
+      : [],
+    activeMutes: tableExists(db, "active_mute")
+      ? db
+          .query<ActiveMuteRow, []>(
+            `SELECT guild_id, user_id, mute_mode, mute_role_id, expires_at, created_at, updated_at
+             FROM active_mute`,
+          )
+          .all()
+          .map(mapActiveMuteRow)
+      : [],
+  };
+}
+
+function tableExists(db: SQLiteDatabase, name: string): boolean {
+  return Boolean(
+    db
+      .query<{ name: string }, [string]>(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+      )
+      .get(name),
+  );
 }
 
 export async function getBotRuntimeStatus(): Promise<BotRuntimeStatus> {
@@ -532,4 +491,76 @@ interface LocalActiveMute {
   expiresAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+interface GuildConfigRow {
+  guild_id: string;
+  log_channel_id: string | null;
+  mod_logs_enabled: number;
+  ban_message: string | null;
+  mute_role_id: string | null;
+  mute_mode: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface GuildTagRow {
+  guild_id: string;
+  tag_name: string;
+  content: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface ActiveMuteRow {
+  guild_id: string;
+  user_id: string;
+  mute_mode: string;
+  mute_role_id: string;
+  expires_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+function mapGuildConfigRow(row: GuildConfigRow): LocalGuildConfig {
+  return {
+    guildId: row.guild_id,
+    logChannelId: row.log_channel_id,
+    modLogsEnabled: row.mod_logs_enabled === 1,
+    banMessage: row.ban_message,
+    muteRoleId: row.mute_role_id,
+    muteMode: normalizeMuteMode(row.mute_mode),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function mapGuildTagRow(row: GuildTagRow): LocalGuildTag {
+  return {
+    guildId: row.guild_id,
+    name: row.tag_name,
+    content: row.content,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function mapActiveMuteRow(row: ActiveMuteRow): LocalActiveMute {
+  if (row.mute_mode !== "role") {
+    throw new Error(`Unsupported mute mode in active_mute: ${row.mute_mode}`);
+  }
+
+  return {
+    guildId: row.guild_id,
+    userId: row.user_id,
+    muteMode: "role",
+    muteRoleId: row.mute_role_id,
+    expiresAt: row.expires_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function normalizeMuteMode(value: string): LocalGuildConfig["muteMode"] {
+  return value === "role" || value === "timeout" ? value : "none";
 }
