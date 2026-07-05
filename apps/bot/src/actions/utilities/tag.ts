@@ -9,6 +9,7 @@ const TAG_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 const MAX_TAG_CONTENT_LENGTH = 2_000;
 const RESERVED_SUBCOMMANDS = new Set(["add", "edit", "remove", "list"]);
 const REQUIRED_TAG_MANAGEMENT_PERMISSION = "ManageMessages";
+const TAG_NAME_REQUIRED_ERROR = "Tag name is required.";
 
 const tagAction = {
   name: "tag",
@@ -29,7 +30,9 @@ export async function handleTagAction(
   context: ActionContext,
   store: GuildConfigStore = getGuildConfigStore(),
 ): Promise<ActionReply> {
-  if (!context.message.inGuild() || !context.message.guildId) {
+  const guildId = context.message.guildId;
+
+  if (!context.message.inGuild() || !guildId) {
     return context.reply("Tags can only be used from inside a server.");
   }
 
@@ -41,19 +44,23 @@ export async function handleTagAction(
 
   switch (subcommand) {
     case "add":
-      return addTag(context, store);
+      return addTag(context, store, guildId);
     case "edit":
-      return editTag(context, store);
+      return editTag(context, store, guildId);
     case "remove":
-      return removeTag(context, store);
+      return removeTag(context, store, guildId);
     case "list":
-      return listTags(context, store);
+      return listTags(context, store, guildId);
     default:
-      return showTag(context, store, subcommand);
+      return showTag(context, store, guildId, subcommand);
   }
 }
 
-async function addTag(context: ActionContext, store: GuildConfigStore): Promise<ActionReply> {
+async function addTag(
+  context: ActionContext,
+  store: GuildConfigStore,
+  guildId: string,
+): Promise<ActionReply> {
   const permissionError = ensureTagManagementPermission(context);
 
   if (permissionError) {
@@ -61,15 +68,19 @@ async function addTag(context: ActionContext, store: GuildConfigStore): Promise<
   }
 
   const rawName = context.args[1];
-  const content = context.args.slice(2).join(" ").trim();
 
+  if (rawName === undefined) {
+    return context.reply(TAG_NAME_REQUIRED_ERROR);
+  }
+
+  const content = context.args.slice(2).join(" ").trim();
   const validationError = validateTagDefinition(rawName, content);
 
   if (validationError) {
     return context.reply(validationError);
   }
 
-  const existingTag = store.getTag(context.message.guildId!, rawName!);
+  const existingTag = store.getTag(guildId, rawName);
 
   if (existingTag) {
     return context.reply(
@@ -77,7 +88,7 @@ async function addTag(context: ActionContext, store: GuildConfigStore): Promise<
     );
   }
 
-  const tag = store.upsertTag(context.message.guildId!, rawName!, content);
+  const tag = store.upsertTag(guildId, rawName, content);
 
   context.log
     .withMetadata({
@@ -90,7 +101,11 @@ async function addTag(context: ActionContext, store: GuildConfigStore): Promise<
   return context.reply(`Added tag \`${tag.name}\`.`);
 }
 
-async function editTag(context: ActionContext, store: GuildConfigStore): Promise<ActionReply> {
+async function editTag(
+  context: ActionContext,
+  store: GuildConfigStore,
+  guildId: string,
+): Promise<ActionReply> {
   const permissionError = ensureTagManagementPermission(context);
 
   if (permissionError) {
@@ -98,21 +113,25 @@ async function editTag(context: ActionContext, store: GuildConfigStore): Promise
   }
 
   const rawName = context.args[1];
-  const content = context.args.slice(2).join(" ").trim();
 
+  if (rawName === undefined) {
+    return context.reply(TAG_NAME_REQUIRED_ERROR);
+  }
+
+  const content = context.args.slice(2).join(" ").trim();
   const validationError = validateTagDefinition(rawName, content);
 
   if (validationError) {
     return context.reply(validationError);
   }
 
-  const existingTag = store.getTag(context.message.guildId!, rawName!);
+  const existingTag = store.getTag(guildId, rawName);
 
   if (!existingTag) {
     return context.reply(`Tag \`${rawName}\` does not exist.`);
   }
 
-  const tag = store.upsertTag(context.message.guildId!, rawName!, content);
+  const tag = store.upsertTag(guildId, rawName, content);
 
   context.log
     .withMetadata({
@@ -125,7 +144,11 @@ async function editTag(context: ActionContext, store: GuildConfigStore): Promise
   return context.reply(`Edited tag \`${tag.name}\`.`);
 }
 
-async function removeTag(context: ActionContext, store: GuildConfigStore): Promise<ActionReply> {
+async function removeTag(
+  context: ActionContext,
+  store: GuildConfigStore,
+  guildId: string,
+): Promise<ActionReply> {
   const permissionError = ensureTagManagementPermission(context);
 
   if (permissionError) {
@@ -144,7 +167,7 @@ async function removeTag(context: ActionContext, store: GuildConfigStore): Promi
     return context.reply(validationError);
   }
 
-  const deleted = store.deleteTag(context.message.guildId!, rawName);
+  const deleted = store.deleteTag(guildId, rawName);
 
   if (!deleted) {
     return context.reply(`Tag \`${rawName}\` does not exist.`);
@@ -161,8 +184,12 @@ async function removeTag(context: ActionContext, store: GuildConfigStore): Promi
   return context.reply(`Removed tag \`${rawName.toLowerCase()}\`.`);
 }
 
-async function listTags(context: ActionContext, store: GuildConfigStore): Promise<ActionReply> {
-  const tags = store.listTags(context.message.guildId!);
+async function listTags(
+  context: ActionContext,
+  store: GuildConfigStore,
+  guildId: string,
+): Promise<ActionReply> {
+  const tags = store.listTags(guildId);
 
   if (tags.length === 0) {
     return context.reply("No tags are configured in this server.");
@@ -174,6 +201,7 @@ async function listTags(context: ActionContext, store: GuildConfigStore): Promis
 async function showTag(
   context: ActionContext,
   store: GuildConfigStore,
+  guildId: string,
   name: string,
 ): Promise<ActionReply> {
   const validationError = validateTagName(name);
@@ -182,7 +210,7 @@ async function showTag(
     return context.reply(validationError);
   }
 
-  const tag = store.getTag(context.message.guildId!, name);
+  const tag = store.getTag(guildId, name);
 
   if (!tag) {
     return context.reply(`Tag \`${name}\` does not exist.`);
@@ -209,7 +237,7 @@ function getTagManagementPermissions(args: readonly string[]): PermissionResolva
   return [];
 }
 
-function validateTagDefinition(name: string | undefined, content: string): string | null {
+function validateTagDefinition(name: string, content: string): string | null {
   const nameError = validateTagName(name);
 
   if (nameError) {
@@ -227,9 +255,9 @@ function validateTagDefinition(name: string | undefined, content: string): strin
   return null;
 }
 
-function validateTagName(name: string | undefined): string | null {
+function validateTagName(name: string): string | null {
   if (!name) {
-    return "Tag name is required.";
+    return TAG_NAME_REQUIRED_ERROR;
   }
 
   if (!TAG_NAME_PATTERN.test(name)) {
