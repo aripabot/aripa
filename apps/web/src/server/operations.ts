@@ -182,23 +182,92 @@ async function readLocalOperations(databasePath: string): Promise<LocalOperation
 async function readLocalOperationsFromDatabase(
   databasePath: string,
 ): Promise<LocalOperationsState> {
+  try {
+    await access(databasePath);
+  } catch {
+    return { guildConfigs: [], tags: [], activeMutes: [] };
+  }
+
   const script = `
-    import { GuildConfigStore } from "@aripabot/core/config/guild-config-store.ts";
-    import { ActiveMuteStore } from "@aripabot/core/moderation/active-mute-store.ts";
+    import { Database } from "bun:sqlite";
 
     const databasePath = process.env.ARIPA_DASHBOARD_DATABASE_PATH;
-    const guildConfigStore = new GuildConfigStore(databasePath);
-    const activeMuteStore = new ActiveMuteStore(databasePath);
+    const db = new Database(databasePath, { readonly: true });
+
+    function tableExists(name) {
+      return Boolean(
+        db.query("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(name),
+      );
+    }
+
+    function normalizeMuteMode(value) {
+      return value === "role" || value === "timeout" ? value : "none";
+    }
+
+    function mapGuildConfig(row) {
+      return {
+        guildId: row.guild_id,
+        logChannelId: row.log_channel_id,
+        modLogsEnabled: row.mod_logs_enabled === 1,
+        banMessage: row.ban_message,
+        muteRoleId: row.mute_role_id,
+        muteMode: normalizeMuteMode(row.mute_mode),
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      };
+    }
+
+    function mapGuildTag(row) {
+      return {
+        guildId: row.guild_id,
+        name: row.tag_name,
+        content: row.content,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      };
+    }
+
+    function mapActiveMute(row) {
+      if (row.mute_mode !== "role") {
+        throw new Error(\`Unsupported mute mode in active_mute: \${row.mute_mode}\`);
+      }
+
+      return {
+        guildId: row.guild_id,
+        userId: row.user_id,
+        muteMode: "role",
+        muteRoleId: row.mute_role_id,
+        expiresAt: row.expires_at,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      };
+    }
 
     try {
       console.log(JSON.stringify({
-        guildConfigs: guildConfigStore.listGuildConfigs(),
-        tags: guildConfigStore.listAllTags(),
-        activeMutes: activeMuteStore.listAll(),
+        guildConfigs: tableExists("guild_config")
+          ? db.query(\`
+              SELECT guild_id, log_channel_id, mod_logs_enabled, ban_message, mute_role_id, mute_mode, created_at, updated_at
+              FROM guild_config
+              ORDER BY updated_at DESC, guild_id ASC
+            \`).all().map(mapGuildConfig)
+          : [],
+        tags: tableExists("guild_tag")
+          ? db.query(\`
+              SELECT guild_id, tag_name, content, created_at, updated_at
+              FROM guild_tag
+              ORDER BY guild_id ASC, tag_name ASC
+            \`).all().map(mapGuildTag)
+          : [],
+        activeMutes: tableExists("active_mute")
+          ? db.query(\`
+              SELECT guild_id, user_id, mute_mode, mute_role_id, expires_at, created_at, updated_at
+              FROM active_mute
+            \`).all().map(mapActiveMute)
+          : [],
       }));
     } finally {
-      guildConfigStore.close();
-      activeMuteStore.close();
+      db.close();
     }
   `;
 
