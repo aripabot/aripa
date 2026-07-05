@@ -17,6 +17,10 @@ import {
 } from "@aripabot/core/config/onboarding.ts";
 import { loadWizardModelOptions } from "@aripabot/core/onboarding-wizard/model-options.ts";
 import { getSelectableModelProviders } from "@aripabot/core/onboarding-wizard/provider-availability.ts";
+import {
+  loadStylePrompts,
+  stylePromptDescription,
+} from "@aripabot/core/onboarding-wizard/style-prompts.ts";
 import { AUTO_UPDATE_CRON_PRESETS } from "@aripabot/core/update/auto-update-cron.ts";
 import {
   fetchGitHubReleases,
@@ -61,7 +65,6 @@ const defaultConfigPath = join(repositoryRoot, "config.json");
 const packageJsonPath = join(repositoryRoot, "package.json");
 const webPackageJsonPath = join(appRoot, "package.json");
 const rootEnv = readRootEnv();
-const STYLE_PROMPTS = ["match", "concise", "formal", "friendly", "original", "playful"] as const;
 const execFileAsync = promisify(execFile);
 const LOG_TAIL_LINE_COUNT = 500;
 
@@ -1046,35 +1049,13 @@ export async function listReleases(): Promise<ReleasesResponse> {
 }
 
 async function getStylePromptOptions(selectedStylePrompt: string): Promise<StylePromptOption[]> {
-  const styles: string[] = [...STYLE_PROMPTS];
-  if (!styles.includes(selectedStylePrompt)) {
-    styles.push(selectedStylePrompt);
-  }
+  const styles = await loadStylePrompts(selectedStylePrompt);
 
   return styles.map((style) => ({
     value: style,
     label: toTitleCase(style),
     description: stylePromptDescription(style),
   }));
-}
-
-function stylePromptDescription(stylePrompt: string): string {
-  switch (stylePrompt) {
-    case "match":
-      return "Adapt to the conversation's tone.";
-    case "friendly":
-      return "Warm and approachable.";
-    case "concise":
-      return "Short, direct responses.";
-    case "formal":
-      return "Polished and restrained.";
-    case "playful":
-      return "Light, casual energy.";
-    case "original":
-      return "The base Aripa personality.";
-    default:
-      return "Custom prompt style.";
-  }
 }
 
 async function readLogCandidate(path: string): Promise<LocalLogFile> {
