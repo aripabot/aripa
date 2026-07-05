@@ -240,6 +240,7 @@ export function createWizardShell({
   controls: TuiControlState;
   destroy: () => void;
   finish: (output: string) => void;
+  handleControlKey: (key: MinimalKeyEvent, options?: { onBack?: () => boolean }) => boolean;
   isFinished: () => boolean;
   renderFrame: (...children: Renderable[]) => void;
   requireRenderer: () => CliRenderer;
@@ -291,6 +292,33 @@ export function createWizardShell({
       rawInputHandler = closeTuiRenderer(renderer, rawInputHandler);
       renderer = null;
       console.log(output);
+    },
+    handleControlKey(key: MinimalKeyEvent, options: { onBack?: () => boolean } = {}): boolean {
+      if (isExitKey(key)) {
+        const output = exitOutput();
+        if (output !== null) {
+          shell.finish(output);
+        }
+        return true;
+      }
+
+      if (key.name === "return" || key.name === "linefeed") {
+        return controls.submitCurrent();
+      }
+
+      if (key.name === "up") {
+        return controls.moveSelectUp();
+      }
+
+      if (key.name === "down") {
+        return controls.moveSelectDown();
+      }
+
+      if (key.name === "left" && controls.currentKind === "select") {
+        return options.onBack?.() ?? false;
+      }
+
+      return false;
     },
     isFinished() {
       return finished;

@@ -50,7 +50,7 @@ import type {
   OnboardingState,
   Step,
 } from "@aripabot/core/onboarding-wizard/types.ts";
-import { createSelectControlFactory, createWizardShell, isExitKey } from "./tui/kit.ts";
+import { createSelectControlFactory, createWizardShell } from "./tui/kit.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../..", import.meta.url));
 const CONFIG_PATH = Bun.env.CONFIG_PATH?.trim() || new URL("../../../config.json", import.meta.url);
@@ -1027,29 +1027,16 @@ async function syncAutoUpdateCron(): Promise<string> {
 }
 
 function handleKeyPress(key: MinimalKeyEvent): boolean {
-  if (isExitKey(key)) {
-    finish("No changes made.");
-    return true;
-  }
+  return shell.handleControlKey(key, {
+    onBack: () => {
+      if (step === "existing-config") {
+        return false;
+      }
 
-  if (key.name === "return" || key.name === "linefeed") {
-    return controls.submitCurrent();
-  }
-
-  if (key.name === "up") {
-    return controls.moveSelectUp();
-  }
-
-  if (key.name === "down") {
-    return controls.moveSelectDown();
-  }
-
-  if (key.name === "left" && controls.currentKind === "select" && step !== "existing-config") {
-    goBack();
-    return true;
-  }
-
-  return false;
+      goBack();
+      return true;
+    },
+  });
 }
 
 function goBack(): void {

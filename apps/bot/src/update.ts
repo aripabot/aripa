@@ -558,24 +558,7 @@ function handleKeyPress(key: MinimalKeyEvent): boolean {
     return true;
   }
 
-  if (isExitKey(key)) {
-    finish("No changes made.");
-    return true;
-  }
-
-  if (key.name === "return" || key.name === "linefeed") {
-    return controls.submitCurrent();
-  }
-
-  if (key.name === "up") {
-    return controls.moveSelectUp();
-  }
-
-  if (key.name === "down") {
-    return controls.moveSelectDown();
-  }
-
-  return false;
+  return shell.handleControlKey(key);
 }
 
 function finish(output: string): void {
