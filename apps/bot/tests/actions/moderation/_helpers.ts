@@ -40,6 +40,12 @@ export interface FakeMessage {
   delete: () => Promise<void>;
 }
 
+interface FakeRole {
+  id: string;
+  name: string;
+  position: number;
+}
+
 export function createModerationHarness({
   args,
   actionName,
@@ -236,6 +242,7 @@ export function createModerationHarness({
       createMessageChannel(nextChannelId, nextMessageBatches),
     ]),
   );
+  const guildRolesCache = new Map<string, FakeRole>(rolePresent ? [[roleId, muteRole]] : []);
 
   const guild = {
     id: guildId,
@@ -246,7 +253,7 @@ export function createModerationHarness({
       fetch: async () => guildChannels,
     },
     roles: {
-      cache: new Map(rolePresent ? [[roleId, muteRole]] : []),
+      cache: guildRolesCache,
       fetch: async (id: string) => (id === roleId && rolePresent ? muteRole : null),
     },
     members: {
@@ -337,6 +344,7 @@ export function createModerationHarness({
     eventLog,
     messageFetchCalls,
     bulkDeleteCalls,
+    guildRolesCache,
     targetMember,
     targetUser,
     muteRole,
