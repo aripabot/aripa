@@ -42,6 +42,11 @@ import {
   validateGitHubRepo,
   validateOperatorUserId,
 } from "@aripabot/core/config/onboarding-validation.ts";
+import {
+  stepDescription,
+  stepTitle,
+  submitButtonLabel,
+} from "@aripabot/core/onboarding-wizard/display.ts";
 import { previousStepFor, stepIndex } from "@aripabot/core/onboarding-wizard/navigation.ts";
 import type { Step as WizardStep } from "@aripabot/core/onboarding-wizard/types.ts";
 import type {
@@ -800,90 +805,6 @@ function previousStep(step: Step, config: RuntimeJsonConfig): Step | null {
   });
 
   return previous === "existing-config" || previous === "done" ? null : previous;
-}
-
-function stepTitle(step: Step): string {
-  switch (step) {
-    case "name":
-      return "Name This Bot";
-    case "operator":
-      return "Set The Operator";
-    case "style":
-      return "Choose Agent Style";
-    case "servers":
-      return "Allow Servers";
-    case "rate-limit":
-    case "rate-limit-custom":
-      return "Set Agent Rate Limit";
-    case "log-privacy":
-      return "Choose Log Privacy";
-    case "models":
-    case "agent-provider":
-    case "agent-model":
-    case "summarizer-provider":
-    case "summarizer-model":
-    case "web-capability":
-    case "web-model":
-      return "Configure AI Models";
-    case "update-source":
-    case "update-repo":
-    case "update-key":
-    case "update-key-paste":
-    case "update-key-generated":
-    case "update-schedule":
-      return "Configure Updates";
-    case "review":
-      return "Review Config";
-  }
-}
-
-function stepDescription(step: Step): string {
-  switch (step) {
-    case "name":
-      return "This name is injected into agent metadata.";
-    case "operator":
-      return "The operator is responsible for this installation and does not receive server permissions.";
-    case "style":
-      return "Choose the voice Aripa uses when responding as an agent.";
-    case "servers":
-      return "Only allowlisted guilds can use prefix commands or mentions.";
-    case "rate-limit":
-    case "rate-limit-custom":
-      return "Limit paid AI mention requests per user, per server, in a 60 second window.";
-    case "log-privacy":
-      return "Private logs redact agent tool inputs and outputs.";
-    case "models":
-      return "Keep defaults or choose providers and models for agent tasks.";
-    case "agent-provider":
-    case "agent-model":
-      return "The main agent model must support tool calls.";
-    case "summarizer-provider":
-    case "summarizer-model":
-      return "The summarizer handles long Discord context windows.";
-    case "web-capability":
-    case "web-model":
-      return "Web search uses Google Generative AI with a Gemini model.";
-    case "update-source":
-      return "Forks should point this at their own GitHub release repository.";
-    case "update-repo":
-      return "Use owner/repo format.";
-    case "update-key":
-    case "update-key-paste":
-    case "update-key-generated":
-      return "The updater needs a public key. GitHub Actions needs the matching private key secret.";
-    case "update-schedule":
-      return "Choose whether Aripa installs releases automatically.";
-    case "review":
-      return "Confirm the runtime configuration before writing config.json.";
-  }
-}
-
-function submitButtonLabel(step: Step, submitting: boolean): string {
-  if (submitting) {
-    return step === "review" ? "Saving…" : "Working…";
-  }
-
-  return step === "review" ? "Write Config" : "Continue";
 }
 
 function defaultModelSummary(config: RuntimeJsonConfig): string {

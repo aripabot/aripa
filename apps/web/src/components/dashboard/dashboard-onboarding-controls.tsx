@@ -12,23 +12,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { ONBOARDING_PROGRESS_STEPS } from "@aripabot/core/onboarding-wizard/display.ts";
 import { stepIndex } from "@aripabot/core/onboarding-wizard/navigation.ts";
-import type { Step as WizardStep } from "@aripabot/core/onboarding-wizard/types.ts";
 import type { ConfigurableRuntimeModelProvider } from "@aripabot/core/config/config.ts";
-
-type Step = Exclude<WizardStep, "existing-config" | "done">;
-
-const progressSteps: Array<{ step: Step; label: string }> = [
-  { step: "name", label: "Name" },
-  { step: "operator", label: "Operator" },
-  { step: "style", label: "Style" },
-  { step: "servers", label: "Servers" },
-  { step: "rate-limit", label: "Rate Limit" },
-  { step: "log-privacy", label: "Log Privacy" },
-  { step: "models", label: "Models" },
-  { step: "update-source", label: "Updates" },
-  { step: "review", label: "Review" },
-];
 
 export function Field({
   label,
@@ -145,7 +131,7 @@ export function ProviderSelect({
 export function OnboardingProgress({ activeProgressIndex }: { activeProgressIndex: number }) {
   return (
     <nav aria-label="Onboarding progress" className="flex flex-col gap-1">
-      {progressSteps.map((item, index) => {
+      {ONBOARDING_PROGRESS_STEPS.map((item, index) => {
         const itemProgressIndex = stepIndex(item.step);
         const active = itemProgressIndex === activeProgressIndex;
         const completed = itemProgressIndex < activeProgressIndex;
