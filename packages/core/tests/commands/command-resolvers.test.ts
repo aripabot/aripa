@@ -77,7 +77,7 @@ describe("infraction and reason resolvers", () => {
       "111",
       "222",
     ]);
-    expect(resolveFlaggedReason(input, tokenized.tokens, "-r")).toEqual({
+    expect(resolveFlaggedReason(tokenized.tokens, "-r")).toEqual({
       ok: true,
       value: "bad boys",
     });

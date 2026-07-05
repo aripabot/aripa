@@ -255,7 +255,6 @@ export function resolveReasonTail(
 }
 
 export function resolveFlaggedReason(
-  input: string,
   tokens: readonly CommandToken[],
   flag = "-r",
 ): ResolverResult<string | null> {
