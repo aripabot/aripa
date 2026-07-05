@@ -18,11 +18,19 @@ describe("updateMemberRole", () => {
         actionName: "role",
         args: ["search", "mod"],
       });
-      const rolesCache = getRolesCache(harness.context);
 
-      rolesCache.set("111111111111111112", createSearchRole("111111111111111112", "Mods", 12));
-      rolesCache.set("111111111111111113", createSearchRole("111111111111111113", "Helper Mod", 8));
-      rolesCache.set("111111111111111114", createSearchRole("111111111111111114", "Artists", 20));
+      harness.guildRolesCache.set(
+        "111111111111111112",
+        createSearchRole("111111111111111112", "Mods", 12),
+      );
+      harness.guildRolesCache.set(
+        "111111111111111113",
+        createSearchRole("111111111111111113", "Helper Mod", 8),
+      );
+      harness.guildRolesCache.set(
+        "111111111111111114",
+        createSearchRole("111111111111111114", "Artists", 20),
+      );
 
       await updateMemberRole(harness.context, { guildConfigStore: store });
 
@@ -46,9 +54,8 @@ describe("updateMemberRole", () => {
         actionName: "role",
         args: ["search", "event", "team"],
       });
-      const rolesCache = getRolesCache(harness.context);
 
-      rolesCache.set(
+      harness.guildRolesCache.set(
         "111111111111111115",
         createSearchRole("111111111111111115", "Event Team", 10),
       );
@@ -164,13 +171,6 @@ describe("updateMemberRole", () => {
     }
   });
 });
-
-function getRolesCache(context: ReturnType<typeof createModerationHarness>["context"]) {
-  return context.message.guild?.roles.cache as Map<
-    string,
-    { id: string; name: string; position: number }
-  >;
-}
 
 function createSearchRole(id: string, name: string, position: number) {
   return {
