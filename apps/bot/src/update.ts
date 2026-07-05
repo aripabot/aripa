@@ -23,11 +23,13 @@ import {
 import type { MinimalKeyEvent } from "@aripabot/core/onboarding-wizard/types.ts";
 import {
   clearRendererRoot,
+  closeTuiRenderer,
   createRenderableFactories,
   isExitKey,
   parseMinimalKey,
   TuiControlState,
   type CliRenderer,
+  type RawInputHandler,
 } from "./tui/kit.ts";
 
 type View = "loading" | "select" | "confirm" | "updating" | "done" | "error";
@@ -54,7 +56,7 @@ const updateLatest = Bun.argv.slice(2).includes("--latest");
 
 let renderer: CliRenderer | null = null;
 const controls = new TuiControlState();
-let rawExitHandler: ((chunk: Buffer | string) => void) | null = null;
+let rawExitHandler: RawInputHandler | null = null;
 let spinnerTimer: ReturnType<typeof setInterval> | null = null;
 let finished = false;
 
@@ -674,11 +676,7 @@ function finish(output: string): void {
 
   finished = true;
   stopSpinner();
-  if (rawExitHandler) {
-    renderer?.stdin.off("data", rawExitHandler);
-    rawExitHandler = null;
-  }
-  renderer?.destroy();
+  rawExitHandler = closeTuiRenderer(renderer, rawExitHandler);
   console.log(output);
 }
 

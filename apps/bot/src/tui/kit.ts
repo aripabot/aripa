@@ -15,6 +15,7 @@ import {
 import type { MinimalKeyEvent } from "@aripabot/core/onboarding-wizard/types.ts";
 
 export type CliRenderer = Awaited<ReturnType<typeof createCliRenderer>>;
+export type RawInputHandler = (chunk: Buffer | string) => void;
 
 export function createRenderableFactories(requireRenderer: () => CliRenderer): {
   Box: (options: BoxOptions, ...children: Renderable[]) => BoxRenderable;
@@ -140,4 +141,16 @@ export function clearRendererRoot(renderer: CliRenderer | null): void {
   for (const child of renderer.root.getChildren()) {
     renderer.root.remove(child.id);
   }
+}
+
+export function closeTuiRenderer(
+  renderer: CliRenderer | null,
+  rawInputHandler: RawInputHandler | null,
+): null {
+  if (rawInputHandler) {
+    renderer?.stdin.off("data", rawInputHandler);
+  }
+
+  renderer?.destroy();
+  return null;
 }

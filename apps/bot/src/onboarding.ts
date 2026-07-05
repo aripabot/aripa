@@ -56,11 +56,13 @@ import type {
 } from "@aripabot/core/onboarding-wizard/types.ts";
 import {
   clearRendererRoot,
+  closeTuiRenderer,
   createRenderableFactories,
   isExitKey,
   parseMinimalKey,
   TuiControlState,
   type CliRenderer,
+  type RawInputHandler,
 } from "./tui/kit.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../..", import.meta.url));
@@ -73,7 +75,7 @@ let step: Step = initialStepForState(state);
 let renderer: CliRenderer | null = null;
 const controls = new TuiControlState();
 let finished = false;
-let rawExitHandler: ((chunk: Buffer | string) => void) | null = null;
+let rawExitHandler: RawInputHandler | null = null;
 let generatedPrivateKeySecret: string | null = null;
 let generatedKeyMessage: string | null = null;
 
@@ -1188,11 +1190,7 @@ function finish(message: string): void {
   }
 
   finished = true;
-  if (rawExitHandler) {
-    renderer?.stdin.off("data", rawExitHandler);
-    rawExitHandler = null;
-  }
-  renderer?.destroy();
+  rawExitHandler = closeTuiRenderer(renderer, rawExitHandler);
   console.log(message);
 }
 
