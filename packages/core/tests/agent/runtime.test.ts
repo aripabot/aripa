@@ -7,6 +7,7 @@ import {
   createAgentMetadata,
   extractMentionPrompt,
   formatSingleMessagePrompt,
+  type AgentTextGenerator,
   handleAgentMention,
   loadAgentPromptParts,
   shouldHandleAgentMention,
@@ -24,6 +25,81 @@ interface CapturingLog {
   info(message: string): void;
   warn(message: string): void;
   error(message: string): void;
+}
+
+type AgentTextOptions = Parameters<AgentTextGenerator>[0];
+type AgentToolCallStart = NonNullable<AgentTextOptions["experimental_onToolCallStart"]>;
+type AgentToolCallFinish = NonNullable<AgentTextOptions["experimental_onToolCallFinish"]>;
+
+type AgentTextOptionsWithToolCallbacks = AgentTextOptions & {
+  experimental_onToolCallStart: AgentToolCallStart;
+  experimental_onToolCallFinish: AgentToolCallFinish;
+};
+
+interface MinimalToolCall {
+  type: "tool-call";
+  toolName: string;
+  toolCallId: string;
+  input: unknown;
+}
+
+interface MinimalToolCallStartEvent {
+  stepNumber?: number;
+  toolCall: MinimalToolCall;
+}
+
+type MinimalToolCallFinishEvent =
+  | (MinimalToolCallStartEvent & {
+      durationMs: number;
+      success: true;
+      output: unknown;
+    })
+  | (MinimalToolCallStartEvent & {
+      durationMs: number;
+      success: false;
+      error: unknown;
+    });
+
+interface RunActionTool {
+  execute(input: { command: string }): Promise<unknown>;
+}
+
+function withToolCallbacks(options: AgentTextOptions): AgentTextOptionsWithToolCallbacks {
+  const { experimental_onToolCallStart, experimental_onToolCallFinish } = options;
+
+  if (!experimental_onToolCallStart || !experimental_onToolCallFinish) {
+    throw new Error("Expected agent tool callbacks to be registered.");
+  }
+
+  return {
+    ...options,
+    experimental_onToolCallStart,
+    experimental_onToolCallFinish,
+  };
+}
+
+async function callToolStart(
+  callback: AgentToolCallStart,
+  event: MinimalToolCallStartEvent,
+): Promise<void> {
+  await (callback as (event: MinimalToolCallStartEvent) => void | Promise<void>)(event);
+}
+
+async function callToolFinish(
+  callback: AgentToolCallFinish,
+  event: MinimalToolCallFinishEvent,
+): Promise<void> {
+  await (callback as (event: MinimalToolCallFinishEvent) => void | Promise<void>)(event);
+}
+
+function runActionTool(options: AgentTextOptions): RunActionTool {
+  const tool = options.tools?.run_action as RunActionTool | undefined;
+
+  if (!tool) {
+    throw new Error("Expected run_action tool to be registered.");
+  }
+
+  return tool;
 }
 
 describe("shouldHandleAgentMention", () => {
@@ -163,7 +239,7 @@ describe("loadAgentPromptParts", () => {
 describe("handleAgentMention", () => {
   test("runs the AI SDK agent loop and replies with the generated text", async () => {
     const replies: string[] = [];
-    const captured: Record<string, unknown>[] = [];
+    const captured: AgentTextOptions[] = [];
 
     const result = await handleAgentMention({
       client: createClient("bot-1"),
@@ -191,7 +267,7 @@ describe("handleAgentMention", () => {
         metadataPrompt: "metadata header",
       }),
       generateAgentText: async (options) => {
-        captured.push(options as Record<string, unknown>);
+        captured.push(options);
         return { text: "Got it." };
       },
     });
@@ -216,7 +292,7 @@ describe("handleAgentMention", () => {
     );
     expect(String(captured[0]?.system)).toContain("- Bot name: Wingbot");
     expect(String(captured[0]?.system)).toContain("2026-04-26T12:34:56.000Z");
-    expect(Object.keys(captured[0]?.tools as Record<string, unknown>).sort()).toEqual([
+    expect(Object.keys(captured[0]?.tools ?? {}).sort()).toEqual([
       "request_context",
       "run_action",
       "search_web",
@@ -224,7 +300,7 @@ describe("handleAgentMention", () => {
   });
 
   test("omits the web tool when web search is disabled", async () => {
-    const captured: Record<string, unknown>[] = [];
+    const captured: AgentTextOptions[] = [];
 
     await handleAgentMention({
       client: createClient("bot-1"),
@@ -234,15 +310,12 @@ describe("handleAgentMention", () => {
       log: createLog(),
       webSearchEnabled: false,
       generateAgentText: async (options) => {
-        captured.push(options as Record<string, unknown>);
+        captured.push(options);
         return { text: "Web search is disabled." };
       },
     });
 
-    expect(Object.keys(captured[0]?.tools as Record<string, unknown>).sort()).toEqual([
-      "request_context",
-      "run_action",
-    ]);
+    expect(Object.keys(captured[0]?.tools ?? {}).sort()).toEqual(["request_context", "run_action"]);
     expect(String(captured[0]?.system)).toContain("Web search is not enabled");
   });
 
@@ -263,18 +336,19 @@ describe("handleAgentMention", () => {
         metadataPrompt: "metadata header",
       }),
       generateAgentText: async (options) => {
+        const callbacks = withToolCallbacks(options);
         const toolCall = {
           type: "tool-call",
           toolName: "run_action",
           toolCallId: "tool-call-1",
           input: { command: "-ping" },
-        };
+        } satisfies MinimalToolCall;
 
-        await (options as any).experimental_onToolCallStart({
+        await callToolStart(callbacks.experimental_onToolCallStart, {
           stepNumber: 1,
           toolCall,
         });
-        await (options as any).experimental_onToolCallFinish({
+        await callToolFinish(callbacks.experimental_onToolCallFinish, {
           stepNumber: 1,
           toolCall,
           durationMs: 42,
@@ -340,18 +414,19 @@ describe("handleAgentMention", () => {
         metadataPrompt: "metadata header",
       }),
       generateAgentText: async (options) => {
+        const callbacks = withToolCallbacks(options);
         const toolCall = {
           type: "tool-call",
           toolName: "request_context",
           toolCallId: "tool-call-private",
           input: { size: "xl" },
-        };
+        } satisfies MinimalToolCall;
 
-        await (options as any).experimental_onToolCallStart({
+        await callToolStart(callbacks.experimental_onToolCallStart, {
           stepNumber: 1,
           toolCall,
         });
-        await (options as any).experimental_onToolCallFinish({
+        await callToolFinish(callbacks.experimental_onToolCallFinish, {
           stepNumber: 1,
           toolCall,
           durationMs: 42,
@@ -402,14 +477,16 @@ describe("handleAgentMention", () => {
         metadataPrompt: "metadata header",
       }),
       generateAgentText: async (options) => {
-        await (options as any).experimental_onToolCallFinish({
+        const callbacks = withToolCallbacks(options);
+
+        await callToolFinish(callbacks.experimental_onToolCallFinish, {
           stepNumber: 2,
           toolCall: {
             type: "tool-call",
             toolName: "search_web",
             toolCallId: "tool-call-2",
             input: { question: "current info" },
-          },
+          } satisfies MinimalToolCall,
           durationMs: 7,
           success: false,
           error: new Error("provider failed"),
@@ -502,7 +579,7 @@ describe("handleAgentMention", () => {
         metadataPrompt: "metadata header",
       }),
       generateAgentText: async (options) => {
-        const result = await (options as any).tools.run_action.execute({
+        const result = await runActionTool(options).execute({
           command: "-ban @spammer spam",
         });
 
