@@ -1,7 +1,12 @@
 import { readdir } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 export async function loadStylePrompts(selectedStylePrompt: string): Promise<string[]> {
-  const stylesDirectory = new URL("../agent/prompts/styles", import.meta.url);
+  const stylesDirectory = join(
+    /* turbopackIgnore: true */ dirname(fileURLToPath(import.meta.url)),
+    "../agent/prompts/styles",
+  );
   const entries = await readdir(stylesDirectory);
   const stylePrompts = entries
     .filter((entry) => entry.endsWith(".md"))

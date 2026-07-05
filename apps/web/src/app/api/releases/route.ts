@@ -1,5 +1,5 @@
 import { json, jsonError } from "@/app/api/_utils/json";
-import { listReleases } from "@/server/config-service";
+import { listReleases } from "@/server/releases";
 import { requireDashboardApiAuth } from "@/server/dashboard-auth-next";
 
 export const dynamic = "force-dynamic";

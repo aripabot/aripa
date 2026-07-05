@@ -1,5 +1,4 @@
 import { execFile, spawn } from "node:child_process";
-import { readFileSync } from "node:fs";
 import { access, open, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -23,7 +22,6 @@ import {
 } from "@aripabot/core/onboarding-wizard/style-prompts.ts";
 import { AUTO_UPDATE_CRON_PRESETS } from "@aripabot/core/update/auto-update-cron.ts";
 import {
-  fetchGitHubReleases,
   installAutoUpdateCron,
   removeAutoUpdateCron,
 } from "@aripabot/core/update/release-updater.ts";
@@ -45,7 +43,6 @@ import type {
   LogEntryLevel,
   LogsResponse,
   OnboardingOptionsResponse,
-  ReleasesResponse,
   SaveConfigResponse,
   StylePromptOption,
 } from "@/lib/api-types";
@@ -58,13 +55,13 @@ import {
 } from "@/server/docker-runtime";
 import { requestBotRuntimeConfigReload } from "@/server/bot-runtime-control";
 import { readableError } from "@/lib/errors";
+import { getEnv, getRootEnv } from "@/server/env";
 
 const appRoot = process.cwd();
 const repositoryRoot = join(/* turbopackIgnore: true */ appRoot, "../..");
 const defaultConfigPath = join(repositoryRoot, "config.json");
 const packageJsonPath = join(repositoryRoot, "package.json");
 const webPackageJsonPath = join(appRoot, "package.json");
-const rootEnv = readRootEnv();
 const execFileAsync = promisify(execFile);
 const LOG_TAIL_LINE_COUNT = 500;
 const LOG_FILE_TAIL_LINE_COUNT = 150;
@@ -91,58 +88,6 @@ const discordDirectoryCache = new Map<
   { expiresAtMs: number; directory: DiscordDirectory }
 >();
 const discordDirectoryInflight = new Map<string, Promise<DiscordDirectory>>();
-
-function getEnv(name: string): string | undefined {
-  return process.env[name] ?? rootEnv[name];
-}
-
-function readRootEnv(): Record<string, string> {
-  try {
-    return parseEnvText(readFileSync(join(repositoryRoot, ".env"), "utf8"));
-  } catch {
-    return {};
-  }
-}
-
-function parseEnvText(text: string): Record<string, string> {
-  const values: Record<string, string> = {};
-
-  for (const line of text.split(/\r?\n/)) {
-    const trimmed = line.trim();
-
-    if (!trimmed || trimmed.startsWith("#")) {
-      continue;
-    }
-
-    const separatorIndex = trimmed.indexOf("=");
-
-    if (separatorIndex === -1) {
-      continue;
-    }
-
-    const key = trimmed.slice(0, separatorIndex).trim();
-    const rawValue = trimmed.slice(separatorIndex + 1).trim();
-
-    if (!key) {
-      continue;
-    }
-
-    values[key] = unquoteEnvValue(rawValue);
-  }
-
-  return values;
-}
-
-function unquoteEnvValue(value: string): string {
-  if (
-    (value.startsWith('"') && value.endsWith('"')) ||
-    (value.startsWith("'") && value.endsWith("'"))
-  ) {
-    return value.slice(1, -1);
-  }
-
-  return value;
-}
 
 export function resolveConfigPath(): string | URL {
   return getEnv("CONFIG_PATH")?.trim() || defaultConfigPath;
@@ -502,7 +447,7 @@ async function readLocalOperationsFromDatabase(
     const { stdout } = await execFileAsync("bun", ["--eval", script], {
       cwd: repositoryRoot,
       env: {
-        ...rootEnv,
+        ...getRootEnv(),
         ...process.env,
         ARIPA_DASHBOARD_DATABASE_PATH: databasePath,
         DATABASE_PATH: databasePath,
@@ -1126,20 +1071,6 @@ async function resolveDatabasePath(): Promise<string> {
   }
 
   return join(repositoryRoot, "aripa.sqlite");
-}
-
-export async function listReleases(): Promise<ReleasesResponse> {
-  const { config } = await readConfig();
-  const repo = config.updates.githubRepo;
-  const releases = config.updates.enabled
-    ? await fetchGitHubReleases({
-        repo,
-        token: getEnv("GITHUB_TOKEN")?.trim() || null,
-        userAgent: "aripa-dashboard",
-      })
-    : [];
-
-  return { repo, releases };
 }
 
 async function getStylePromptOptions(selectedStylePrompt: string): Promise<StylePromptOption[]> {
