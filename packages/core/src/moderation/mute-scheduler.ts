@@ -15,6 +15,7 @@ import {
   buildModerationLogEmbed,
   getRoleMuteUnmuteReason,
 } from "@aripabot/core/moderation/moderation-helpers.ts";
+import { errorMessage } from "@aripabot/core/shared/errors.ts";
 
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
 const DEFAULT_RETRY_DELAY_MS = 30_000;
@@ -317,14 +318,14 @@ export class MuteScheduler {
       return;
     }
 
-    const errorMessage = extractErrorMessage(error);
+    const message = errorMessage(error);
     const embed = buildModerationLogEmbed({
       guildName: null,
       title: "Automatic Unmute Failed",
       details: [
         `User: <@${record.userId}> (\`${record.userId}\`)`,
         `Role: <@&${record.muteRoleId}> (\`${record.muteRoleId}\`)`,
-        `Error: ${errorMessage}`,
+        `Error: ${message}`,
         `Retrying In: ${Math.ceil(retryDelayMs / 1_000)} seconds`,
       ],
     });
@@ -419,16 +420,4 @@ function discordErrorCode(error: unknown): number | null {
 
   const maybeDiscordError = error as { code?: unknown };
   return typeof maybeDiscordError.code === "number" ? maybeDiscordError.code : null;
-}
-
-function extractErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  if (typeof error === "string") {
-    return error;
-  }
-
-  return "Unknown error";
 }

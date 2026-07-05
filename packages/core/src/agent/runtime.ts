@@ -22,6 +22,7 @@ import {
   type ContextMessageLike,
 } from "@aripabot/core/agent/tools/request-context.ts";
 import type { ResolvedTextModel } from "@aripabot/core/agent/models.ts";
+import { errorSnapshot } from "@aripabot/core/shared/errors.ts";
 import { escapeRegExp } from "@aripabot/core/shared/text.ts";
 import packageJson from "../../package.json" with { type: "json" };
 
@@ -215,7 +216,7 @@ export async function handleAgentMention({
             .withError(event.error)
             .withMetadata({
               ...metadata,
-              error: snapshotError(event.error),
+              error: errorSnapshot(event.error),
             })
             .error("Agent tool call failed.");
         },
@@ -671,17 +672,4 @@ function formatUserIdentity(user: {
 function normalizeAgentReply(text: string): string {
   const trimmed = text.trim();
   return trimmed.length > 0 ? trimmed : EMPTY_AGENT_REPLY;
-}
-
-function snapshotError(error: unknown): Record<string, unknown> {
-  if (error instanceof Error) {
-    return {
-      name: error.name,
-      message: error.message,
-    };
-  }
-
-  return {
-    message: String(error),
-  };
 }
