@@ -66,6 +66,12 @@ import {
 import { readableError } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import { DashboardOnboardingScreen } from "@/components/dashboard/dashboard-onboarding-screen";
+import {
+  formatCount,
+  formatDate,
+  formatDateTime,
+  formatTime,
+} from "@/components/dashboard/lib/format";
 import type {
   CompleteOnboardingResponse,
   DashboardLogEntry,
@@ -2356,10 +2362,6 @@ function normalizeVersionTag(value: string | null): string | null {
   return value?.replace(/^v(?=\d)/i, "") ?? null;
 }
 
-function formatCount(value: number): string {
-  return new Intl.NumberFormat().format(value);
-}
-
 function nextThemeMode(themeMode: ThemeMode): ThemeMode {
   switch (themeMode) {
     case "system":
@@ -2384,23 +2386,4 @@ function themeButtonLabel(themeMode: ThemeMode, resolvedTheme: ResolvedTheme): s
 
 function initialLoadState<T>(): LoadState<T> {
   return { status: "loading", data: null, error: null };
-}
-
-function formatDate(input: string): string {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-  }).format(new Date(input));
-}
-
-function formatDateTime(input: string): string {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(input));
-}
-
-function formatTime(input: string): string {
-  return new Intl.DateTimeFormat(undefined, {
-    timeStyle: "short",
-  }).format(new Date(input));
 }
