@@ -1,5 +1,7 @@
 import { join, resolve } from "node:path";
 
+import { escapeRegExp } from "@aripabot/core/shared/text.ts";
+
 export const AUTO_UPDATE_CRON_BEGIN = "# BEGIN ARIPA AUTO UPDATE";
 export const AUTO_UPDATE_CRON_END = "# END ARIPA AUTO UPDATE";
 
@@ -58,8 +60,4 @@ function formatCronPath(pathOrUrl: string | URL): string {
   }
 
   return resolve(pathOrUrl);
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

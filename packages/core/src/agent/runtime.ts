@@ -22,6 +22,7 @@ import {
   type ContextMessageLike,
 } from "@aripabot/core/agent/tools/request-context.ts";
 import type { ResolvedTextModel } from "@aripabot/core/agent/models.ts";
+import { escapeRegExp } from "@aripabot/core/shared/text.ts";
 import packageJson from "../../package.json" with { type: "json" };
 
 const DEFAULT_BOT_NAME = "Aripa";
@@ -683,8 +684,4 @@ function snapshotError(error: unknown): Record<string, unknown> {
   return {
     message: String(error),
   };
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
