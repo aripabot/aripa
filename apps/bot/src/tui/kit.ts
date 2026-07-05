@@ -8,6 +8,7 @@ import {
   type BoxOptions,
   type InputRenderableOptions,
   type Renderable,
+  type SelectOption,
   type SelectRenderableOptions,
   type TextOptions,
 } from "@opentui/core";
@@ -40,6 +41,78 @@ export function createRenderableFactories(requireRenderer: () => CliRenderer): {
       return new SelectRenderable(requireRenderer(), options);
     },
   };
+}
+
+export class TuiControlState {
+  private focusCurrentControl: (() => void) | null = null;
+  private currentInput: InputRenderable | null = null;
+  private currentSelect: SelectRenderable | null = null;
+  private currentSelectHandler: ((option: SelectOption) => void) | null = null;
+  currentKind: "input" | "select" | null = null;
+
+  reset(): void {
+    this.focusCurrentControl = null;
+    this.currentKind = null;
+    this.currentInput = null;
+    this.currentSelect = null;
+    this.currentSelectHandler = null;
+  }
+
+  focus(): void {
+    this.focusCurrentControl?.();
+  }
+
+  registerInput(input: InputRenderable): void {
+    this.focusCurrentControl = () => input.focus();
+    this.currentKind = "input";
+    this.currentInput = input;
+  }
+
+  registerSelect(select: SelectRenderable, onSelected: (option: SelectOption) => void): void {
+    this.focusCurrentControl = () => select.focus();
+    this.currentKind = "select";
+    this.currentSelect = select;
+    this.currentSelectHandler = onSelected;
+  }
+
+  hasSelect(): boolean {
+    return this.currentSelect !== null;
+  }
+
+  submitCurrent(): boolean {
+    if (this.currentKind === "input" && this.currentInput) {
+      this.currentInput.submit();
+      return true;
+    }
+
+    if (this.currentKind === "select" && this.currentSelect && this.currentSelectHandler) {
+      const selectedOption = this.currentSelect.getSelectedOption();
+      if (selectedOption) {
+        this.currentSelectHandler(selectedOption);
+      }
+      return true;
+    }
+
+    return false;
+  }
+
+  moveSelectUp(): boolean {
+    if (this.currentKind !== "select" || !this.currentSelect) {
+      return false;
+    }
+
+    this.currentSelect.moveUp();
+    return true;
+  }
+
+  moveSelectDown(): boolean {
+    if (this.currentKind !== "select" || !this.currentSelect) {
+      return false;
+    }
+
+    this.currentSelect.moveDown();
+    return true;
+  }
 }
 
 export function parseMinimalKey(sequence: string): MinimalKeyEvent | null {

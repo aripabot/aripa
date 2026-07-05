@@ -26,6 +26,7 @@ import {
   createRenderableFactories,
   isExitKey,
   parseMinimalKey,
+  TuiControlState,
   type CliRenderer,
 } from "./tui/kit.ts";
 
@@ -52,9 +53,7 @@ const dryRunUpdates = Bun.env.DRY_RUN_UPDATES?.trim() === "true";
 const updateLatest = Bun.argv.slice(2).includes("--latest");
 
 let renderer: CliRenderer | null = null;
-let currentSelect: SelectRenderable | null = null;
-let currentSelectHandler: ((option: SelectOption) => void) | null = null;
-let focusCurrentControl: (() => void) | null = null;
+const controls = new TuiControlState();
 let rawExitHandler: ((chunk: Buffer | string) => void) | null = null;
 let spinnerTimer: ReturnType<typeof setInterval> | null = null;
 let finished = false;
@@ -177,9 +176,7 @@ function render(): void {
   }
 
   clearRendererRoot(renderer);
-  currentSelect = null;
-  currentSelectHandler = null;
-  focusCurrentControl = null;
+  controls.reset();
 
   renderer.root.add(
     Box(
@@ -198,7 +195,7 @@ function render(): void {
     ),
   );
 
-  (focusCurrentControl as null | (() => void))?.();
+  controls.focus();
   renderer.requestRender();
 }
 
@@ -352,7 +349,7 @@ function footer(): BoxRenderable {
   const content =
     view === "done"
       ? "Enter/Esc/Ctrl+C: exit"
-      : currentSelect
+      : controls.hasSelect()
         ? "Up/Down: choose | Enter: select | Esc/Ctrl+C: quit"
         : "Esc/Ctrl+C: quit";
 
@@ -431,9 +428,7 @@ function selectControl(
   select.on(SelectRenderableEvents.ITEM_SELECTED, (_index: number, option: SelectOption) =>
     onSelected(option),
   );
-  currentSelect = select;
-  currentSelectHandler = onSelected;
-  focusCurrentControl = () => select.focus();
+  controls.registerSelect(select, onSelected);
   return select;
 }
 
@@ -657,22 +652,16 @@ function handleKeyPress(key: MinimalKeyEvent): boolean {
     return true;
   }
 
-  if ((key.name === "return" || key.name === "linefeed") && currentSelect && currentSelectHandler) {
-    const selectedOption = currentSelect.getSelectedOption();
-    if (selectedOption) {
-      currentSelectHandler(selectedOption);
-    }
-    return true;
+  if (key.name === "return" || key.name === "linefeed") {
+    return controls.submitCurrent();
   }
 
-  if (key.name === "up" && currentSelect) {
-    currentSelect.moveUp();
-    return true;
+  if (key.name === "up") {
+    return controls.moveSelectUp();
   }
 
-  if (key.name === "down" && currentSelect) {
-    currentSelect.moveDown();
-    return true;
+  if (key.name === "down") {
+    return controls.moveSelectDown();
   }
 
   return false;

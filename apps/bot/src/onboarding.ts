@@ -1,8 +1,6 @@
 import {
   InputRenderableEvents,
-  InputRenderable,
   SelectRenderableEvents,
-  SelectRenderable,
   createCliRenderer,
   type SelectOption,
 } from "@opentui/core";
@@ -61,6 +59,7 @@ import {
   createRenderableFactories,
   isExitKey,
   parseMinimalKey,
+  TuiControlState,
   type CliRenderer,
 } from "./tui/kit.ts";
 
@@ -72,11 +71,7 @@ const state: OnboardingState = createInitialOnboardingState(CONFIG_PATH, existin
 
 let step: Step = initialStepForState(state);
 let renderer: CliRenderer | null = null;
-let focusCurrentControl: (() => void) | null = null;
-let currentControlKind: "input" | "select" | null = null;
-let currentInput: InputRenderable | null = null;
-let currentSelect: SelectRenderable | null = null;
-let currentSelectHandler: ((option: SelectOption) => void) | null = null;
+const controls = new TuiControlState();
 let finished = false;
 let rawExitHandler: ((chunk: Buffer | string) => void) | null = null;
 let generatedPrivateKeySecret: string | null = null;
@@ -119,11 +114,7 @@ function render(): void {
   }
 
   clearRendererRoot(renderer);
-  focusCurrentControl = null;
-  currentControlKind = null;
-  currentInput = null;
-  currentSelect = null;
-  currentSelectHandler = null;
+  controls.reset();
 
   renderer.root.add(
     Box(
@@ -142,7 +133,7 @@ function render(): void {
     ),
   );
 
-  (focusCurrentControl as null | (() => void))?.();
+  controls.focus();
   renderer.requestRender();
 }
 
@@ -1024,9 +1015,7 @@ function inputControl(value: string, placeholder: string, onSubmit: (value: stri
     placeholderColor: colors.dim,
   });
   input.on(InputRenderableEvents.ENTER, (submittedValue: string) => onSubmit(submittedValue));
-  focusCurrentControl = () => input.focus();
-  currentControlKind = "input";
-  currentInput = input;
+  controls.registerInput(input);
 
   return Box(
     {
@@ -1069,10 +1058,7 @@ function selectControl(
   select.on(SelectRenderableEvents.ITEM_SELECTED, (_index: number, option: SelectOption) =>
     onSelected(option),
   );
-  focusCurrentControl = () => select.focus();
-  currentControlKind = "select";
-  currentSelect = select;
-  currentSelectHandler = onSelected;
+  controls.registerSelect(select, onSelected);
 
   return select;
 }
@@ -1161,31 +1147,18 @@ function handleKeyPress(key: MinimalKeyEvent): boolean {
   }
 
   if (key.name === "return" || key.name === "linefeed") {
-    if (currentControlKind === "input" && currentInput) {
-      currentInput.submit();
-      return true;
-    }
-
-    if (currentControlKind === "select" && currentSelect && currentSelectHandler) {
-      const selectedOption = currentSelect.getSelectedOption();
-      if (selectedOption) {
-        currentSelectHandler(selectedOption);
-      }
-      return true;
-    }
+    return controls.submitCurrent();
   }
 
-  if (key.name === "up" && currentControlKind === "select" && currentSelect) {
-    currentSelect.moveUp();
-    return true;
+  if (key.name === "up") {
+    return controls.moveSelectUp();
   }
 
-  if (key.name === "down" && currentControlKind === "select" && currentSelect) {
-    currentSelect.moveDown();
-    return true;
+  if (key.name === "down") {
+    return controls.moveSelectDown();
   }
 
-  if (key.name === "left" && currentControlKind === "select" && step !== "existing-config") {
+  if (key.name === "left" && controls.currentKind === "select" && step !== "existing-config") {
     goBack();
     return true;
   }
@@ -1237,7 +1210,7 @@ function handleRawExitInput(chunk: Buffer | string): void {
 }
 
 function footerText(): string {
-  if (currentControlKind === "input") {
+  if (controls.currentKind === "input") {
     return "Enter: continue | Esc/Ctrl+C: quit";
   }
 
