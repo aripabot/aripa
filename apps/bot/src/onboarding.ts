@@ -261,7 +261,6 @@ function stepContent() {
     case "existing-config":
       return [
         Text({ content: "Existing config found", fg: colors.warning, attributes: 1 }),
-        //    Text({ content: "The wizard can update known fields while preserving any extra future config keys.", fg: colors.muted }),
         selectControl(
           [
             {
