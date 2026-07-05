@@ -51,6 +51,7 @@ import {
   rateLimitPresetIndex,
   stepIndex,
 } from "@aripabot/core/onboarding-wizard/navigation.ts";
+import { providerDisplayFor } from "@aripabot/core/onboarding-wizard/provider-display.ts";
 import {
   loadStylePrompts,
   stylePromptDescription,
@@ -1317,44 +1318,10 @@ function selectableProvidersFromModelOptions(
 }
 
 function providerOptionFor(provider: ConfigurableProvider): SelectOption {
-  switch (provider) {
-    case "openai":
-      return {
-        name: "OpenAI",
-        description: "Use OPENAI_API_KEY and OpenAI models.",
-        value: provider,
-      };
-    case "openrouter":
-      return {
-        name: "OpenRouter",
-        description: "Use OPENROUTER_API_KEY and OpenRouter model routing.",
-        value: provider,
-      };
-    case "gateway":
-      return {
-        name: "Vercel AI Gateway",
-        description: "Use AI_GATEWAY_API_KEY and Gateway model IDs.",
-        value: provider,
-      };
-    case "ollama":
-      return {
-        name: "Ollama",
-        description: "Use a local OpenAI-compatible Ollama server.",
-        value: provider,
-      };
-    case "lmstudio":
-      return {
-        name: "LM Studio",
-        description: "Use a local LM Studio OpenAI-compatible server.",
-        value: provider,
-      };
-    case "fm":
-      return {
-        name: "Apple Foundation Models",
-        description: "Use fm serve with the system or PCC model.",
-        value: provider,
-      };
-  }
+  return {
+    ...providerDisplayFor(provider),
+    value: provider,
+  };
 }
 
 function selectModelControl(
