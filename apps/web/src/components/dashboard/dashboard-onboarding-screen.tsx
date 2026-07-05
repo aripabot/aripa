@@ -439,26 +439,7 @@ export function DashboardOnboardingScreen({
               </div>
             </div>
 
-            <nav aria-label="Onboarding progress" className="flex flex-col gap-1">
-              {progressSteps.map((item, index) => {
-                const itemProgressIndex = stepIndex(item.step);
-                const active = itemProgressIndex === activeProgressIndex;
-                const completed = itemProgressIndex < activeProgressIndex;
-                return (
-                  <div
-                    key={item.step}
-                    aria-current={active ? "step" : undefined}
-                    className="flex h-10 items-center gap-3 rounded-md px-3 text-sm"
-                    data-active={active ? "" : undefined}
-                  >
-                    <span className="flex size-6 items-center justify-center rounded-md border bg-background text-xs text-muted-foreground">
-                      {completed ? <CheckCircle2 aria-hidden="true" /> : index + 1}
-                    </span>
-                    <span className="min-w-0 truncate font-medium">{item.label}</span>
-                  </div>
-                );
-              })}
-            </nav>
+            <OnboardingProgress activeProgressIndex={activeProgressIndex} />
 
             <div className="mt-auto">
               <Button type="button" variant="outline" className="w-full" onClick={onSignOut}>
@@ -1054,6 +1035,31 @@ function ProviderSelect({
         </SelectContent>
       </Select>
     </Field>
+  );
+}
+
+function OnboardingProgress({ activeProgressIndex }: { activeProgressIndex: number }) {
+  return (
+    <nav aria-label="Onboarding progress" className="flex flex-col gap-1">
+      {progressSteps.map((item, index) => {
+        const itemProgressIndex = stepIndex(item.step);
+        const active = itemProgressIndex === activeProgressIndex;
+        const completed = itemProgressIndex < activeProgressIndex;
+        return (
+          <div
+            key={item.step}
+            aria-current={active ? "step" : undefined}
+            className="flex h-10 items-center gap-3 rounded-md px-3 text-sm"
+            data-active={active ? "" : undefined}
+          >
+            <span className="flex size-6 items-center justify-center rounded-md border bg-background text-xs text-muted-foreground">
+              {completed ? <CheckCircle2 aria-hidden="true" /> : index + 1}
+            </span>
+            <span className="min-w-0 truncate font-medium">{item.label}</span>
+          </div>
+        );
+      })}
+    </nav>
   );
 }
 
