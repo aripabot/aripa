@@ -1,6 +1,10 @@
 "use client";
 
+import type { ReactNode } from "react";
+import { Clipboard, KeyRound, ShieldCheck } from "lucide-react";
+
 import { Field } from "@/components/dashboard/dashboard-onboarding-controls";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -171,5 +175,76 @@ export function UpdateKeyPasteStep({
         spellCheck={false}
       />
     </Field>
+  );
+}
+
+export function UpdateKeyChoiceStep({
+  onGenerate,
+  onPaste,
+  onUseEnvironmentVariable,
+}: {
+  onGenerate: () => void;
+  onPaste: () => void;
+  onUseEnvironmentVariable: () => void;
+}) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-3">
+      <Button type="button" variant="outline" onClick={onGenerate}>
+        <KeyRound aria-hidden="true" />
+        Generate Keypair
+      </Button>
+      <Button type="button" variant="outline" onClick={onPaste}>
+        Paste Public Key
+      </Button>
+      <Button type="button" variant="outline" onClick={onUseEnvironmentVariable}>
+        Use Environment Variable
+      </Button>
+    </div>
+  );
+}
+
+export function GeneratedUpdateKeyStep({
+  privateKey,
+  onCopy,
+  onRegenerate,
+}: {
+  privateKey: string | null;
+  onCopy: () => void;
+  onRegenerate: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="rounded-md border bg-muted p-3">
+        <p className="text-sm font-medium">ARIPA_RELEASE_PRIVATE_KEY_PEM_B64</p>
+        <p className="mt-1 break-all font-mono text-xs text-muted-foreground">{privateKey}</p>
+      </div>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <Button type="button" variant="outline" onClick={onCopy}>
+          <Clipboard aria-hidden="true" />
+          Copy Secret Value
+        </Button>
+        <Button type="button" variant="outline" onClick={onRegenerate}>
+          Regenerate Keypair
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+export function ReviewStep({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="rounded-md border bg-muted p-3">
+        <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words text-xs">
+          {children}
+        </pre>
+      </div>
+      <div className="flex items-start gap-3 rounded-md border bg-background p-3 text-sm">
+        <ShieldCheck aria-hidden="true" />
+        <p className="text-muted-foreground">
+          Saving writes config.json and applies the automatic update schedule.
+        </p>
+      </div>
+    </div>
   );
 }

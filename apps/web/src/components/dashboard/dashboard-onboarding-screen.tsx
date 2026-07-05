@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type * as React from "react";
-import { Clipboard, KeyRound, LogOut, Save, ShieldCheck, Sparkles } from "lucide-react";
+import { LogOut, Save, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,10 +15,13 @@ import {
 } from "@/components/dashboard/dashboard-onboarding-controls";
 import {
   CustomRateLimitStep,
+  GeneratedUpdateKeyStep,
   NameStep,
   OperatorStep,
+  ReviewStep,
   ServerAllowlistStep,
   StyleStep,
+  UpdateKeyChoiceStep,
   UpdateKeyPasteStep,
   UpdateRepoStep,
 } from "@/components/dashboard/dashboard-onboarding-steps";
@@ -695,33 +698,18 @@ export function DashboardOnboardingScreen({
         );
       case "update-key":
         return (
-          <div className="grid gap-3 sm:grid-cols-3">
-            <Button type="button" variant="outline" onClick={() => void generateKeyPair()}>
-              <KeyRound aria-hidden="true" />
-              Generate Keypair
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setStepWithReset("update-key-paste")}
-            >
-              Paste Public Key
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                const updates = { ...config.updates };
-                delete updates.releasePublicKeyPem;
-                delete updates.releasePublicKeyPemBase64;
-                setConfig({ ...config, updates });
-                setGeneratedPrivateKey(null);
-                setStepWithReset("update-schedule");
-              }}
-            >
-              Use Environment Variable
-            </Button>
-          </div>
+          <UpdateKeyChoiceStep
+            onGenerate={() => void generateKeyPair()}
+            onPaste={() => setStepWithReset("update-key-paste")}
+            onUseEnvironmentVariable={() => {
+              const updates = { ...config.updates };
+              delete updates.releasePublicKeyPem;
+              delete updates.releasePublicKeyPemBase64;
+              setConfig({ ...config, updates });
+              setGeneratedPrivateKey(null);
+              setStepWithReset("update-schedule");
+            }}
+          />
         );
       case "update-key-paste":
         return (
@@ -742,23 +730,11 @@ export function DashboardOnboardingScreen({
         );
       case "update-key-generated":
         return (
-          <div className="flex flex-col gap-4">
-            <div className="rounded-md border bg-muted p-3">
-              <p className="text-sm font-medium">ARIPA_RELEASE_PRIVATE_KEY_PEM_B64</p>
-              <p className="mt-1 break-all font-mono text-xs text-muted-foreground">
-                {generatedPrivateKey}
-              </p>
-            </div>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <Button type="button" variant="outline" onClick={() => void copyGeneratedKey()}>
-                <Clipboard aria-hidden="true" />
-                Copy Secret Value
-              </Button>
-              <Button type="button" variant="outline" onClick={() => void generateKeyPair()}>
-                Regenerate Keypair
-              </Button>
-            </div>
-          </div>
+          <GeneratedUpdateKeyStep
+            privateKey={generatedPrivateKey}
+            onCopy={() => void copyGeneratedKey()}
+            onRegenerate={() => void generateKeyPair()}
+          />
         );
       case "update-schedule":
         return (
@@ -816,26 +792,16 @@ export function DashboardOnboardingScreen({
         );
       case "review":
         return (
-          <div className="flex flex-col gap-4">
-            <div className="rounded-md border bg-muted p-3">
-              <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words text-xs">
-                {JSON.stringify(
-                  {
-                    ...config,
-                    allowlistedServerIds: parseAllowlistedServerIds(allowlistInput),
-                  },
-                  null,
-                  2,
-                )}
-              </pre>
-            </div>
-            <div className="flex items-start gap-3 rounded-md border bg-background p-3 text-sm">
-              <ShieldCheck aria-hidden="true" />
-              <p className="text-muted-foreground">
-                Saving writes config.json and applies the automatic update schedule.
-              </p>
-            </div>
-          </div>
+          <ReviewStep>
+            {JSON.stringify(
+              {
+                ...config,
+                allowlistedServerIds: parseAllowlistedServerIds(allowlistInput),
+              },
+              null,
+              2,
+            )}
+          </ReviewStep>
         );
     }
   }
