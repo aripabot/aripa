@@ -1,6 +1,6 @@
 import { execFile, spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { access, readFile, stat, writeFile } from "node:fs/promises";
+import { access, open, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
@@ -67,6 +67,18 @@ const webPackageJsonPath = join(appRoot, "package.json");
 const rootEnv = readRootEnv();
 const execFileAsync = promisify(execFile);
 const LOG_TAIL_LINE_COUNT = 500;
+const LOG_FILE_TAIL_LINE_COUNT = 150;
+const LOG_FILE_TAIL_BYTES = 256 * 1024;
+const LOG_ENTRY_LEVELS = new Set<LogEntryLevel>([
+  "trace",
+  "debug",
+  "info",
+  "warn",
+  "error",
+  "fatal",
+  "unknown",
+]);
+const ANSI_ESCAPE_PATTERN = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "g");
 
 function getEnv(name: string): string | undefined {
   return process.env[name] ?? rootEnv[name];
@@ -1074,8 +1086,7 @@ async function readLogCandidate(path: string): Promise<LocalLogFile> {
       };
     }
 
-    const text = await readFile(path, "utf8");
-    const lines = text.split(/\r?\n/).filter(Boolean).slice(-150);
+    const lines = await readLogTailLines(path, metadata.size);
 
     return {
       name,
@@ -1094,6 +1105,26 @@ async function readLogCandidate(path: string): Promise<LocalLogFile> {
       sizeBytes: 0,
       lines: [],
     };
+  }
+}
+
+async function readLogTailLines(path: string, sizeBytes: number): Promise<string[]> {
+  const byteLength = Math.min(sizeBytes, LOG_FILE_TAIL_BYTES);
+  const start = Math.max(sizeBytes - byteLength, 0);
+  const buffer = Buffer.alloc(byteLength);
+  const file = await open(path, "r");
+
+  try {
+    const { bytesRead } = await file.read(buffer, 0, byteLength, start);
+    const lines = buffer.subarray(0, bytesRead).toString("utf8").split(/\r?\n/).filter(Boolean);
+
+    if (start > 0) {
+      lines.shift();
+    }
+
+    return lines.slice(-LOG_FILE_TAIL_LINE_COUNT);
+  } finally {
+    await file.close();
   }
 }
 
@@ -1206,7 +1237,7 @@ function normalizeLogLevel(value: unknown): LogEntryLevel {
 }
 
 function isLogEntryLevel(value: string): value is LogEntryLevel {
-  return ["trace", "debug", "info", "warn", "error", "fatal", "unknown"].includes(value);
+  return LOG_ENTRY_LEVELS.has(value as LogEntryLevel);
 }
 
 function inferTextLogLevel(line: string): LogEntryLevel {
@@ -1280,7 +1311,7 @@ function redactLogText(value: string): string {
 }
 
 function stripAnsi(value: string): string {
-  return value.replace(new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "g"), "");
+  return value.replace(ANSI_ESCAPE_PATTERN, "");
 }
 
 function getString(value: unknown): string | null {
