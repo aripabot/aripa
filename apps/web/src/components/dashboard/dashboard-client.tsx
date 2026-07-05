@@ -54,6 +54,7 @@ import { readableError } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import { ConfirmActionButton } from "@/components/dashboard/components/confirm-action-button";
 import { Field, SwitchField } from "@/components/dashboard/components/fields";
+import { LogMetric } from "@/components/dashboard/components/log-metric";
 import { Metric } from "@/components/dashboard/components/metric";
 import { ModelCard } from "@/components/dashboard/components/model-card";
 import {
@@ -871,23 +872,6 @@ function LogsPage({ logs, onRefresh }: { logs: LoadState<LogsResponse>; onRefres
           )}
         </section>
       )}
-    </div>
-  );
-}
-
-function LogMetric({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: number;
-  tone: "default" | "warn" | "error";
-}) {
-  return (
-    <div className="rounded-md border bg-background p-3">
-      <p className="text-xs font-medium uppercase text-muted-foreground">{label}</p>
-      <p className={`mt-2 text-2xl font-semibold ${logMetricClass(tone)}`}>{formatCount(value)}</p>
     </div>
   );
 }
@@ -1762,20 +1746,8 @@ const badgeToneClasses: Record<BadgeTone, string> = {
   muted: "bg-muted text-muted-foreground",
 };
 
-type MetricTextTone = "default" | "danger" | "warning";
-
-const metricTextToneClasses: Record<MetricTextTone, string> = {
-  default: "text-foreground",
-  danger: "text-red-700 dark:text-red-300",
-  warning: "text-amber-700 dark:text-amber-300",
-};
-
 function badgeToneClass(tone: BadgeTone): string {
   return badgeToneClasses[tone];
-}
-
-function metricTextToneClass(tone: MetricTextTone): string {
-  return metricTextToneClasses[tone];
 }
 
 function runtimeToneClass(state: DashboardStatus["botRuntime"]["state"]): string {
@@ -1897,17 +1869,6 @@ function sourceTabLabel(name: string): string {
   }
 
   return name.split("/").at(-1) ?? name;
-}
-
-function logMetricClass(tone: "default" | "warn" | "error"): string {
-  switch (tone) {
-    case "error":
-      return metricTextToneClass("danger");
-    case "warn":
-      return metricTextToneClass("warning");
-    case "default":
-      return metricTextToneClass("default");
-  }
 }
 
 function logLevelClass(level: LogEntryLevel): string {
