@@ -24,8 +24,14 @@ describe("fetchGitHubReleases", () => {
   test("sorts published releases newest first and marks pre-releases", async () => {
     const releases = await fetchGitHubReleases({
       repo: "Owner/repo",
-      fetchImpl: async (url) => {
+      userAgent: "aripa-dashboard",
+      fetchImpl: async (url, init) => {
         expect(String(url)).toBe("https://api.github.com/repos/Owner/repo/releases?per_page=100");
+        expect(init?.headers).toMatchObject({
+          Accept: "application/vnd.github+json",
+          "User-Agent": "aripa-dashboard",
+          "X-GitHub-Api-Version": "2022-11-28",
+        });
         return Response.json([
           {
             id: 1,

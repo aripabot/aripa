@@ -9,6 +9,15 @@ import {
   removeManagedAutoUpdateCronContent,
   updateManagedAutoUpdateCronContent,
 } from "@aripabot/core/update/auto-update-cron-content.ts";
+import {
+  fetchGitHubReleaseByTagName,
+  fetchGitHubReleases,
+  githubHeaders,
+  type FetchLike,
+  type FetchReleasesOptions,
+  type GitHubRelease,
+  type GitHubReleaseAsset,
+} from "@aripabot/core/update/github-releases.ts";
 
 export {
   AUTO_UPDATE_CRON_PRESETS,
@@ -24,53 +33,24 @@ export {
   updateManagedAutoUpdateCronContent,
   type AutoUpdateCronEntryOptions,
 } from "@aripabot/core/update/auto-update-cron-content.ts";
+export {
+  DEFAULT_GITHUB_REPO,
+  fetchGitHubReleaseByTagName,
+  fetchGitHubReleases,
+  githubHeaders,
+  toGitHubRelease,
+  type FetchLike,
+  type FetchReleasesOptions,
+  type GitHubRelease,
+  type GitHubReleaseAsset,
+} from "@aripabot/core/update/github-releases.ts";
 
-export const DEFAULT_GITHUB_REPO = "aripabot/aripa";
 export const DEFAULT_RELEASE_PUBLIC_KEY_PEM_B64 =
   "LS0tLS1CRUdJTiBQVUJMSUMgS0VZLS0tLS0KTUNvd0JRWURLMlZ3QXlFQVY4d2JnNEZXYzV5YTQ3VXFhalJ2L3Y3Qm1xd253WjlpREtzTm1uNXNwdzg9Ci0tLS0tRU5EIFBVQkxJQyBLRVktLS0tLQo=";
 export const RELEASE_MANIFEST_ASSET_NAME = "aripa-release.json";
 export const RELEASE_MANIFEST_SIGNATURE_ASSET_NAME = "aripa-release.json.sig";
 export const RELEASE_PUBLIC_KEY_ENV = "ARIPA_RELEASE_PUBLIC_KEY_PEM";
 export const RELEASE_PUBLIC_KEY_BASE64_ENV = "ARIPA_RELEASE_PUBLIC_KEY_PEM_B64";
-
-export interface GitHubReleaseAsset {
-  name: string;
-  downloadUrl: string;
-}
-
-export interface GitHubRelease {
-  id: number;
-  tagName: string;
-  name: string;
-  prerelease: boolean;
-  draft: boolean;
-  publishedAt: string;
-  tarballUrl: string;
-  zipballUrl: string;
-  htmlUrl: string;
-  assets: GitHubReleaseAsset[];
-}
-
-type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
-
-interface GitHubReleaseResponse {
-  id: number;
-  tag_name: string;
-  name: string | null;
-  prerelease: boolean;
-  draft: boolean;
-  published_at: string | null;
-  created_at: string;
-  tarball_url: string;
-  zipball_url: string;
-  html_url: string;
-  assets?: GitHubReleaseAssetResponse[];
-}
-
-interface GitHubReleaseAssetResponse {
-  name: string;
-  browser_download_url: string;
-}
 
 interface ReleaseManifest {
   schemaVersion: 1;
@@ -81,12 +61,6 @@ interface ReleaseManifest {
     sha256: string;
   };
   generatedAt: string;
-}
-
-export interface FetchReleasesOptions {
-  repo?: string;
-  fetchImpl?: FetchLike;
-  token?: string | null;
 }
 
 export interface CompareCurrentVersionOptions extends FetchReleasesOptions {
@@ -162,48 +136,6 @@ export async function compareCurrentPackageVersionWithLatestReleaseVersion(
   };
 }
 
-export async function fetchGitHubReleases(
-  options: FetchReleasesOptions = {},
-): Promise<GitHubRelease[]> {
-  const repo = options.repo ?? DEFAULT_GITHUB_REPO;
-  const fetchImpl = options.fetchImpl ?? fetch;
-  const response = await fetchImpl(`https://api.github.com/repos/${repo}/releases?per_page=100`, {
-    headers: githubHeaders(options.token),
-  });
-
-  if (!response.ok) {
-    throw new Error(`GitHub releases request failed: ${response.status} ${response.statusText}`);
-  }
-
-  const payload = (await response.json()) as GitHubReleaseResponse[];
-  return payload
-    .filter((release) => !release.draft)
-    .map(toGitHubRelease)
-    .sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt));
-}
-
-async function fetchGitHubReleaseByTagName(
-  tagName: string,
-  options: FetchReleasesOptions = {},
-): Promise<GitHubRelease> {
-  const repo = options.repo ?? DEFAULT_GITHUB_REPO;
-  const fetchImpl = options.fetchImpl ?? fetch;
-  const response = await fetchImpl(
-    `https://api.github.com/repos/${repo}/releases/tags/${encodeURIComponent(tagName)}`,
-    {
-      headers: githubHeaders(options.token),
-    },
-  );
-
-  if (!response.ok) {
-    throw new Error(
-      `GitHub release ${tagName} request failed: ${response.status} ${response.statusText}`,
-    );
-  }
-
-  return toGitHubRelease((await response.json()) as GitHubReleaseResponse);
-}
-
 async function readCurrentPackageVersion(cwd: string): Promise<string> {
   const packageJson = (await Bun.file(join(cwd, "package.json")).json()) as { version?: unknown };
   if (typeof packageJson.version !== "string" || packageJson.version.trim().length === 0) {
@@ -211,24 +143,6 @@ async function readCurrentPackageVersion(cwd: string): Promise<string> {
   }
 
   return packageJson.version.trim();
-}
-
-function toGitHubRelease(release: GitHubReleaseResponse): GitHubRelease {
-  return {
-    id: release.id,
-    tagName: release.tag_name,
-    name: release.name?.trim() || release.tag_name,
-    prerelease: release.prerelease,
-    draft: release.draft,
-    publishedAt: release.published_at ?? release.created_at,
-    tarballUrl: release.tarball_url,
-    zipballUrl: release.zipball_url,
-    htmlUrl: release.html_url,
-    assets: (release.assets ?? []).map((asset) => ({
-      name: asset.name,
-      downloadUrl: asset.browser_download_url,
-    })),
-  };
 }
 
 export function formatReleaseDate(input: string): string {
@@ -650,23 +564,6 @@ async function writeUserCrontab(content: string): Promise<void> {
     const output = [stderr.trim(), stdout.trim()].filter(Boolean).join("\n");
     throw new Error(output || `crontab update failed with exit code ${exitCode}.`);
   }
-}
-
-function githubHeaders(
-  token: string | null | undefined,
-  accept = "application/vnd.github+json",
-): Record<string, string> {
-  const headers: Record<string, string> = {
-    Accept: accept,
-    "User-Agent": "aripa-update",
-    "X-GitHub-Api-Version": "2022-11-28",
-  };
-
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
-
-  return headers;
 }
 
 function sanitizeFileName(value: string): string {

@@ -19,6 +19,7 @@ import { loadWizardModelOptions } from "@aripabot/core/onboarding-wizard/model-o
 import { getSelectableModelProviders } from "@aripabot/core/onboarding-wizard/provider-availability.ts";
 import { AUTO_UPDATE_CRON_PRESETS } from "@aripabot/core/update/auto-update-cron.ts";
 import {
+  fetchGitHubReleases,
   installAutoUpdateCron,
   removeAutoUpdateCron,
   type GitHubRelease,
@@ -1037,7 +1038,11 @@ export async function listReleases(): Promise<ReleasesResponse> {
   const { config } = await readConfig();
   const repo = config.updates.githubRepo;
   const releases = config.updates.enabled
-    ? await fetchGitHubReleases(repo, getEnv("GITHUB_TOKEN")?.trim() || null)
+    ? await fetchGitHubReleases({
+        repo,
+        token: getEnv("GITHUB_TOKEN")?.trim() || null,
+        userAgent: "aripa-dashboard",
+      })
     : [];
 
   return { repo, releases };
@@ -1360,76 +1365,6 @@ async function readExistingJsonObject(
   }
 
   return rawConfig as Record<string, unknown>;
-}
-
-async function fetchGitHubReleases(
-  repo: string,
-  token: string | null | undefined,
-): Promise<GitHubRelease[]> {
-  const response = await fetch(`https://api.github.com/repos/${repo}/releases?per_page=100`, {
-    headers: githubHeaders(token),
-  });
-
-  if (!response.ok) {
-    throw new Error(`GitHub releases request failed: ${response.status} ${response.statusText}`);
-  }
-
-  const payload = (await response.json()) as GitHubReleaseResponse[];
-  return payload
-    .filter((release) => !release.draft)
-    .map(toGitHubRelease)
-    .sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt));
-}
-
-function toGitHubRelease(release: GitHubReleaseResponse): GitHubRelease {
-  return {
-    id: release.id,
-    tagName: release.tag_name,
-    name: release.name?.trim() || release.tag_name,
-    prerelease: release.prerelease,
-    draft: release.draft,
-    publishedAt: release.published_at ?? release.created_at,
-    tarballUrl: release.tarball_url,
-    zipballUrl: release.zipball_url,
-    htmlUrl: release.html_url,
-    assets: (release.assets ?? []).map((asset) => ({
-      name: asset.name,
-      downloadUrl: asset.browser_download_url,
-    })),
-  };
-}
-
-function githubHeaders(token: string | null | undefined): Record<string, string> {
-  const headers: Record<string, string> = {
-    Accept: "application/vnd.github+json",
-    "User-Agent": "aripa-dashboard",
-    "X-GitHub-Api-Version": "2022-11-28",
-  };
-
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
-
-  return headers;
-}
-
-interface GitHubReleaseResponse {
-  id: number;
-  tag_name: string;
-  name: string | null;
-  prerelease: boolean;
-  draft: boolean;
-  published_at: string | null;
-  created_at: string;
-  tarball_url: string;
-  zipball_url: string;
-  html_url: string;
-  assets?: GitHubReleaseAssetResponse[];
-}
-
-interface GitHubReleaseAssetResponse {
-  name: string;
-  browser_download_url: string;
 }
 
 interface LocalOperationsState {
