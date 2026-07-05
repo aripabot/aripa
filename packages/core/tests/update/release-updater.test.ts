@@ -585,6 +585,39 @@ describe("auto-update cron helpers", () => {
     );
   });
 
+  test("inserts one managed cron block after unmanaged jobs", () => {
+    const existing = "15 2 * * * /usr/bin/true\n";
+    const cronEntry = "0 4 * * 0 new command";
+
+    expect(updateManagedAutoUpdateCronContent(existing, cronEntry)).toBe(
+      [
+        "15 2 * * * /usr/bin/true",
+        "",
+        "# BEGIN ARIPA AUTO UPDATE",
+        cronEntry,
+        "# END ARIPA AUTO UPDATE",
+        "",
+      ].join("\n"),
+    );
+  });
+
+  test("replacing a managed cron block is idempotent", () => {
+    const cronEntry = "0 4 * * 0 new command";
+    const updated = updateManagedAutoUpdateCronContent(
+      [
+        "15 2 * * * /usr/bin/true",
+        "",
+        "# BEGIN ARIPA AUTO UPDATE",
+        "0 4 * * * old command",
+        "# END ARIPA AUTO UPDATE",
+        "",
+      ].join("\n"),
+      cronEntry,
+    );
+
+    expect(updateManagedAutoUpdateCronContent(updated, cronEntry)).toBe(updated);
+  });
+
   test("removes only the managed cron block", () => {
     const existing = [
       "15 2 * * * /usr/bin/true",
