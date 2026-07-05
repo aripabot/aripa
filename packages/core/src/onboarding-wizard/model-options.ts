@@ -1,13 +1,17 @@
-import { DEFAULT_RUNTIME_CONFIG } from "@aripabot/core/config/runtime-config.ts";
 import {
   DEFAULT_ONBOARDING_MODEL_OPTIONS,
   type OnboardingModelOptions,
-  type OnboardingModelRole,
   type WizardModelOption,
 } from "@aripabot/core/onboarding-models.ts";
 import { getFmDefaultBaseURL } from "@aripabot/core/agent/fm-compat.ts";
 import { isFmProviderAvailable } from "@aripabot/core/onboarding-wizard/provider-availability.ts";
-import type { ConfigurableProvider } from "@aripabot/core/onboarding-wizard/types.ts";
+
+export {
+  defaultModelForProvider,
+  modelOptionsForProvider,
+  selectableProvidersFromModelOptions,
+  selectedModelIndex,
+} from "@aripabot/core/onboarding-wizard/model-option-selection.ts";
 
 export async function loadWizardModelOptions(): Promise<OnboardingModelOptions> {
   const openRouterModels = await fetchOpenRouterToolModels();
@@ -60,47 +64,6 @@ export async function loadWizardModelOptions(): Promise<OnboardingModelOptions> 
     },
     web: DEFAULT_ONBOARDING_MODEL_OPTIONS.web,
   };
-}
-
-export function modelOptionsForProvider(
-  options: OnboardingModelOptions,
-  provider: ConfigurableProvider,
-  role: OnboardingModelRole,
-  selectedModel: string,
-): WizardModelOption[] {
-  const providerOptions = options[role][provider] ?? [];
-  if (providerOptions.some((option) => option.value === selectedModel)) {
-    return providerOptions;
-  }
-
-  return [
-    ...providerOptions,
-    {
-      name: selectedModel,
-      description: "Existing custom model from config.json.",
-      value: selectedModel,
-    },
-  ];
-}
-
-export function selectedModelIndex(
-  options: readonly WizardModelOption[],
-  selectedModel: string,
-): number {
-  const index = options.findIndex((option) => option.value === selectedModel);
-  return index >= 0 ? index : 0;
-}
-
-export function defaultModelForProvider(
-  options: OnboardingModelOptions,
-  provider: ConfigurableProvider,
-  role: OnboardingModelRole,
-): string {
-  return (
-    options[role][provider]?.[0]?.value ??
-    DEFAULT_ONBOARDING_MODEL_OPTIONS[role][provider][0]?.value ??
-    DEFAULT_RUNTIME_CONFIG.models[role].model
-  );
 }
 
 async function fetchOpenRouterToolModels(): Promise<WizardModelOption[]> {

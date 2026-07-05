@@ -43,6 +43,7 @@ import {
   defaultModelForProvider,
   loadWizardModelOptions,
   modelOptionsForProvider,
+  selectableProvidersFromModelOptions,
   selectedModelIndex,
 } from "@aripabot/core/onboarding-wizard/model-options.ts";
 import {
@@ -1306,14 +1307,6 @@ function selectProviderControl(
       0,
       options.findIndex((option) => option.value === selectedProvider),
     ),
-  );
-}
-
-function selectableProvidersFromModelOptions(
-  options: typeof MODEL_OPTIONS,
-): ConfigurableProvider[] {
-  return (Object.keys(options.agent) as ConfigurableProvider[]).filter(
-    (provider) => options.agent[provider].length > 0 && options.summarizer[provider].length > 0,
   );
 }
 

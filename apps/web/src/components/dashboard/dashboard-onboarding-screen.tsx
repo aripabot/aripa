@@ -40,6 +40,7 @@ import {
   validateGitHubRepo,
   validateOperatorUserId,
 } from "@aripabot/core/config/onboarding-validation.ts";
+import { selectableProvidersFromModelOptions } from "@aripabot/core/onboarding-wizard/model-option-selection.ts";
 import type {
   ConfigurableRuntimeModelProvider,
   RuntimeJsonConfig,
@@ -683,7 +684,7 @@ export function DashboardOnboardingScreen({
             id="onboarding-agent-provider"
             label="Agent Provider"
             providers={selectableProvidersFromModelOptions(
-              options,
+              options.modelOptions,
               config.models.agent.provider as ConfigurableRuntimeModelProvider,
             )}
             value={config.models.agent.provider as ConfigurableRuntimeModelProvider}
@@ -716,7 +717,7 @@ export function DashboardOnboardingScreen({
             id="onboarding-summarizer-provider"
             label="Summarizer Provider"
             providers={selectableProvidersFromModelOptions(
-              options,
+              options.modelOptions,
               config.models.summarizer.provider as ConfigurableRuntimeModelProvider,
             )}
             value={config.models.summarizer.provider as ConfigurableRuntimeModelProvider}
@@ -1068,21 +1069,6 @@ function ProviderSelect({
       </Select>
     </Field>
   );
-}
-
-function selectableProvidersFromModelOptions(
-  options: OnboardingOptionsResponse,
-  currentProvider: ConfigurableRuntimeModelProvider,
-): ConfigurableRuntimeModelProvider[] {
-  const providers = (
-    Object.keys(options.modelOptions.agent) as ConfigurableRuntimeModelProvider[]
-  ).filter(
-    (provider) =>
-      options.modelOptions.agent[provider]?.length > 0 &&
-      options.modelOptions.summarizer[provider]?.length > 0,
-  );
-
-  return providers.includes(currentProvider) ? providers : [...providers, currentProvider];
 }
 
 function ModelSelect({
