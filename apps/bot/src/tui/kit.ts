@@ -113,6 +113,34 @@ export function createSelectControlFactory({
   };
 }
 
+export function createFooterFactory({
+  Box,
+  Text,
+  colors,
+}: {
+  Box: (options: BoxOptions, ...children: Renderable[]) => BoxRenderable;
+  Text: (options: TextOptions) => TextRenderable;
+  colors: {
+    border: string;
+    muted: string;
+    panel: string;
+  };
+}): (content: string) => BoxRenderable {
+  return (content) =>
+    Box(
+      {
+        width: "100%",
+        height: 3,
+        border: true,
+        borderStyle: "rounded",
+        borderColor: colors.border,
+        backgroundColor: colors.panel,
+        paddingX: 2,
+      },
+      Text({ content, fg: colors.muted }),
+    );
+}
+
 export class TuiControlState {
   private focusCurrentControl: (() => void) | null = null;
   private currentInput: InputRenderable | null = null;

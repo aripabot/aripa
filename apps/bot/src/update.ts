@@ -14,7 +14,12 @@ import {
   type GitHubRelease,
 } from "@aripabot/core/update/release-updater.ts";
 import type { MinimalKeyEvent } from "@aripabot/core/onboarding-wizard/types.ts";
-import { createSelectControlFactory, createWizardShell, isExitKey } from "./tui/kit.ts";
+import {
+  createFooterFactory,
+  createSelectControlFactory,
+  createWizardShell,
+  isExitKey,
+} from "./tui/kit.ts";
 
 type View = "loading" | "select" | "confirm" | "updating" | "done" | "error";
 
@@ -56,6 +61,7 @@ const shell = createWizardShell({
 });
 const { Box, Text, Select, controls } = shell;
 const selectControl = createSelectControlFactory({ Select, controls, colors });
+const footerControl = createFooterFactory({ Box, Text, colors });
 
 if (updateLatest) {
   await runLatestUpdate();
@@ -295,18 +301,7 @@ function footer(): BoxRenderable {
         ? "Up/Down: choose | Enter: select | Esc/Ctrl+C: quit"
         : "Esc/Ctrl+C: quit";
 
-  return Box(
-    {
-      width: "100%",
-      height: 3,
-      border: true,
-      borderStyle: "rounded",
-      borderColor: colors.border,
-      backgroundColor: colors.panel,
-      paddingX: 2,
-    },
-    Text({ content, fg: colors.muted }),
-  );
+  return footerControl(content);
 }
 
 function releaseOptions(): SelectOption[] {

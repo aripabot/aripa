@@ -50,7 +50,7 @@ import type {
   OnboardingState,
   Step,
 } from "@aripabot/core/onboarding-wizard/types.ts";
-import { createSelectControlFactory, createWizardShell } from "./tui/kit.ts";
+import { createFooterFactory, createSelectControlFactory, createWizardShell } from "./tui/kit.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../..", import.meta.url));
 const CONFIG_PATH = Bun.env.CONFIG_PATH?.trim() || new URL("../../../config.json", import.meta.url);
@@ -73,6 +73,7 @@ const shell = createWizardShell({
 });
 const { Box, Text, Input, Select, controls } = shell;
 const selectControl = createSelectControlFactory({ Select, controls, colors });
+const footerControl = createFooterFactory({ Box, Text, colors });
 
 try {
   await shell.start(render);
@@ -902,21 +903,7 @@ function stepContent() {
 }
 
 function footer() {
-  return Box(
-    {
-      width: "100%",
-      height: 3,
-      border: true,
-      borderStyle: "rounded",
-      borderColor: colors.border,
-      backgroundColor: colors.panel,
-      paddingX: 2,
-    },
-    Text({
-      content: footerText(),
-      fg: colors.muted,
-    }),
-  );
+  return footerControl(footerText());
 }
 
 function inputControl(value: string, placeholder: string, onSubmit: (value: string) => void) {
