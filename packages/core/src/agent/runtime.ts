@@ -24,6 +24,7 @@ import {
 import type { ResolvedTextModel } from "@aripabot/core/agent/models.ts";
 import { errorSnapshot } from "@aripabot/core/shared/errors.ts";
 import { escapeRegExp } from "@aripabot/core/shared/text.ts";
+import { unrefTimer } from "@aripabot/core/shared/timers.ts";
 import packageJson from "../../package.json" with { type: "json" };
 
 const DEFAULT_BOT_NAME = "Aripa";
@@ -268,9 +269,7 @@ function createAgentTimeout(timeoutMs: number): {
     controller.abort(new Error(`Agent request timed out after ${delayMs}ms.`));
   }, delayMs);
 
-  if (typeof timeout === "object" && timeout !== null && "unref" in timeout) {
-    timeout.unref();
-  }
+  unrefTimer(timeout);
 
   return {
     signal: controller.signal,
@@ -561,9 +560,7 @@ function startTypingIndicator({
     clearScheduledRefresh();
     timeout = setTimeout(refresh, intervalMs);
 
-    if (typeof timeout === "object" && timeout !== null && "unref" in timeout) {
-      timeout.unref();
-    }
+    unrefTimer(timeout);
   };
 
   const refresh = () => {

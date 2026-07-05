@@ -109,7 +109,6 @@ export async function handleMessage({
 
   if (!action) {
     const tagResult = await handleTagInvocation({
-      client,
       message,
       parsedName: parsed.name,
       parsedArgs: parsed.args,
@@ -266,7 +265,6 @@ export async function handleMessage({
 }
 
 interface HandleTagInvocationOptions {
-  client: Client;
   message: Message;
   parsedName: string;
   parsedArgs: readonly string[];
