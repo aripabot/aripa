@@ -6,7 +6,8 @@ import type {
 } from "@/lib/api-types";
 import { readableError } from "@/lib/errors";
 import { getDockerDeploymentStatus } from "@/server/docker-deployment-service";
-import { getDashboardStatus, readLocalLogs } from "@/server/config-service";
+import { getDashboardStatus } from "@/server/config-service";
+import { readLocalLogs } from "@/server/log-sources";
 import { listReleases } from "@/server/releases";
 
 export type LoadState<T> =

@@ -1,6 +1,5 @@
 import { spawn } from "node:child_process";
 
-import { parseLogLine } from "@/server/config-service";
 import { requireDashboardApiAuth } from "@/server/dashboard-auth-next";
 import {
   CURRENT_DOCKER_SOURCE_ID,
@@ -9,6 +8,7 @@ import {
   getDockerRuntimeLogPath,
   isInsideDockerRuntime,
 } from "@/server/docker-runtime";
+import { parseLogLine } from "@/server/log-sources";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";

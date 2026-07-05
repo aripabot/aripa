@@ -1,6 +1,6 @@
 import { json, jsonError } from "@/app/api/_utils/json";
-import { readLocalLogs } from "@/server/config-service";
 import { requireDashboardApiAuth } from "@/server/dashboard-auth-next";
+import { readLocalLogs } from "@/server/log-sources";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
