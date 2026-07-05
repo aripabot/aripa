@@ -25,6 +25,28 @@ describe("dashboard log sources", () => {
     expect(entry.metadata).toEqual({ metadata: { action: "ping" } });
   });
 
+  test.each([
+    [10, "trace"],
+    [20, "debug"],
+    [30, "info"],
+    [40, "warn"],
+    [50, "error"],
+    [60, "fatal"],
+    ["warn", "warn"],
+    ["unknown-level", "unknown"],
+  ] as const)("maps pino level %s to %s", (level, expectedLevel) => {
+    const entry = parseLogLine(
+      JSON.stringify({
+        level,
+        msg: "Mapped level.",
+      }),
+      { id: "file:/tmp/aripa.log", kind: "file", name: "aripa.log" },
+      0,
+    );
+
+    expect(entry.level).toBe(expectedLevel);
+  });
+
   test("redacts sensitive log fields before returning entries", () => {
     const entry = parseLogLine(
       JSON.stringify({
