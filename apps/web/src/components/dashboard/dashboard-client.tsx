@@ -55,6 +55,7 @@ import { cn } from "@/lib/utils";
 import { ConfirmActionButton } from "@/components/dashboard/components/confirm-action-button";
 import { Field, SwitchField } from "@/components/dashboard/components/fields";
 import { Metric } from "@/components/dashboard/components/metric";
+import { ModelCard } from "@/components/dashboard/components/model-card";
 import { EmptyPanel, ErrorPanel, LoadingPanel } from "@/components/dashboard/components/panels";
 import { DashboardOnboardingScreen } from "@/components/dashboard/dashboard-onboarding-screen";
 import { useLoadState } from "@/components/dashboard/hooks/use-load-state";
@@ -1793,82 +1794,6 @@ function SettingsPage({
         </Card>
       </div>
     </form>
-  );
-}
-
-function ModelCard({
-  title,
-  model,
-  providers,
-  reasoningEfforts,
-  onChange,
-}: {
-  title: string;
-  model: RuntimeModelSelection;
-  providers: DashboardStatus["providers"];
-  reasoningEfforts: DashboardStatus["reasoningEfforts"];
-  onChange: (patch: Partial<RuntimeModelSelection>) => void;
-}) {
-  const idBase = title.toLowerCase().replace(/\s+/g, "-");
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        <CardDescription>Provider, model, and reasoning settings.</CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-4">
-        <Field label="Provider" htmlFor={`${idBase}-provider`}>
-          <Select
-            value={model.provider}
-            onValueChange={(provider) =>
-              onChange({ provider: provider as RuntimeModelSelection["provider"] })
-            }
-          >
-            <SelectTrigger id={`${idBase}-provider`}>
-              <SelectValue placeholder="Choose provider" />
-            </SelectTrigger>
-            <SelectContent>
-              {providers.map((provider) => (
-                <SelectItem key={provider} value={provider}>
-                  {provider}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
-        <Field label="Model" htmlFor={`${idBase}-model`}>
-          <Input
-            id={`${idBase}-model`}
-            name={`${idBase}-model`}
-            autoComplete="off"
-            value={model.model}
-            onChange={(event) => onChange({ model: event.target.value })}
-            spellCheck={false}
-          />
-        </Field>
-        <Field label="Reasoning" htmlFor={`${idBase}-reasoning`}>
-          <Select
-            value={model.reasoningEffort ?? "low"}
-            onValueChange={(reasoningEffort) =>
-              onChange({
-                reasoningEffort: reasoningEffort as RuntimeModelSelection["reasoningEffort"],
-              })
-            }
-          >
-            <SelectTrigger id={`${idBase}-reasoning`}>
-              <SelectValue placeholder="Choose effort" />
-            </SelectTrigger>
-            <SelectContent>
-              {reasoningEfforts.map((effort) => (
-                <SelectItem key={effort} value={effort}>
-                  {effort}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
-      </CardContent>
-    </Card>
   );
 }
 
