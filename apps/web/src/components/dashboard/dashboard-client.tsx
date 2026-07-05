@@ -458,14 +458,13 @@ function Overview({
         </div>
 
         <div className="grid divide-y sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4">
-          <Metric label="Servers" value={operations.totals.guilds} detail="" />
+          <Metric label="Servers" value={operations.totals.guilds} />
           <Metric
             label="Need Attention"
             value={operations.totals.attentionGuilds + operations.totals.expiredMutes}
-            detail=""
           />
-          <Metric label="Active Mutes" value={operations.totals.activeMutes} detail="" />
-          <Metric label="Tags" value={operations.totals.tags} detail="" />
+          <Metric label="Active Mutes" value={operations.totals.activeMutes} />
+          <Metric label="Tags" value={operations.totals.tags} />
         </div>
       </section>
 
@@ -573,12 +572,12 @@ function Overview({
   );
 }
 
-function Metric({ label, value, detail }: { label: string; value: number; detail: string }) {
+function Metric({ label, value }: { label: string; value: number }) {
   return (
     <div className="p-4">
       <p className="text-sm text-muted-foreground">{label}</p>
       <p className="mt-2 text-3xl font-semibold tracking-normal">{formatCount(value)}</p>
-      <p className="mt-1 text-sm text-muted-foreground">{detail}</p>
+      <p className="mt-1 h-5 text-sm text-muted-foreground" aria-hidden="true" />
     </div>
   );
 }
