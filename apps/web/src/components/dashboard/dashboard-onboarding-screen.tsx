@@ -8,21 +8,20 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   ChoiceList,
-  Field,
   ModelSelect,
   OnboardingProgress,
   ProviderSelect,
   SwitchField,
 } from "@/components/dashboard/dashboard-onboarding-controls";
-import { Input } from "@/components/ui/input";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
+  CustomRateLimitStep,
+  NameStep,
+  OperatorStep,
+  ServerAllowlistStep,
+  StyleStep,
+  UpdateKeyPasteStep,
+  UpdateRepoStep,
+} from "@/components/dashboard/dashboard-onboarding-steps";
 import { completeOnboarding, generateSigningKey, getOnboardingOptions } from "@/lib/api";
 import { readableError } from "@/lib/errors";
 import type {
@@ -510,70 +509,24 @@ export function DashboardOnboardingScreen({
 
     switch (step) {
       case "name":
-        return (
-          <Field label="Bot Name" htmlFor="onboarding-name">
-            <Input
-              id="onboarding-name"
-              name="name"
-              autoComplete="off"
-              value={config.name}
-              onChange={(event) => updateConfig({ name: event.target.value })}
-              placeholder="Aripa…"
-              required
-            />
-          </Field>
-        );
+        return <NameStep value={config.name} onChange={(name) => updateConfig({ name })} />;
       case "operator":
         return (
-          <Field label="Operator User ID" htmlFor="onboarding-operator">
-            <Input
-              id="onboarding-operator"
-              name="operator-user-id"
-              autoComplete="off"
-              inputMode="numeric"
-              value={config.operatorUserId ?? ""}
-              onChange={(event) =>
-                updateConfig({ operatorUserId: event.target.value.trim() || null })
-              }
-              placeholder="Optional Discord user ID…"
-              spellCheck={false}
-            />
-          </Field>
+          <OperatorStep
+            value={config.operatorUserId}
+            onChange={(operatorUserId) => updateConfig({ operatorUserId })}
+          />
         );
       case "style":
         return (
-          <Field label="Agent Style" htmlFor="onboarding-style">
-            <Select
-              value={config.stylePrompt}
-              onValueChange={(value) => updateConfig({ stylePrompt: value })}
-            >
-              <SelectTrigger id="onboarding-style">
-                <SelectValue placeholder="Choose a style" />
-              </SelectTrigger>
-              <SelectContent>
-                {options.styles.map((style) => (
-                  <SelectItem key={style.value} value={style.value}>
-                    {style.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
+          <StyleStep
+            styles={options.styles}
+            value={config.stylePrompt}
+            onChange={(stylePrompt) => updateConfig({ stylePrompt })}
+          />
         );
       case "servers":
-        return (
-          <Field label="Server Allowlist" htmlFor="onboarding-servers">
-            <Textarea
-              id="onboarding-servers"
-              name="allowlisted-server-ids"
-              autoComplete="off"
-              value={allowlistInput}
-              onChange={(event) => setAllowlistInput(event.target.value)}
-              placeholder="123456789012345678…"
-              spellCheck={false}
-            />
-          </Field>
-        );
+        return <ServerAllowlistStep value={allowlistInput} onChange={setAllowlistInput} />;
       case "rate-limit":
         return (
           <ChoiceList
@@ -599,17 +552,7 @@ export function DashboardOnboardingScreen({
         );
       case "rate-limit-custom":
         return (
-          <Field label="Messages Per Minute" htmlFor="onboarding-rate-limit-custom">
-            <Input
-              id="onboarding-rate-limit-custom"
-              name="agent-rate-limit-custom"
-              autoComplete="off"
-              inputMode="numeric"
-              value={customRateLimitInput}
-              onChange={(event) => setCustomRateLimitInput(event.target.value)}
-              placeholder="12…"
-            />
-          </Field>
+          <CustomRateLimitStep value={customRateLimitInput} onChange={setCustomRateLimitInput} />
         );
       case "log-privacy":
         return (
@@ -740,22 +683,15 @@ export function DashboardOnboardingScreen({
         );
       case "update-repo":
         return (
-          <Field label="GitHub Repository" htmlFor="onboarding-update-repo">
-            <Input
-              id="onboarding-update-repo"
-              name="update-repository"
-              autoComplete="off"
-              value={config.updates.githubRepo}
-              onChange={(event) =>
-                setConfig({
-                  ...config,
-                  updates: { ...config.updates, githubRepo: event.target.value },
-                })
-              }
-              placeholder="owner/repo…"
-              spellCheck={false}
-            />
-          </Field>
+          <UpdateRepoStep
+            value={config.updates.githubRepo}
+            onChange={(githubRepo) =>
+              setConfig({
+                ...config,
+                updates: { ...config.updates, githubRepo },
+              })
+            }
+          />
         );
       case "update-key":
         return (
@@ -789,28 +725,20 @@ export function DashboardOnboardingScreen({
         );
       case "update-key-paste":
         return (
-          <Field label="Base64 Public Key" htmlFor="onboarding-release-key">
-            <Textarea
-              id="onboarding-release-key"
-              name="release-public-key"
-              autoComplete="off"
-              value={config.updates.releasePublicKeyPemBase64 ?? ""}
-              onChange={(event) => {
-                const updates = { ...config.updates };
-                delete updates.releasePublicKeyPem;
-                const key = event.target.value.trim();
-                setConfig({
-                  ...config,
-                  updates: {
-                    ...updates,
-                    ...(key ? { releasePublicKeyPemBase64: key } : {}),
-                  },
-                });
-              }}
-              placeholder="Optional base64 public key…"
-              spellCheck={false}
-            />
-          </Field>
+          <UpdateKeyPasteStep
+            value={config.updates.releasePublicKeyPemBase64 ?? ""}
+            onChange={(key) => {
+              const updates = { ...config.updates };
+              delete updates.releasePublicKeyPem;
+              setConfig({
+                ...config,
+                updates: {
+                  ...updates,
+                  ...(key ? { releasePublicKeyPemBase64: key } : {}),
+                },
+              });
+            }}
+          />
         );
       case "update-key-generated":
         return (
