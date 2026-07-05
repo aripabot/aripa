@@ -1,15 +1,11 @@
 import {
-  BoxRenderable,
   SelectRenderable,
   SelectRenderableEvents,
-  TextRenderable,
   createCliRenderer,
   parseKeypress,
-  type BoxOptions,
+  type BoxRenderable,
   type Renderable,
   type SelectOption,
-  type SelectRenderableOptions,
-  type TextOptions,
 } from "@opentui/core";
 import { fileURLToPath } from "node:url";
 
@@ -26,6 +22,7 @@ import {
   type GitHubRelease,
 } from "@aripabot/core/update/release-updater.ts";
 import type { MinimalKeyEvent } from "@aripabot/core/onboarding-wizard/types.ts";
+import { createRenderableFactories, type CliRenderer } from "./tui/kit.ts";
 
 type View = "loading" | "select" | "confirm" | "updating" | "done" | "error";
 
@@ -49,7 +46,7 @@ const isOfficialUpdateRepo = updateConfig.githubRepo === DEFAULT_GITHUB_REPO;
 const dryRunUpdates = Bun.env.DRY_RUN_UPDATES?.trim() === "true";
 const updateLatest = Bun.argv.slice(2).includes("--latest");
 
-let renderer: Awaited<ReturnType<typeof createCliRenderer>> | null = null;
+let renderer: CliRenderer | null = null;
 let currentSelect: SelectRenderable | null = null;
 let currentSelectHandler: ((option: SelectOption) => void) | null = null;
 let focusCurrentControl: (() => void) | null = null;
@@ -64,6 +61,7 @@ let message = "Scanning GitHub releases...";
 let errorMessage: string | null = null;
 let detectedDefaultDockerContainer = false;
 let spinnerIndex = 0;
+const { Box, Text, Select } = createRenderableFactories(requireRenderer);
 
 if (updateLatest) {
   await runLatestUpdate();
@@ -199,24 +197,7 @@ function render(): void {
   renderer.requestRender();
 }
 
-function Box(options: BoxOptions, ...children: Renderable[]): BoxRenderable {
-  const box = new BoxRenderable(requireRenderer(), options);
-  for (const child of children) {
-    box.add(child);
-  }
-
-  return box;
-}
-
-function Text(options: TextOptions): TextRenderable {
-  return new TextRenderable(requireRenderer(), options);
-}
-
-function Select(options: SelectRenderableOptions): SelectRenderable {
-  return new SelectRenderable(requireRenderer(), options);
-}
-
-function requireRenderer() {
+function requireRenderer(): CliRenderer {
   if (!renderer) {
     throw new Error("Update renderer has not been created.");
   }
@@ -224,7 +205,7 @@ function requireRenderer() {
   return renderer;
 }
 
-function header(): BoxRenderable {
+function header() {
   return Box(
     {
       width: "100%",

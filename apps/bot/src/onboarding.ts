@@ -1,18 +1,11 @@
 import {
-  BoxRenderable,
   InputRenderableEvents,
   InputRenderable,
   SelectRenderableEvents,
   SelectRenderable,
-  TextRenderable,
   createCliRenderer,
   parseKeypress,
-  type BoxOptions,
-  type InputRenderableOptions,
-  type Renderable,
   type SelectOption,
-  type SelectRenderableOptions,
-  type TextOptions,
 } from "@opentui/core";
 import { fileURLToPath } from "node:url";
 
@@ -64,6 +57,7 @@ import type {
   OnboardingState,
   Step,
 } from "@aripabot/core/onboarding-wizard/types.ts";
+import { createRenderableFactories, type CliRenderer } from "./tui/kit.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../..", import.meta.url));
 const CONFIG_PATH = Bun.env.CONFIG_PATH?.trim() || new URL("../../../config.json", import.meta.url);
@@ -72,7 +66,7 @@ const existingConfig = await loadExistingRuntimeConfig(CONFIG_PATH);
 const state: OnboardingState = createInitialOnboardingState(CONFIG_PATH, existingConfig);
 
 let step: Step = initialStepForState(state);
-let renderer: Awaited<ReturnType<typeof createCliRenderer>> | null = null;
+let renderer: CliRenderer | null = null;
 let focusCurrentControl: (() => void) | null = null;
 let currentControlKind: "input" | "select" | null = null;
 let currentInput: InputRenderable | null = null;
@@ -86,6 +80,7 @@ let generatedKeyMessage: string | null = null;
 const STYLE_PROMPTS = await loadStylePrompts(state.stylePrompt);
 const MODEL_OPTIONS = await loadWizardModelOptions();
 const SELECTABLE_MODEL_PROVIDERS = selectableProvidersFromModelOptions(MODEL_OPTIONS);
+const { Box, Text, Input, Select } = createRenderableFactories(requireRenderer);
 
 try {
   renderer = await createCliRenderer({
@@ -146,28 +141,7 @@ function render(): void {
   renderer.requestRender();
 }
 
-function Box(options: BoxOptions, ...children: Renderable[]): BoxRenderable {
-  const box = new BoxRenderable(requireRenderer(), options);
-  for (const child of children) {
-    box.add(child);
-  }
-
-  return box;
-}
-
-function Text(options: TextOptions): TextRenderable {
-  return new TextRenderable(requireRenderer(), options);
-}
-
-function Input(options: InputRenderableOptions): InputRenderable {
-  return new InputRenderable(requireRenderer(), options);
-}
-
-function Select(options: SelectRenderableOptions): SelectRenderable {
-  return new SelectRenderable(requireRenderer(), options);
-}
-
-function requireRenderer() {
+function requireRenderer(): CliRenderer {
   if (!renderer) {
     throw new Error("Onboarding renderer has not been created.");
   }
