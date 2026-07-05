@@ -2051,25 +2051,51 @@ function viewTitle(view: View): string {
   return views.find((item) => item.id === view)?.label ?? "Overview";
 }
 
+type BadgeTone = "success" | "danger" | "warning" | "info" | "muted";
+
+const badgeToneClasses: Record<BadgeTone, string> = {
+  success: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+  danger: "bg-red-500/10 text-red-700 dark:text-red-300",
+  warning: "bg-amber-500/10 text-amber-700 dark:text-amber-300",
+  info: "bg-sky-500/10 text-sky-700 dark:text-sky-300",
+  muted: "bg-muted text-muted-foreground",
+};
+
+type MetricTextTone = "default" | "danger" | "warning";
+
+const metricTextToneClasses: Record<MetricTextTone, string> = {
+  default: "text-foreground",
+  danger: "text-red-700 dark:text-red-300",
+  warning: "text-amber-700 dark:text-amber-300",
+};
+
+function badgeToneClass(tone: BadgeTone): string {
+  return badgeToneClasses[tone];
+}
+
+function metricTextToneClass(tone: MetricTextTone): string {
+  return metricTextToneClasses[tone];
+}
+
 function runtimeToneClass(state: DashboardStatus["botRuntime"]["state"]): string {
   switch (state) {
     case "running":
-      return "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+      return badgeToneClass("success");
     case "docker":
-      return "bg-sky-500/10 text-sky-700 dark:text-sky-300";
+      return badgeToneClass("info");
     case "stopped":
-      return "bg-red-500/10 text-red-700 dark:text-red-300";
+      return badgeToneClass("danger");
   }
 }
 
 function dockerStateClass(state: DockerDeploymentStatus["state"]): string {
   switch (state) {
     case "running":
-      return "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+      return badgeToneClass("success");
     case "stopped":
-      return "bg-red-500/10 text-red-700 dark:text-red-300";
+      return badgeToneClass("danger");
     case "unknown":
-      return "bg-muted text-muted-foreground";
+      return badgeToneClass("muted");
   }
 }
 
@@ -2085,11 +2111,11 @@ function dockerActionLabel(action: DockerDeploymentAction): string {
 function readinessClass(readiness: DashboardStatus["operations"]["guilds"][number]["readiness"]) {
   switch (readiness) {
     case "ready":
-      return "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+      return badgeToneClass("success");
     case "attention":
-      return "bg-red-500/10 text-red-700 dark:text-red-300";
+      return badgeToneClass("danger");
     case "quiet":
-      return "bg-muted text-muted-foreground";
+      return badgeToneClass("muted");
   }
 }
 
@@ -2109,11 +2135,11 @@ function attentionIconClass(
 function muteStatusClass(status: DashboardStatus["operations"]["activeMutes"][number]["status"]) {
   switch (status) {
     case "active":
-      return "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+      return badgeToneClass("success");
     case "expired":
-      return "bg-red-500/10 text-red-700 dark:text-red-300";
+      return badgeToneClass("danger");
     case "indefinite":
-      return "bg-muted text-muted-foreground";
+      return badgeToneClass("muted");
   }
 }
 
@@ -2271,11 +2297,11 @@ function levelLabel(level: LogEntryLevel): string {
 function logMetricClass(tone: "default" | "warn" | "error"): string {
   switch (tone) {
     case "error":
-      return "text-red-700 dark:text-red-300";
+      return metricTextToneClass("danger");
     case "warn":
-      return "text-amber-700 dark:text-amber-300";
+      return metricTextToneClass("warning");
     case "default":
-      return "text-foreground";
+      return metricTextToneClass("default");
   }
 }
 
@@ -2283,14 +2309,14 @@ function logLevelClass(level: LogEntryLevel): string {
   switch (level) {
     case "fatal":
     case "error":
-      return "bg-red-500/10 text-red-700 dark:text-red-300";
+      return badgeToneClass("danger");
     case "warn":
-      return "bg-amber-500/10 text-amber-700 dark:text-amber-300";
+      return badgeToneClass("warning");
     case "info":
-      return "bg-sky-500/10 text-sky-700 dark:text-sky-300";
+      return badgeToneClass("info");
     case "debug":
     case "trace":
-      return "bg-muted text-muted-foreground";
+      return badgeToneClass("muted");
     case "unknown":
       return "bg-background text-muted-foreground";
   }
