@@ -47,7 +47,11 @@ export async function updateMemberRole(
   const subaction = parsedInvocation.args[0]?.toLowerCase();
 
   if (subaction === "search") {
-    return searchGuildRoles(context, parsedInvocation.args.slice(1).join(" "));
+    return searchGuildRoles(
+      context,
+      context.message.guild,
+      parsedInvocation.args.slice(1).join(" "),
+    );
   }
 
   if (subaction !== "add" && subaction !== "remove") {
@@ -143,7 +147,11 @@ export async function updateMemberRole(
   );
 }
 
-function searchGuildRoles(context: ActionContext, rawQuery: string): Promise<ActionReply> {
+function searchGuildRoles(
+  context: ActionContext,
+  guild: NonNullable<ActionContext["message"]["guild"]>,
+  rawQuery: string,
+): Promise<ActionReply> {
   const query = rawQuery.trim();
 
   if (!query) {
@@ -151,7 +159,7 @@ function searchGuildRoles(context: ActionContext, rawQuery: string): Promise<Act
   }
 
   const normalizedQuery = query.toLocaleLowerCase();
-  const matches = Array.from(context.message.guild?.roles.cache.values() ?? [])
+  const matches = Array.from(guild.roles.cache.values())
     .filter((role) => role.name.toLocaleLowerCase().includes(normalizedQuery))
     .sort((left, right) => {
       const leftName = left.name.toLocaleLowerCase();
