@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type * as React from "react";
 import {
   Activity,
@@ -763,18 +763,38 @@ function LogsPage({ logs, onRefresh }: { logs: LoadState<LogsResponse>; onRefres
   const [sourceId, setSourceId] = useState("all");
   const [liveTail, setLiveTail] = useState(true);
   const [entries, setEntries] = useState<DashboardLogEntry[]>([]);
+  const entryKeysRef = useRef<Set<string> | null>(null);
   const [streamState, setStreamState] = useState<"idle" | "live" | "paused" | "reconnecting">(
     "idle",
   );
 
+  if (entryKeysRef.current === null) {
+    entryKeysRef.current = new Set();
+  }
+  const entryKeys = entryKeysRef.current;
+
   useEffect(() => {
     if (logs.status === "ready") {
       setEntries(logs.data.entries);
+      entryKeys.clear();
+      for (const entry of logs.data.entries) {
+        entryKeys.add(logEntryKey(entry));
+      }
     }
+  }, [entryKeys, logs]);
+
+  const dockerSourceId = useMemo(() => {
+    if (logs.status !== "ready") {
+      return null;
+    }
+
+    return (
+      logs.data.sources.find((source) => source.kind === "docker" && source.available)?.id ?? null
+    );
   }, [logs]);
 
   useEffect(() => {
-    if (logs.status !== "ready") {
+    if (dockerSourceId === null) {
       setStreamState("idle");
       return;
     }
@@ -784,23 +804,14 @@ function LogsPage({ logs, onRefresh }: { logs: LoadState<LogsResponse>; onRefres
       return;
     }
 
-    const dockerSource = logs.data.sources.find(
-      (source) => source.kind === "docker" && source.available,
-    );
-
-    if (!dockerSource) {
-      setStreamState("idle");
-      return;
-    }
-
     const eventSource = new EventSource(
-      `/api/log-stream?source=${encodeURIComponent(dockerSource.id)}`,
+      `/api/log-stream?source=${encodeURIComponent(dockerSourceId)}`,
     );
 
     eventSource.addEventListener("open", () => setStreamState("live"));
     eventSource.addEventListener("log", (event) => {
       const entry = JSON.parse(event.data) as DashboardLogEntry;
-      setEntries((current) => appendLogEntry(current, entry));
+      setEntries((current) => appendLogEntry(current, entry, entryKeys));
     });
     eventSource.addEventListener("stream-error", () => setStreamState("reconnecting"));
     eventSource.addEventListener("done", () => setStreamState("reconnecting"));
@@ -809,7 +820,22 @@ function LogsPage({ logs, onRefresh }: { logs: LoadState<LogsResponse>; onRefres
     return () => {
       eventSource.close();
     };
-  }, [liveTail, logs]);
+  }, [dockerSourceId, entryKeys, liveTail]);
+
+  const availableSources = useMemo(
+    () => (logs.status === "ready" ? logs.data.sources.filter((source) => source.available) : []),
+    [logs],
+  );
+  const activeSourceId =
+    sourceId === "all" || availableSources.some((source) => source.id === sourceId)
+      ? sourceId
+      : "all";
+  const queryText = query.trim().toLowerCase();
+  const { summary, visibleEntries } = useMemo(
+    () => filterAndSummarizeLogs(entries, { activeSourceId, level, queryText }),
+    [activeSourceId, entries, level, queryText],
+  );
+  const shownEntries = useMemo(() => newestFirstLogEntries(visibleEntries), [visibleEntries]);
 
   if (logs.status === "loading") {
     return <LoadingPanel label="Loading logs" />;
@@ -818,30 +844,6 @@ function LogsPage({ logs, onRefresh }: { logs: LoadState<LogsResponse>; onRefres
   if (logs.status === "error") {
     return <ErrorPanel title="Logs unavailable" message={logs.error} onRetry={onRefresh} />;
   }
-
-  const availableSources = logs.data.sources.filter((source) => source.available);
-  const activeSourceId =
-    sourceId === "all" || availableSources.some((source) => source.id === sourceId)
-      ? sourceId
-      : "all";
-  const queryText = query.trim().toLowerCase();
-  const visibleEntries = entries.filter((entry) => {
-    if (level !== "all" && entry.level !== level) {
-      return false;
-    }
-
-    if (activeSourceId !== "all" && entry.sourceId !== activeSourceId) {
-      return false;
-    }
-
-    if (!queryText) {
-      return true;
-    }
-
-    return `${entry.message} ${entry.raw} ${entry.sourceName}`.toLowerCase().includes(queryText);
-  });
-  const summary = summarizeLogs(entries);
-  const shownEntries = newestFirstLogEntries(visibleEntries);
 
   return (
     <div className="grid gap-5">
@@ -2134,15 +2136,28 @@ function datumToneClass(tone: "default" | "good" | "muted"): string {
 const logLevels: LogEntryLevel[] = ["trace", "debug", "info", "warn", "error", "fatal", "unknown"];
 
 function appendLogEntry(
-  entries: readonly DashboardLogEntry[],
+  entries: DashboardLogEntry[],
   entry: DashboardLogEntry,
+  entryKeys: Set<string>,
 ): DashboardLogEntry[] {
   const entryKey = logEntryKey(entry);
-  if (entries.some((current) => logEntryKey(current) === entryKey)) {
-    return [...entries];
+  if (entryKeys.has(entryKey)) {
+    return entries;
   }
 
-  return [...entries, entry].slice(-800);
+  const nextEntries = [...entries, entry].slice(-800);
+
+  if (nextEntries.length === entries.length + 1) {
+    entryKeys.add(entryKey);
+    return nextEntries;
+  }
+
+  entryKeys.clear();
+  for (const nextEntry of nextEntries) {
+    entryKeys.add(logEntryKey(nextEntry));
+  }
+
+  return nextEntries;
 }
 
 function newestFirstLogEntries(entries: readonly DashboardLogEntry[]): DashboardLogEntry[] {
@@ -2153,14 +2168,43 @@ function logEntryKey(entry: DashboardLogEntry): string {
   return `${entry.sourceId}:${entry.timestamp ?? ""}:${entry.raw}`;
 }
 
-function summarizeLogs(entries: readonly DashboardLogEntry[]): {
-  errors: number;
-  warnings: number;
+function filterAndSummarizeLogs(
+  entries: readonly DashboardLogEntry[],
+  filters: { activeSourceId: string; level: LogEntryLevel | "all"; queryText: string },
+): {
+  summary: { errors: number; warnings: number };
+  visibleEntries: DashboardLogEntry[];
 } {
-  return {
-    errors: entries.filter((entry) => entry.level === "error" || entry.level === "fatal").length,
-    warnings: entries.filter((entry) => entry.level === "warn").length,
-  };
+  let errors = 0;
+  let warnings = 0;
+  const visibleEntries: DashboardLogEntry[] = [];
+
+  for (const entry of entries) {
+    if (entry.level === "error" || entry.level === "fatal") {
+      errors += 1;
+    } else if (entry.level === "warn") {
+      warnings += 1;
+    }
+
+    if (filters.level !== "all" && entry.level !== filters.level) {
+      continue;
+    }
+
+    if (filters.activeSourceId !== "all" && entry.sourceId !== filters.activeSourceId) {
+      continue;
+    }
+
+    if (
+      filters.queryText &&
+      !`${entry.message} ${entry.raw} ${entry.sourceName}`.toLowerCase().includes(filters.queryText)
+    ) {
+      continue;
+    }
+
+    visibleEntries.push(entry);
+  }
+
+  return { summary: { errors, warnings }, visibleEntries };
 }
 
 function logCaptureLabel(
