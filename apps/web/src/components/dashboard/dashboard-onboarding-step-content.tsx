@@ -34,6 +34,28 @@ import type { Step as WizardStep } from "@aripabot/core/onboarding-wizard/types.
 export type DashboardOnboardingStep = Exclude<WizardStep, "existing-config" | "done">;
 export type UpdateSource = "official" | "custom" | "disabled";
 
+export interface DashboardOnboardingStepContentProps {
+  allowlistInput: string;
+  config: RuntimeJsonConfig;
+  customRateLimitInput: string;
+  generatedPrivateKey: string | null;
+  modelMode: "defaults" | "customize";
+  onCopyGeneratedKey: () => void;
+  onGenerateKeyPair: () => void;
+  options: OnboardingOptionsResponse | null;
+  setAllowlistInput: React.Dispatch<React.SetStateAction<string>>;
+  setConfig: React.Dispatch<React.SetStateAction<RuntimeJsonConfig>>;
+  setCustomRateLimitInput: React.Dispatch<React.SetStateAction<string>>;
+  setGeneratedPrivateKey: React.Dispatch<React.SetStateAction<string | null>>;
+  setModelMode: React.Dispatch<React.SetStateAction<"defaults" | "customize">>;
+  setStepWithReset: (nextStep: DashboardOnboardingStep) => void;
+  setUpdateSource: React.Dispatch<React.SetStateAction<UpdateSource>>;
+  step: DashboardOnboardingStep;
+  updateConfig: (patch: Partial<RuntimeJsonConfig>) => void;
+  updateModel: (role: "agent" | "summarizer", patch: Partial<RuntimeModelSelection>) => void;
+  updateSource: UpdateSource;
+}
+
 export function DashboardOnboardingStepContent({
   allowlistInput,
   config,
@@ -54,27 +76,7 @@ export function DashboardOnboardingStepContent({
   updateConfig,
   updateModel,
   updateSource,
-}: {
-  allowlistInput: string;
-  config: RuntimeJsonConfig;
-  customRateLimitInput: string;
-  generatedPrivateKey: string | null;
-  modelMode: "defaults" | "customize";
-  onCopyGeneratedKey: () => void;
-  onGenerateKeyPair: () => void;
-  options: OnboardingOptionsResponse | null;
-  setAllowlistInput: React.Dispatch<React.SetStateAction<string>>;
-  setConfig: React.Dispatch<React.SetStateAction<RuntimeJsonConfig>>;
-  setCustomRateLimitInput: React.Dispatch<React.SetStateAction<string>>;
-  setGeneratedPrivateKey: React.Dispatch<React.SetStateAction<string | null>>;
-  setModelMode: React.Dispatch<React.SetStateAction<"defaults" | "customize">>;
-  setStepWithReset: (nextStep: DashboardOnboardingStep) => void;
-  setUpdateSource: React.Dispatch<React.SetStateAction<UpdateSource>>;
-  step: DashboardOnboardingStep;
-  updateConfig: (patch: Partial<RuntimeJsonConfig>) => void;
-  updateModel: (role: "agent" | "summarizer", patch: Partial<RuntimeModelSelection>) => void;
-  updateSource: UpdateSource;
-}) {
+}: DashboardOnboardingStepContentProps) {
   if (!options) {
     return null;
   }
