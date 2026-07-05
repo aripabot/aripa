@@ -35,6 +35,14 @@ interface GuildConfigRow {
   updated_at: string;
 }
 
+interface GuildTagRow {
+  guild_id: string;
+  tag_name: string;
+  content: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export class GuildConfigStore {
   readonly db: Database;
 
@@ -181,16 +189,7 @@ export class GuildConfigStore {
     }
 
     const row = this.db
-      .query<
-        {
-          guild_id: string;
-          tag_name: string;
-          content: string;
-          created_at: string;
-          updated_at: string;
-        },
-        [string, string]
-      >(
+      .query<GuildTagRow, [string, string]>(
         `SELECT guild_id, tag_name, content, created_at, updated_at
          FROM guild_tag
          WHERE guild_id = ? AND tag_name = ?`,
@@ -201,66 +200,30 @@ export class GuildConfigStore {
       return null;
     }
 
-    return {
-      guildId: row.guild_id,
-      name: row.tag_name,
-      content: row.content,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-    };
+    return mapGuildTagRow(row);
   }
 
   listTags(guildId: string): GuildTag[] {
     return this.db
-      .query<
-        {
-          guild_id: string;
-          tag_name: string;
-          content: string;
-          created_at: string;
-          updated_at: string;
-        },
-        [string]
-      >(
+      .query<GuildTagRow, [string]>(
         `SELECT guild_id, tag_name, content, created_at, updated_at
          FROM guild_tag
          WHERE guild_id = ?
          ORDER BY tag_name ASC`,
       )
       .all(guildId)
-      .map((row) => ({
-        guildId: row.guild_id,
-        name: row.tag_name,
-        content: row.content,
-        createdAt: row.created_at,
-        updatedAt: row.updated_at,
-      }));
+      .map(mapGuildTagRow);
   }
 
   listAllTags(): GuildTag[] {
     return this.db
-      .query<
-        {
-          guild_id: string;
-          tag_name: string;
-          content: string;
-          created_at: string;
-          updated_at: string;
-        },
-        []
-      >(
+      .query<GuildTagRow, []>(
         `SELECT guild_id, tag_name, content, created_at, updated_at
          FROM guild_tag
          ORDER BY guild_id ASC, tag_name ASC`,
       )
       .all()
-      .map((row) => ({
-        guildId: row.guild_id,
-        name: row.tag_name,
-        content: row.content,
-        createdAt: row.created_at,
-        updatedAt: row.updated_at,
-      }));
+      .map(mapGuildTagRow);
   }
 
   upsertTag(guildId: string, name: string, content: string): GuildTag {
@@ -379,6 +342,16 @@ function mapGuildConfigRow(row: GuildConfigRow): GuildConfig {
     banMessage: row.ban_message,
     muteRoleId: row.mute_role_id,
     muteMode: normalizeMuteMode(row.mute_mode),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function mapGuildTagRow(row: GuildTagRow): GuildTag {
+  return {
+    guildId: row.guild_id,
+    name: row.tag_name,
+    content: row.content,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
