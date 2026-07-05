@@ -6,7 +6,26 @@ COPY package.json bun.lock ./
 COPY apps/bot/package.json ./apps/bot/package.json
 COPY apps/web/package.json ./apps/web/package.json
 COPY packages/core/package.json ./packages/core/package.json
-RUN bun install 
+RUN bun install --frozen-lockfile
+
+FROM oven/bun:1.3-alpine AS prod-deps
+
+WORKDIR /app
+
+COPY package.json bun.lock ./
+COPY apps/bot/package.json ./apps/bot/package.json
+COPY apps/web/package.json ./apps/web/package.json
+COPY packages/core/package.json ./packages/core/package.json
+RUN bun install --frozen-lockfile --production
+
+FROM deps AS builder
+
+COPY package.json bun.lock tsconfig.json config.template.json ./
+COPY apps ./apps
+COPY packages ./packages
+COPY scripts/docker/start_docker.sh ./scripts/docker/start_docker.sh
+
+RUN bun run --cwd apps/web build
 
 FROM oven/bun:1.3-alpine AS runtime
 
@@ -20,14 +39,13 @@ ENV NODE_ENV=production \
 
 RUN addgroup -S aripa && adduser -S aripa -G aripa
 
-COPY --from=deps --chown=aripa:aripa /app/node_modules ./node_modules
-COPY --chown=aripa:aripa package.json bun.lock tsconfig.json config.template.json ./
-COPY --chown=aripa:aripa apps ./apps
-COPY --chown=aripa:aripa packages ./packages
-COPY --chown=aripa:aripa scripts/docker/start_docker.sh ./scripts/docker/start_docker.sh
+COPY --from=prod-deps --chown=aripa:aripa /app/node_modules ./node_modules
+COPY --from=builder --chown=aripa:aripa /app/package.json /app/bun.lock /app/tsconfig.json /app/config.template.json ./
+COPY --from=builder --chown=aripa:aripa /app/apps ./apps
+COPY --from=builder --chown=aripa:aripa /app/packages ./packages
+COPY --from=builder --chown=aripa:aripa /app/scripts/docker/start_docker.sh ./scripts/docker/start_docker.sh
 
-RUN bun run --cwd apps/web build && \
-    mkdir -p /app/data && \
+RUN mkdir -p /app/data && \
     chmod +x /app/scripts/docker/start_docker.sh && \
     chown aripa:aripa /app/data
 
