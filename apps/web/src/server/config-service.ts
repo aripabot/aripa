@@ -1125,7 +1125,7 @@ async function resolveDatabasePath(): Promise<string> {
     }
   }
 
-  return "aripa.sqlite";
+  return join(repositoryRoot, "aripa.sqlite");
 }
 
 export async function listReleases(): Promise<ReleasesResponse> {
