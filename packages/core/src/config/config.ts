@@ -1,3 +1,6 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   cloneDefaultRuntimeConfig,
   parseRuntimeJsonConfig,
@@ -29,15 +32,17 @@ export {
   type RuntimeWebModelSelection,
 } from "@aripabot/core/config/runtime-config.ts";
 
-const defaultRuntimeConfigUrl = new URL("../../../../config.json", import.meta.url);
+const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
+const defaultRuntimeConfigPath = join(repositoryRoot, "config.json");
+const defaultDatabasePath = join(repositoryRoot, "aripa.sqlite");
 
 const runtimeConfig = await loadRuntimeJsonConfig();
 
 export const config = {
-  token: Bun.env.TOKEN,
-  prefix: Bun.env.PREFIX?.trim() || "-",
-  logLevel: Bun.env.LOG_LEVEL || "info",
-  databasePath: Bun.env.DATABASE_PATH?.trim() || "aripa.sqlite",
+  token: process.env.TOKEN,
+  prefix: process.env.PREFIX?.trim() || "-",
+  logLevel: process.env.LOG_LEVEL || "info",
+  databasePath: process.env.DATABASE_PATH?.trim() || defaultDatabasePath,
   name: runtimeConfig.name,
   operatorUserId: runtimeConfig.operatorUserId,
   stylePrompt: runtimeConfig.stylePrompt,
@@ -68,13 +73,15 @@ export function isGuildAllowed(
 }
 
 export async function loadRuntimeJsonConfig(
-  pathOrUrl: string | URL = Bun.env.CONFIG_PATH?.trim() || defaultRuntimeConfigUrl,
+  pathOrUrl: string | URL = process.env.CONFIG_PATH?.trim() || defaultRuntimeConfigPath,
 ): Promise<RuntimeJsonConfig> {
-  const file = Bun.file(pathOrUrl);
+  try {
+    return parseRuntimeJsonConfig(JSON.parse(await readFile(pathOrUrl, "utf8")));
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return cloneDefaultRuntimeConfig();
+    }
 
-  if (!(await file.exists())) {
-    return cloneDefaultRuntimeConfig();
+    throw error;
   }
-
-  return parseRuntimeJsonConfig(await file.json());
 }

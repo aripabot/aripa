@@ -1,9 +1,15 @@
 import { describe, expect, test } from "vitest";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   DEFAULT_RUNTIME_CONFIG,
+  config,
   isGuildAllowed,
+  loadRuntimeJsonConfig,
   parseRuntimeJsonConfig,
 } from "@aripabot/core/config/config.ts";
+
+const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 
 describe("parseRuntimeJsonConfig", () => {
   test("uses defaults when config values are absent", () => {
@@ -123,6 +129,20 @@ describe("parseRuntimeJsonConfig", () => {
       agentMaxConcurrentRequests: DEFAULT_RUNTIME_CONFIG.agentMaxConcurrentRequests,
       agentMaxConcurrentRequestsPerGuild: DEFAULT_RUNTIME_CONFIG.agentMaxConcurrentRequestsPerGuild,
     });
+  });
+});
+
+describe("loadRuntimeJsonConfig", () => {
+  test("uses defaults when the config file is missing", async () => {
+    await expect(
+      loadRuntimeJsonConfig(join(repositoryRoot, ".missing-config.json")),
+    ).resolves.toEqual(DEFAULT_RUNTIME_CONFIG);
+  });
+});
+
+describe("config", () => {
+  test("uses a repository-root database path by default", () => {
+    expect(config.databasePath).toBe(join(repositoryRoot, "aripa.sqlite"));
   });
 });
 
