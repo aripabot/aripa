@@ -2,9 +2,38 @@ import { describe, expect, test } from "vitest";
 
 import {
   formatRateLimitInputValue,
+  previousStepFor,
   rateLimitPresetIndex,
   rateLimitPresetValue,
 } from "@aripabot/core/onboarding-wizard/navigation.ts";
+
+describe("previousStepFor", () => {
+  test("follows the custom update repository signing path", () => {
+    const options = { webEnabled: true, updateKeyRequired: true, updatesEnabled: true };
+
+    expect(previousStepFor("update-key", options)).toBe("update-repo");
+    expect(previousStepFor("update-key-paste", options)).toBe("update-key");
+    expect(previousStepFor("update-key-generated", options)).toBe("update-key");
+    expect(previousStepFor("update-schedule", options)).toBe("update-key");
+  });
+
+  test("skips signing setup for the official update repository", () => {
+    const options = { webEnabled: false, updateKeyRequired: false, updatesEnabled: true };
+
+    expect(previousStepFor("update-schedule", options)).toBe("update-source");
+    expect(previousStepFor("review", options)).toBe("update-schedule");
+  });
+
+  test("skips the update schedule when updates are disabled", () => {
+    expect(
+      previousStepFor("review", {
+        webEnabled: false,
+        updateKeyRequired: false,
+        updatesEnabled: false,
+      }),
+    ).toBe("update-source");
+  });
+});
 
 describe("rate limit navigation helpers", () => {
   test("maps stored rate limits to preset indexes", () => {

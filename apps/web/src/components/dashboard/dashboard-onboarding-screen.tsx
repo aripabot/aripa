@@ -41,35 +41,18 @@ import {
   validateOperatorUserId,
 } from "@aripabot/core/config/onboarding-validation.ts";
 import { selectableProvidersFromModelOptions } from "@aripabot/core/onboarding-wizard/model-option-selection.ts";
-import { rateLimitPresetValue } from "@aripabot/core/onboarding-wizard/navigation.ts";
+import {
+  previousStepFor,
+  rateLimitPresetValue,
+} from "@aripabot/core/onboarding-wizard/navigation.ts";
+import type { Step as WizardStep } from "@aripabot/core/onboarding-wizard/types.ts";
 import type {
   ConfigurableRuntimeModelProvider,
   RuntimeJsonConfig,
   RuntimeModelSelection,
 } from "@aripabot/core/config/config.ts";
 
-type Step =
-  | "name"
-  | "operator"
-  | "style"
-  | "servers"
-  | "rate-limit"
-  | "rate-limit-custom"
-  | "log-privacy"
-  | "models"
-  | "agent-provider"
-  | "agent-model"
-  | "summarizer-provider"
-  | "summarizer-model"
-  | "web-capability"
-  | "web-model"
-  | "update-source"
-  | "update-repo"
-  | "update-key"
-  | "update-key-paste"
-  | "update-key-generated"
-  | "update-schedule"
-  | "review";
+type Step = Exclude<WizardStep, "existing-config" | "done">;
 
 type UpdateSource = "official" | "custom" | "disabled";
 
@@ -1163,50 +1146,13 @@ function progressIndex(step: Step): number {
 }
 
 function previousStep(step: Step, config: RuntimeJsonConfig): Step | null {
-  switch (step) {
-    case "operator":
-      return "name";
-    case "style":
-      return "operator";
-    case "servers":
-      return "style";
-    case "rate-limit":
-      return "servers";
-    case "rate-limit-custom":
-      return "rate-limit";
-    case "log-privacy":
-      return "rate-limit";
-    case "models":
-      return "log-privacy";
-    case "agent-provider":
-      return "models";
-    case "agent-model":
-      return "agent-provider";
-    case "summarizer-provider":
-      return "agent-model";
-    case "summarizer-model":
-      return "summarizer-provider";
-    case "web-capability":
-      return "summarizer-model";
-    case "web-model":
-      return "web-capability";
-    case "update-source":
-      return config.models.web.enabled ? "web-model" : "web-capability";
-    case "update-repo":
-      return "update-source";
-    case "update-key":
-      return "update-repo";
-    case "update-key-paste":
-      return "update-key";
-    case "update-key-generated":
-      return "update-key";
-    case "update-schedule":
-      return config.updates.githubRepo === "aripabot/aripa" ? "update-source" : "update-key";
-    case "review":
-      return config.updates.enabled ? "update-schedule" : "update-source";
-    default:
-      return null;
-  }
+  const previous = previousStepFor(step, {
+    webEnabled: config.models.web.enabled,
+    updateKeyRequired: config.updates.githubRepo !== "aripabot/aripa",
+    updatesEnabled: config.updates.enabled,
+  });
+
+  return previous === "existing-config" || previous === "done" ? null : previous;
 }
 
 function stepTitle(step: Step): string {

@@ -36,7 +36,7 @@ export function previousStepFor(
     case "update-repo":
       return "update-source";
     case "update-key":
-      return "update-source";
+      return "update-repo";
     case "update-key-paste":
       return "update-key";
     case "update-key-generated":
