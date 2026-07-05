@@ -1,14 +1,9 @@
 "use client";
 
 import { formatCount } from "@/components/dashboard/lib/format";
+import { textToneClass } from "@/components/dashboard/lib/tone";
 
 type LogMetricTone = "default" | "warn" | "error";
-
-const logMetricToneClasses: Record<LogMetricTone, string> = {
-  default: "text-foreground",
-  warn: "text-amber-600 dark:text-amber-300",
-  error: "text-red-600 dark:text-red-300",
-};
 
 export function LogMetric({
   label,
@@ -22,9 +17,20 @@ export function LogMetric({
   return (
     <div className="rounded-md border bg-background p-3">
       <p className="text-xs font-medium uppercase text-muted-foreground">{label}</p>
-      <p className={`mt-2 text-2xl font-semibold ${logMetricToneClasses[tone]}`}>
+      <p className={`mt-2 text-2xl font-semibold ${logMetricToneClass(tone)}`}>
         {formatCount(value)}
       </p>
     </div>
   );
+}
+
+function logMetricToneClass(tone: LogMetricTone): string {
+  switch (tone) {
+    case "default":
+      return textToneClass("default");
+    case "warn":
+      return textToneClass("warning");
+    case "error":
+      return textToneClass("danger");
+  }
 }

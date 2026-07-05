@@ -12,6 +12,7 @@ import {
 } from "@/components/dashboard/components/docker-display";
 import { ErrorPanel, LoadingPanel } from "@/components/dashboard/components/panels";
 import { formatDateTime } from "@/components/dashboard/lib/format";
+import { badgeToneClass } from "@/components/dashboard/lib/tone";
 import { runDockerDeploymentCommand } from "@/lib/api";
 import type {
   DockerDeploymentAction,
@@ -20,14 +21,6 @@ import type {
 } from "@/lib/api-types";
 import { readableError } from "@/lib/errors";
 import type { LoadState } from "@/server/dashboard-page-data";
-
-type BadgeTone = "success" | "danger" | "muted";
-
-const badgeToneClasses: Record<BadgeTone, string> = {
-  success: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-  danger: "bg-red-500/10 text-red-700 dark:text-red-300",
-  muted: "bg-muted text-muted-foreground",
-};
 
 export function DockerDeploymentsPage({
   deployment,
@@ -104,7 +97,7 @@ export function DockerDeploymentsPage({
         </div>
 
         <div className="grid divide-y sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4">
-          <DeploymentMetric label="Status" value={deployment.data.stateLabel} detail="" />
+          <DeploymentMetric label="Status" value={deployment.data.stateLabel} />
           <DeploymentMetric
             label="Container"
             value={deployment.data.containerName}
@@ -122,7 +115,6 @@ export function DockerDeploymentsPage({
             value={
               deployment.data.startedAt ? formatDateTime(deployment.data.startedAt) : "Not started"
             }
-            detail=""
           />
         </div>
       </section>
@@ -192,7 +184,7 @@ export function DockerDeploymentsPage({
                     <p className="text-sm font-medium">{script.label}</p>
                   </div>
                   <span
-                    className={`w-fit rounded-sm px-1.5 py-0.5 text-xs ${script.available ? "bg-muted text-foreground" : "bg-muted text-muted-foreground"}`}
+                    className={`w-fit rounded-sm px-1.5 py-0.5 text-xs ${badgeToneClass(script.available ? "default" : "muted")}`}
                   >
                     {script.available ? "Available" : "Missing"}
                   </span>
@@ -206,10 +198,6 @@ export function DockerDeploymentsPage({
       {commandResult ? <DockerCommandOutput result={commandResult} /> : null}
     </div>
   );
-}
-
-function badgeToneClass(tone: BadgeTone): string {
-  return badgeToneClasses[tone];
 }
 
 function dockerStateClass(state: DockerDeploymentStatus["state"]): string {

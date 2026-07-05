@@ -4,6 +4,7 @@ import { Terminal } from "lucide-react";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatTime } from "@/components/dashboard/lib/format";
+import { badgeToneClass } from "@/components/dashboard/lib/tone";
 import type { DockerDeploymentCommandResponse } from "@/lib/api-types";
 
 export function DeploymentMetric({
@@ -13,7 +14,7 @@ export function DeploymentMetric({
 }: {
   label: string;
   value: string;
-  detail: string;
+  detail?: string;
 }) {
   return (
     <div className="min-w-0 p-4">
@@ -42,11 +43,7 @@ export function DockerCommandOutput({ result }: { result: DockerDeploymentComman
             <CardDescription>Completed at {formatTime(result.completedAt)}.</CardDescription>
           </div>
           <span
-            className={`w-fit rounded-sm px-1.5 py-0.5 text-xs ${
-              result.exitCode === 0
-                ? "bg-muted text-foreground"
-                : "bg-red-500/10 text-red-700 dark:text-red-300"
-            }`}
+            className={`w-fit rounded-sm px-1.5 py-0.5 text-xs ${badgeToneClass(result.exitCode === 0 ? "default" : "danger")}`}
           >
             Exit {result.exitCode}
           </span>

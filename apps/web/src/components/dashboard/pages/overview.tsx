@@ -11,19 +11,10 @@ import {
 } from "@/components/dashboard/components/overview-display";
 import { ErrorPanel, LoadingPanel } from "@/components/dashboard/components/panels";
 import { formatCount, formatDateTime } from "@/components/dashboard/lib/format";
+import { badgeToneClass, textToneClass } from "@/components/dashboard/lib/tone";
 import type { DashboardStatus } from "@/lib/api-types";
 import type { LoadState } from "@/server/dashboard-page-data";
 import type { RuntimeModelSelection } from "@aripabot/core/config/config.ts";
-
-type BadgeTone = "success" | "danger" | "warning" | "info" | "muted";
-
-const badgeToneClasses: Record<BadgeTone, string> = {
-  success: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-  danger: "bg-red-500/10 text-red-700 dark:text-red-300",
-  warning: "bg-amber-500/10 text-amber-700 dark:text-amber-300",
-  info: "bg-sky-500/10 text-sky-700 dark:text-sky-300",
-  muted: "bg-muted text-muted-foreground",
-};
 
 export function Overview({
   status,
@@ -299,10 +290,6 @@ function MuteRow({ mute }: { mute: DashboardStatus["operations"]["activeMutes"][
   );
 }
 
-function badgeToneClass(tone: BadgeTone): string {
-  return badgeToneClasses[tone];
-}
-
 function runtimeToneClass(state: DashboardStatus["botRuntime"]["state"]): string {
   switch (state) {
     case "running":
@@ -330,11 +317,11 @@ function attentionIconClass(
 ) {
   switch (severity) {
     case "critical":
-      return "text-red-600 dark:text-red-400";
+      return textToneClass("danger");
     case "warning":
-      return "text-amber-600 dark:text-amber-400";
+      return textToneClass("warning");
     case "info":
-      return "text-sky-600 dark:text-sky-400";
+      return textToneClass("info");
   }
 }
 

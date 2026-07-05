@@ -2,6 +2,8 @@
 
 import type { LucideIcon } from "lucide-react";
 
+import { textToneClass } from "@/components/dashboard/lib/tone";
+
 export function ResponsiveDatum({
   label,
   value,
@@ -17,7 +19,7 @@ export function ResponsiveDatum({
     <div className="min-w-0">
       <p className="text-xs font-medium uppercase text-muted-foreground lg:hidden">{label}</p>
       <p
-        className={`mt-1 flex min-w-0 items-center gap-2 truncate text-sm lg:mt-0 ${datumToneClass(tone)}`}
+        className={`mt-1 flex min-w-0 items-center gap-2 truncate text-sm lg:mt-0 ${textToneClass(tone)}`}
       >
         {Icon ? <Icon aria-hidden="true" className="size-3.5 shrink-0" /> : null}
         <span className="truncate">{value}</span>
@@ -55,12 +57,4 @@ export function EmptyState({
       </div>
     </div>
   );
-}
-
-function datumToneClass(tone: "default" | "muted"): string {
-  if (tone === "muted") {
-    return "text-muted-foreground";
-  }
-
-  return "text-foreground";
 }

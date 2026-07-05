@@ -3,6 +3,7 @@
 import type { DashboardLogEntry, LogEntryLevel } from "@/lib/api-types";
 import { formatTime } from "@/components/dashboard/lib/format";
 import { levelLabel } from "@/components/dashboard/lib/log-utils";
+import { badgeToneClass } from "@/components/dashboard/lib/tone";
 
 export function LogEntryRow({ entry }: { entry: DashboardLogEntry }) {
   const metadata = entry.metadata ? JSON.stringify(entry.metadata, null, 2) : null;
@@ -46,14 +47,14 @@ function logLevelClass(level: LogEntryLevel): string {
   switch (level) {
     case "fatal":
     case "error":
-      return "bg-red-500/10 text-red-700 dark:text-red-300";
+      return badgeToneClass("danger");
     case "warn":
-      return "bg-amber-500/10 text-amber-700 dark:text-amber-300";
+      return badgeToneClass("warning");
     case "info":
-      return "bg-sky-500/10 text-sky-700 dark:text-sky-300";
+      return badgeToneClass("info");
     case "debug":
     case "trace":
-      return "bg-muted text-muted-foreground";
+      return badgeToneClass("muted");
     case "unknown":
       return "bg-background text-muted-foreground";
   }
