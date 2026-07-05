@@ -71,6 +71,20 @@ describe("dashboard log sources", () => {
     });
   });
 
+  test("parses timestamped text logs with ansi codes and redacted bot tokens", () => {
+    const entry = parseLogLine(
+      "2026-07-05T12:34:56.789Z \u001B[31mWARN\u001B[0m retrying with Bot secret-token-value",
+      { id: "docker:aripabot-docker", kind: "docker", name: "Docker" },
+      2,
+    );
+
+    expect(entry.level).toBe("warn");
+    expect(entry.timestamp).toBe("2026-07-05T12:34:56.789Z");
+    expect(entry.message).toBe("WARN retrying with Bot [redacted]");
+    expect(entry.raw).toBe("WARN retrying with Bot [redacted]");
+    expect(entry.metadata).toBeNull();
+  });
+
   test("reads current container logs when running inside Docker", async () => {
     const previousDockerRuntime = process.env.ARIPA_DOCKER_RUNTIME;
     const previousDockerLogPath = process.env.ARIPA_DOCKER_LOG_PATH;
