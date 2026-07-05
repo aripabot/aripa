@@ -18,6 +18,27 @@ import type { MinimalKeyEvent } from "@aripabot/core/onboarding-wizard/types.ts"
 export type CliRenderer = Awaited<ReturnType<typeof createCliRenderer>>;
 export type RawInputHandler = (chunk: Buffer | string) => void;
 
+export async function createTuiRenderer({
+  backgroundColor,
+  onKeyPress,
+}: {
+  backgroundColor: string;
+  onKeyPress: (key: MinimalKeyEvent) => boolean;
+}): Promise<CliRenderer> {
+  return createCliRenderer({
+    exitOnCtrlC: false,
+    screenMode: "alternate-screen",
+    backgroundColor,
+    openConsoleOnError: false,
+    prependInputHandlers: [
+      (sequence) => {
+        const key = parseMinimalKey(sequence);
+        return key ? onKeyPress(key) : false;
+      },
+    ],
+  });
+}
+
 export function createRenderableFactories(requireRenderer: () => CliRenderer): {
   Box: (options: BoxOptions, ...children: Renderable[]) => BoxRenderable;
   Text: (options: TextOptions) => TextRenderable;

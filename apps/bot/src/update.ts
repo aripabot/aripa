@@ -1,9 +1,4 @@
-import {
-  createCliRenderer,
-  type BoxRenderable,
-  type Renderable,
-  type SelectOption,
-} from "@opentui/core";
+import { type BoxRenderable, type Renderable, type SelectOption } from "@opentui/core";
 import { fileURLToPath } from "node:url";
 
 import { colors } from "@aripabot/core/onboarding-wizard/theme.ts";
@@ -24,6 +19,7 @@ import {
   closeTuiRenderer,
   createRenderableFactories,
   createSelectControlFactory,
+  createTuiRenderer,
   isExitKey,
   parseMinimalKey,
   TuiControlState,
@@ -75,17 +71,9 @@ if (updateLatest) {
 }
 
 try {
-  renderer = await createCliRenderer({
-    exitOnCtrlC: false,
-    screenMode: "alternate-screen",
+  renderer = await createTuiRenderer({
     backgroundColor: colors.background,
-    openConsoleOnError: false,
-    prependInputHandlers: [
-      (sequence) => {
-        const key = parseMinimalKey(sequence);
-        return key ? handleKeyPress(key) : false;
-      },
-    ],
+    onKeyPress: handleKeyPress,
   });
 
   rawExitHandler = handleRawExitInput;

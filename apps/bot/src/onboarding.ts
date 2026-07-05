@@ -1,4 +1,4 @@
-import { InputRenderableEvents, createCliRenderer, type SelectOption } from "@opentui/core";
+import { InputRenderableEvents, type SelectOption } from "@opentui/core";
 import { fileURLToPath } from "node:url";
 
 import {
@@ -55,6 +55,7 @@ import {
   closeTuiRenderer,
   createRenderableFactories,
   createSelectControlFactory,
+  createTuiRenderer,
   isExitKey,
   parseMinimalKey,
   TuiControlState,
@@ -83,21 +84,9 @@ const { Box, Text, Input, Select } = createRenderableFactories(requireRenderer);
 const selectControl = createSelectControlFactory({ Select, controls, colors });
 
 try {
-  renderer = await createCliRenderer({
-    exitOnCtrlC: false,
-    screenMode: "alternate-screen",
+  renderer = await createTuiRenderer({
     backgroundColor: colors.background,
-    openConsoleOnError: false,
-    prependInputHandlers: [
-      (sequence) => {
-        const key = parseMinimalKey(sequence);
-        if (key) {
-          return handleKeyPress(key);
-        }
-
-        return false;
-      },
-    ],
+    onKeyPress: handleKeyPress,
   });
 
   rawExitHandler = handleRawExitInput;
