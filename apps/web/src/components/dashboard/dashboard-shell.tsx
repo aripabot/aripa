@@ -4,9 +4,10 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type * as React from "react";
-import { Activity, Container, Download, LogOut, Logs, Moon, Settings, Sun } from "lucide-react";
+import { LogOut, Moon, Sun } from "lucide-react";
 
 import { ErrorPanel } from "@/components/dashboard/components/panels";
+import { StatusDot } from "@/components/dashboard/components/status-dot";
 import { DashboardOnboardingScreen } from "@/components/dashboard/dashboard-onboarding-screen";
 import { useLoadState } from "@/components/dashboard/hooks/use-load-state";
 import { Button } from "@/components/ui/button";
@@ -25,17 +26,12 @@ interface DashboardShellRenderContext {
   setStatusState: React.Dispatch<React.SetStateAction<LoadState<DashboardStatus>>>;
 }
 
-const views: Array<{ id: View; label: string; href: string; icon: typeof Activity }> = [
-  { id: "overview", label: "Overview", href: "/", icon: Activity },
-  { id: "logs", label: "Logs", href: "/logs", icon: Logs },
-  { id: "updates", label: "Updates", href: "/updates", icon: Download },
-  {
-    id: "docker-deployments",
-    label: "Docker Deployments",
-    href: "/docker-deployments",
-    icon: Container,
-  },
-  { id: "settings", label: "Settings", href: "/settings", icon: Settings },
+const views: Array<{ id: View; label: string; href: string }> = [
+  { id: "overview", label: "Overview", href: "/" },
+  { id: "logs", label: "Logs", href: "/logs" },
+  { id: "updates", label: "Updates", href: "/updates" },
+  { id: "docker-deployments", label: "Docker", href: "/docker-deployments" },
+  { id: "settings", label: "Settings", href: "/settings" },
 ];
 
 export function DashboardShell({
@@ -132,37 +128,47 @@ export function DashboardShell({
     );
   }
 
+  const runtime = statusState.status === "ready" ? statusState.data.botRuntime : null;
+
   return (
     <div className="min-h-screen bg-background">
-      <div className="grid min-h-screen lg:grid-cols-[16rem_1fr]">
+      <div className="mx-auto grid min-h-screen w-full max-w-[88rem] lg:grid-cols-[13.5rem_1fr]">
         <aside
-          className="border-b bg-card/70 lg:border-b-0 lg:border-r"
+          className="border-b lg:border-b-0 lg:border-r"
           style={{ viewTransitionName: "dashboard-sidebar" } as React.CSSProperties}
         >
-          <div className="flex h-full flex-col gap-5 p-4">
-            <div className="flex items-center gap-3">
-              <picture>
+          <div className="flex h-full flex-col gap-6 px-4 py-4 lg:sticky lg:top-0 lg:max-h-screen lg:px-4 lg:py-6">
+            <div className="flex items-center justify-between gap-3">
+              <Link
+                href="/"
+                className="flex items-center gap-2.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                onClick={(event) => markNavigationPending("/", event)}
+              >
                 <img
                   src={resolvedTheme === "dark" ? "/aripa-mark-dark.svg" : "/aripa-mark-light.svg"}
                   alt=""
-                  width="40"
-                  height="40"
+                  width="24"
+                  height="24"
                   fetchPriority="high"
-                  className="size-10 rounded-lg"
+                  className="size-6 rounded-md"
                 />
-              </picture>
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold">Aripa</p>
-                <p className="text-xs text-muted-foreground">Local dashboard (Experimental)</p>
+                <span className="text-sm font-semibold tracking-tight">Aripa</span>
+              </Link>
+              <div className="flex items-center gap-1 lg:hidden">
+                <ThemeButton
+                  themeMode={themeMode}
+                  resolvedTheme={resolvedTheme}
+                  onToggle={() => setThemeMode(nextThemeMode(themeMode))}
+                />
+                <SignOutButton onSignOut={() => void signOut()} />
               </div>
             </div>
 
             <nav
               aria-label="Dashboard"
-              className="grid grid-cols-2 gap-1 sm:grid-cols-5 lg:flex lg:flex-col"
+              className="-mx-1 flex gap-0.5 overflow-x-auto px-1 pb-1 lg:flex-col lg:overflow-visible lg:pb-0"
             >
               {views.map((item) => {
-                const Icon = item.icon;
                 const active = item.href === activeHref;
                 return (
                   <Link
@@ -171,76 +177,112 @@ export function DashboardShell({
                     prefetch={true}
                     aria-current={active ? "page" : undefined}
                     className={cn(
-                      "inline-flex h-10 items-center justify-start gap-2 rounded-md px-4 py-2 text-sm font-medium transition-[background-color,color] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-                      active ? "bg-foreground text-background" : "text-foreground",
+                      "inline-flex h-8 shrink-0 items-center rounded-md px-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      active
+                        ? "bg-muted font-medium text-foreground"
+                        : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
                     )}
                     onClick={(event) => markNavigationPending(item.href, event)}
                   >
-                    <Icon aria-hidden="true" className="size-4" />
                     {item.label}
                   </Link>
                 );
               })}
             </nav>
 
-            <div className="mt-auto hidden rounded-lg border bg-background p-3 text-sm lg:block">
-              <p className="font-medium">Runtime</p>
-              <p className="mt-1 break-all text-xs text-muted-foreground">
-                {statusState.status === "ready"
-                  ? statusState.data.configPath
-                  : "Loading config path…"}
-              </p>
+            <div className="mt-auto hidden flex-col gap-3 lg:flex">
+              {runtime ? (
+                <div className="flex items-center gap-2 px-3 text-sm text-muted-foreground">
+                  <StatusDot tone={runtimeTone(runtime.state)} />
+                  <span className="truncate">{runtime.label}</span>
+                </div>
+              ) : null}
+              <div className="flex items-center gap-1 px-1.5">
+                <ThemeButton
+                  themeMode={themeMode}
+                  resolvedTheme={resolvedTheme}
+                  onToggle={() => setThemeMode(nextThemeMode(themeMode))}
+                />
+                <SignOutButton onSignOut={() => void signOut()} />
+              </div>
             </div>
-            <Button type="button" variant="outline" onClick={() => void signOut()}>
-              <LogOut aria-hidden="true" />
-              Sign Out
-            </Button>
           </div>
         </aside>
 
-        <div className="min-w-0">
-          <header
-            className="sticky top-0 z-20 border-b bg-background/92 backdrop-blur"
-            style={{ viewTransitionName: "dashboard-header" } as React.CSSProperties}
-          >
-            <div className="flex min-h-16 items-center justify-between gap-3 px-4 sm:px-6">
-              <div className="min-w-0">
-                <h1 className="truncate text-pretty text-xl font-semibold tracking-normal sm:text-2xl">
-                  {viewTitle(view)}
-                </h1>
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                aria-label={themeButtonLabel(themeMode, resolvedTheme)}
-                title={themeButtonLabel(themeMode, resolvedTheme)}
-                onClick={() => setThemeMode(nextThemeMode(themeMode))}
-              >
-                {resolvedTheme === "dark" ? (
-                  <Sun aria-hidden="true" />
-                ) : (
-                  <Moon aria-hidden="true" />
-                )}
-              </Button>
+        <main
+          id="main-content"
+          className="min-w-0 px-5 py-8 sm:px-8 lg:py-10"
+          style={{ viewTransitionName: "dashboard-header" } as React.CSSProperties}
+        >
+          <div className="mx-auto w-full max-w-4xl">
+            <h1 className="text-xl font-semibold tracking-tight">{viewTitle(view)}</h1>
+            <div className="mt-6">
+              {statusState.status === "error" ? (
+                <ErrorPanel
+                  title="Dashboard unavailable"
+                  message={statusState.error}
+                  onRetry={refreshStatus}
+                />
+              ) : (
+                children({ statusState, refreshStatus, setStatusState })
+              )}
             </div>
-          </header>
-
-          <main id="main-content" className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6">
-            {statusState.status === "error" ? (
-              <ErrorPanel
-                title="Dashboard unavailable"
-                message={statusState.error}
-                onRetry={refreshStatus}
-              />
-            ) : (
-              children({ statusState, refreshStatus, setStatusState })
-            )}
-          </main>
-        </div>
+          </div>
+        </main>
       </div>
     </div>
   );
+}
+
+function ThemeButton({
+  themeMode,
+  resolvedTheme,
+  onToggle,
+}: {
+  themeMode: ThemeMode;
+  resolvedTheme: ResolvedTheme;
+  onToggle: () => void;
+}) {
+  const label = themeButtonLabel(themeMode, resolvedTheme);
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon"
+      className="size-8 text-muted-foreground hover:text-foreground"
+      aria-label={label}
+      title={label}
+      onClick={onToggle}
+    >
+      {resolvedTheme === "dark" ? <Sun aria-hidden="true" /> : <Moon aria-hidden="true" />}
+    </Button>
+  );
+}
+
+function SignOutButton({ onSignOut }: { onSignOut: () => void }) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon"
+      className="size-8 text-muted-foreground hover:text-foreground"
+      aria-label="Sign out"
+      title="Sign out"
+      onClick={onSignOut}
+    >
+      <LogOut aria-hidden="true" />
+    </Button>
+  );
+}
+
+function runtimeTone(state: DashboardStatus["botRuntime"]["state"]): "ok" | "danger" | "neutral" {
+  switch (state) {
+    case "running":
+    case "docker":
+      return "ok";
+    case "stopped":
+      return "danger";
+  }
 }
 
 function viewTitle(view: View): string {

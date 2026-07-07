@@ -1,17 +1,14 @@
 "use client";
 
-import { AlertCircle, CheckCircle2, RefreshCw, Server, Tags, UserRound } from "lucide-react";
+import { RefreshCw, Server, UserRound } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Metric } from "@/components/dashboard/components/metric";
-import {
-  EmptyState,
-  ResponsiveDatum,
-  RuntimeDetail,
-} from "@/components/dashboard/components/overview-display";
-import { ErrorPanel, LoadingPanel } from "@/components/dashboard/components/panels";
+import { ResponsiveDatum, RuntimeDetail } from "@/components/dashboard/components/overview-display";
+import { EmptyPanel, ErrorPanel, LoadingPanel } from "@/components/dashboard/components/panels";
+import { StatusDot, StatusText } from "@/components/dashboard/components/status-dot";
+import type { StatusTone } from "@/components/dashboard/components/status-dot";
 import { formatCount, formatDateTime } from "@/components/dashboard/lib/format";
-import { badgeToneClass, textToneClass } from "@/components/dashboard/lib/tone";
 import type { DashboardStatus } from "@/lib/api-types";
 import type { LoadState } from "@/server/dashboard-page-data";
 import type { RuntimeModelSelection } from "@aripabot/core/config/config.ts";
@@ -24,105 +21,86 @@ export function Overview({
   onRefresh: () => void;
 }) {
   if (status.status === "loading") {
-    return <LoadingPanel label="Loading dashboard" />;
+    return <LoadingPanel label="Loading" />;
   }
 
   if (status.status === "error") {
     return <ErrorPanel title="Overview unavailable" message={status.error} onRetry={onRefresh} />;
   }
 
-  const { operations } = status.data;
+  const { operations, botRuntime } = status.data;
   const visibleGuilds = operations.guilds.slice(0, 8);
   const visibleMutes = operations.activeMutes.slice(0, 6);
-  const runtimeTone = runtimeToneClass(status.data.botRuntime.state);
 
   return (
-    <div className="grid gap-6">
-      <section className="rounded-lg border bg-card">
-        <div className="flex flex-col gap-4 border-b p-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-3">
-              <span
-                className={`inline-flex items-center gap-2 rounded-md px-2.5 py-1 text-sm font-medium ${runtimeTone}`}
-              >
-                <span className="size-2 rounded-full bg-current" aria-hidden="true" />
-                {status.data.botRuntime.label}
-              </span>
-              <p className="break-words text-sm text-muted-foreground">
-                {status.data.botRuntime.detail}
-              </p>
-            </div>
+    <div className="grid gap-10">
+      <section className="grid gap-5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-baseline gap-2.5">
+            <StatusText tone={runtimeTone(botRuntime.state)} className="font-medium">
+              {botRuntime.label}
+            </StatusText>
+            <span className="truncate text-sm text-muted-foreground">{botRuntime.detail}</span>
           </div>
-          <Button type="button" variant="outline" onClick={onRefresh}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-8 shrink-0 text-muted-foreground hover:text-foreground"
+            aria-label="Refresh"
+            title="Refresh"
+            onClick={onRefresh}
+          >
             <RefreshCw aria-hidden="true" />
-            Refresh
           </Button>
         </div>
-
-        <div className="grid divide-y sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-6 border-y py-5 sm:grid-cols-4">
           <Metric label="Servers" value={operations.totals.guilds} />
           <Metric
-            label="Need Attention"
+            label="Need attention"
             value={operations.totals.attentionGuilds + operations.totals.expiredMutes}
           />
-          <Metric label="Active Mutes" value={operations.totals.activeMutes} />
+          <Metric label="Active mutes" value={operations.totals.activeMutes} />
           <Metric label="Tags" value={operations.totals.tags} />
         </div>
       </section>
 
-      <section className="grid gap-3">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-base font-semibold text-pretty">Attention</h2>
-          <span className="text-sm text-muted-foreground">
-            {operations.discordLookup.available ? "" : "Discord names limited"}
-          </span>
-        </div>
-        {operations.attentionItems.length === 0 ? (
-          <div className="rounded-lg border bg-card p-4">
-            <div className="flex items-center gap-3">
-              <CheckCircle2
-                aria-hidden="true"
-                className="size-5 text-emerald-600 dark:text-emerald-400"
-              />
-              <p className="text-sm font-medium">No obvious setup issues.</p>
-            </div>
-          </div>
-        ) : (
-          <div className="divide-y rounded-lg border bg-card">
+      {operations.attentionItems.length > 0 ? (
+        <section className="grid gap-3">
+          <h2 className="text-sm font-medium">Needs attention</h2>
+          <ul className="grid gap-0 divide-y">
             {operations.attentionItems.map((item) => (
-              <div key={item.id} className="flex gap-3 p-4">
-                <AlertCircle
-                  aria-hidden="true"
-                  className={`mt-0.5 size-4 shrink-0 ${attentionIconClass(item.severity)}`}
-                />
+              <li key={item.id} className="flex gap-2.5 py-3">
+                <StatusDot tone={attentionTone(item.severity)} className="mt-[7px]" />
                 <div className="min-w-0">
-                  <p className="text-sm font-medium">{item.title}</p>
-                  <p className="mt-1 break-words text-sm text-muted-foreground">{item.detail}</p>
+                  <p className="text-sm">{item.title}</p>
+                  <p className="mt-0.5 break-words text-sm text-muted-foreground">{item.detail}</p>
                 </div>
-              </div>
+              </li>
             ))}
-          </div>
-        )}
-      </section>
+          </ul>
+        </section>
+      ) : null}
 
       <section className="grid gap-3">
-        <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-          <h2 className="text-base font-semibold text-pretty">Servers</h2>
-          <p className="text-sm text-muted-foreground"></p>
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 className="text-sm font-medium">Servers</h2>
+          {operations.discordLookup.available ? null : (
+            <p className="text-sm text-muted-foreground">Names unavailable while offline</p>
+          )}
         </div>
         {visibleGuilds.length === 0 ? (
-          <EmptyState
-            icon={Server}
-            title="No Servers Tracked"
-            message="Allowlist a server or configure guild settings to see operational status here."
+          <EmptyPanel
+            title="No servers yet"
+            message="Add a server to the allowlist in Settings to see it here."
           />
         ) : (
-          <div className="overflow-hidden rounded-lg border bg-card">
-            <div className="hidden grid-cols-[minmax(16rem,1.4fr)_repeat(4,minmax(8rem,1fr))] gap-4 border-b px-4 py-2 text-xs font-medium uppercase text-muted-foreground lg:grid">
+          <div>
+            <div className="hidden grid-cols-[minmax(15rem,1.4fr)_repeat(4,minmax(6.5rem,1fr))] gap-4 border-b pb-2 text-xs text-muted-foreground lg:grid">
               <span>Server</span>
-              <span>Mod Logs</span>
-              <span>Mute Mode</span>
-              <span>Active Mutes</span>
+              <span>Mod logs</span>
+              <span>Mutes</span>
+              <span>Active</span>
               <span>Tags</span>
             </div>
             <div className="divide-y">
@@ -134,114 +112,93 @@ export function Overview({
         )}
       </section>
 
-      <section className="grid gap-3">
-        <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-          <h2 className="text-base font-semibold text-pretty">Active Mutes</h2>
-          <p className="text-sm text-muted-foreground">
-            Role mutes waiting for manual or scheduled cleanup.
-          </p>
-        </div>
-        {visibleMutes.length === 0 ? (
-          <EmptyState
-            icon={UserRound}
-            title="No Active Role Mutes"
-            message="Timed role mutes will appear here when they are stored for expiry."
-          />
-        ) : (
-          <div className="divide-y rounded-lg border bg-card">
+      {visibleMutes.length > 0 ? (
+        <section className="grid gap-3">
+          <h2 className="text-sm font-medium">Active mutes</h2>
+          <div className="divide-y">
             {visibleMutes.map((mute) => (
               <MuteRow key={`${mute.guildId}:${mute.userId}`} mute={mute} />
             ))}
           </div>
-        )}
-      </section>
+        </section>
+      ) : null}
 
-      <section className="rounded-lg border bg-card">
-        <div className="grid gap-4 p-4 sm:grid-cols-3">
-          <RuntimeDetail label="Agent Model" value={formatModel(status.data.config.models.agent)} />
-          <RuntimeDetail
-            label="Rate Limit"
-            value={
-              status.data.config.agentRateLimitMessagesPerMinute === null
-                ? "Off"
-                : `${status.data.config.agentRateLimitMessagesPerMinute}/min`
-            }
-          />
-          <RuntimeDetail label="Version" value={status.data.botVersion} />
-        </div>
+      <section className="grid gap-4 border-t pt-5 sm:grid-cols-3">
+        <RuntimeDetail label="Model" value={formatModel(status.data.config.models.agent)} />
+        <RuntimeDetail
+          label="Rate limit"
+          value={
+            status.data.config.agentRateLimitMessagesPerMinute === null
+              ? "Off"
+              : `${status.data.config.agentRateLimitMessagesPerMinute} per minute`
+          }
+        />
+        <RuntimeDetail label="Version" value={status.data.botVersion} />
       </section>
     </div>
   );
 }
 
 function GuildRow({ guild }: { guild: DashboardStatus["operations"]["guilds"][number] }) {
-  const statusLabel =
-    guild.readiness === "attention"
-      ? "Needs Attention"
-      : guild.readiness === "ready"
-        ? "Ready"
-        : "Unconfigured";
   const logStatus = guild.modLogsEnabled
     ? guild.logChannelName
       ? `#${guild.logChannelName}`
       : guild.logChannelId
         ? `#${guild.logChannelId}`
-        : "Missing Channel"
-    : guild.logChannelId
-      ? "Disabled"
-      : "Not Set";
+        : "Channel missing"
+    : "Off";
   const muteStatus =
     guild.muteMode === "role"
       ? guild.muteRoleName
         ? `@${guild.muteRoleName}`
         : guild.muteRoleId
           ? `@${guild.muteRoleId}`
-          : "Missing Role"
+          : "Role missing"
       : guild.muteMode === "timeout"
-        ? "Discord Timeout"
+        ? "Timeout"
         : "Off";
 
   return (
-    <div className="grid gap-4 p-4 lg:grid-cols-[minmax(16rem,1.4fr)_repeat(4,minmax(8rem,1fr))] lg:items-center">
+    <div className="grid gap-3 py-3.5 lg:grid-cols-[minmax(15rem,1.4fr)_repeat(4,minmax(6.5rem,1fr))] lg:items-center lg:gap-4">
       <div className="flex min-w-0 items-center gap-3">
         {guild.iconUrl ? (
           <img
             src={guild.iconUrl}
             alt=""
-            width="36"
-            height="36"
+            width="32"
+            height="32"
             loading="lazy"
-            className="size-9 rounded-md"
+            className="size-8 rounded-md"
           />
         ) : (
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted">
-            <Server aria-hidden="true" className="size-4 text-muted-foreground" />
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted">
+            <Server aria-hidden="true" className="size-3.5 text-muted-foreground" />
           </div>
         )}
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium">{guild.name ?? guild.guildId}</p>
-          <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2">
-            <span className={`rounded-sm px-1.5 py-0.5 text-xs ${readinessClass(guild.readiness)}`}>
-              {statusLabel}
+          <p className="flex items-center gap-2 truncate text-sm font-medium">
+            <StatusDot tone={readinessTone(guild.readiness)} />
+            <span className="truncate" title={guild.name ?? undefined}>
+              {guild.name ?? guild.guildId}
             </span>
-            <span className="truncate text-xs text-muted-foreground" translate="no">
-              {guild.guildId}
-            </span>
-          </div>
+          </p>
+          <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground" translate="no">
+            {guild.guildId}
+          </p>
         </div>
       </div>
       <ResponsiveDatum
-        label="Mod Logs"
+        label="Mod logs"
         value={logStatus}
         tone={guild.modLogsEnabled ? "default" : "muted"}
       />
       <ResponsiveDatum
-        label="Mute Mode"
+        label="Mutes"
         value={muteStatus}
         tone={guild.muteMode === "none" ? "muted" : "default"}
       />
-      <ResponsiveDatum label="Active Mutes" value={formatCount(guild.activeMuteCount)} />
-      <ResponsiveDatum label="Tags" value={formatCount(guild.tagCount)} icon={Tags} />
+      <ResponsiveDatum label="Active" value={formatCount(guild.activeMuteCount)} />
+      <ResponsiveDatum label="Tags" value={formatCount(guild.tagCount)} />
     </div>
   );
 }
@@ -251,91 +208,96 @@ function MuteRow({ mute }: { mute: DashboardStatus["operations"]["activeMutes"][
   const role = mute.muteRoleName ? `@${mute.muteRoleName}` : `@${mute.muteRoleId}`;
 
   return (
-    <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-2 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
       <div className="flex min-w-0 items-center gap-3">
         {mute.avatarUrl ? (
           <img
             src={mute.avatarUrl}
             alt=""
-            width="36"
-            height="36"
+            width="32"
+            height="32"
             loading="lazy"
-            className="size-9 rounded-full"
+            className="size-8 rounded-full"
           />
         ) : (
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted">
-            <UserRound aria-hidden="true" className="size-4 text-muted-foreground" />
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted">
+            <UserRound aria-hidden="true" className="size-3.5 text-muted-foreground" />
           </div>
         )}
         <div className="min-w-0">
           <p className="truncate text-sm font-medium">{person}</p>
-          <p className="mt-1 truncate text-xs text-muted-foreground">
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">
             {mute.guildName ?? mute.guildId} · {role}
           </p>
         </div>
       </div>
-      <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-        <span className={`rounded-sm px-1.5 py-0.5 text-xs ${muteStatusClass(mute.status)}`}>
-          {mute.status === "expired"
-            ? "Expired"
-            : mute.status === "indefinite"
-              ? "Indefinite"
-              : "Active"}
-        </span>
-        <span className="text-sm text-muted-foreground">
-          {mute.expiresAt ? formatDateTime(mute.expiresAt) : "No expiry"}
-        </span>
+      <div className="flex shrink-0 items-center gap-2 pl-11 sm:pl-0">
+        <StatusText tone={muteTone(mute.status)} className="text-muted-foreground">
+          {muteLabel(mute)}
+        </StatusText>
       </div>
     </div>
   );
 }
 
-function runtimeToneClass(state: DashboardStatus["botRuntime"]["state"]): string {
+function runtimeTone(state: DashboardStatus["botRuntime"]["state"]): StatusTone {
   switch (state) {
     case "running":
-      return badgeToneClass("success");
     case "docker":
-      return badgeToneClass("info");
+      return "ok";
     case "stopped":
-      return badgeToneClass("danger");
+      return "danger";
   }
 }
 
-function readinessClass(readiness: DashboardStatus["operations"]["guilds"][number]["readiness"]) {
+function readinessTone(
+  readiness: DashboardStatus["operations"]["guilds"][number]["readiness"],
+): StatusTone {
   switch (readiness) {
     case "ready":
-      return badgeToneClass("success");
+      return "ok";
     case "attention":
-      return badgeToneClass("danger");
+      return "danger";
     case "quiet":
-      return badgeToneClass("muted");
+      return "neutral";
   }
 }
 
-function attentionIconClass(
+function attentionTone(
   severity: DashboardStatus["operations"]["attentionItems"][number]["severity"],
-) {
+): StatusTone {
   switch (severity) {
     case "critical":
-      return textToneClass("danger");
+      return "danger";
     case "warning":
-      return textToneClass("warning");
+      return "warning";
     case "info":
-      return textToneClass("info");
+      return "neutral";
   }
 }
 
-function muteStatusClass(status: DashboardStatus["operations"]["activeMutes"][number]["status"]) {
+function muteLabel(mute: DashboardStatus["operations"]["activeMutes"][number]): string {
+  switch (mute.status) {
+    case "expired":
+      return "Expired";
+    case "indefinite":
+      return "No expiry";
+    case "active":
+      return mute.expiresAt ? `Until ${formatDateTime(mute.expiresAt)}` : "Active";
+  }
+}
+
+function muteTone(status: DashboardStatus["operations"]["activeMutes"][number]["status"]): StatusTone {
   switch (status) {
     case "active":
-      return badgeToneClass("success");
+      return "ok";
     case "expired":
-      return badgeToneClass("danger");
+      return "danger";
     case "indefinite":
-      return badgeToneClass("muted");
+      return "neutral";
   }
 }
 
 function formatModel(model: RuntimeModelSelection): string {
-  return `${model.provider} / ${model.model}`;
+  return model.model;
 }

@@ -3,10 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type * as React from "react";
-import { KeyRound, LockKeyhole, ShieldAlert } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { DashboardAuthState } from "@/server/dashboard-auth";
@@ -17,27 +15,25 @@ export function DashboardAuthScreen({ authState }: { authState: DashboardAuthSta
       id="main-content"
       className="flex min-h-screen items-center justify-center bg-background px-4 py-10"
     >
-      <div className="w-full max-w-md">
-        <div className="mb-6 flex items-center justify-center">
-          <picture>
-            <img
-              src="/aripa-mark-light.svg"
-              alt=""
-              width="48"
-              height="48"
-              fetchPriority="high"
-              className="size-12 rounded-lg dark:hidden"
-            />
-            <img
-              src="/aripa-mark-dark.svg"
-              alt=""
-              width="48"
-              height="48"
-              fetchPriority="high"
-              className="hidden size-12 rounded-lg dark:block"
-            />
-          </picture>
-        </div>
+      <div className="w-full max-w-xs">
+        <picture>
+          <img
+            src="/aripa-mark-light.svg"
+            alt=""
+            width="32"
+            height="32"
+            fetchPriority="high"
+            className="size-8 rounded-md dark:hidden"
+          />
+          <img
+            src="/aripa-mark-dark.svg"
+            alt=""
+            width="32"
+            height="32"
+            fetchPriority="high"
+            className="hidden size-8 rounded-md dark:block"
+          />
+        </picture>
 
         {authState.status === "not_configured" ? (
           <DashboardPasswordSetup authPath={authState.authPath} />
@@ -51,26 +47,17 @@ export function DashboardAuthScreen({ authState }: { authState: DashboardAuthSta
 
 function DashboardPasswordSetup({ authPath }: { authPath: string }) {
   return (
-    <Card>
-      <CardHeader>
-        <div className="mb-2 flex size-10 items-center justify-center rounded-md bg-muted">
-          <ShieldAlert aria-hidden="true" />
-        </div>
-        <CardTitle>Dashboard Locked</CardTitle>
-        <CardDescription>
-          Create the dashboard password before opening Aripa from a browser.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        <div className="rounded-md border bg-muted p-3 font-mono text-sm">
-          bun run dashboard:password
-        </div>
-        <p className="break-words text-sm text-muted-foreground">
-          Keep the generated password somewhere safe. It is only shown once.
-        </p>
-        <p className="break-words text-xs text-muted-foreground">{authPath}</p>
-      </CardContent>
-    </Card>
+    <div className="mt-6">
+      <h1 className="text-lg font-semibold tracking-tight">Create a password</h1>
+      <p className="mt-1 text-sm text-muted-foreground">
+        The dashboard needs a password before it can open. Run this once, then keep the password
+        it prints — it isn't shown again.
+      </p>
+      <p className="mt-4 rounded-lg border bg-muted/40 px-3.5 py-2.5 font-mono text-sm">
+        bun run dashboard:password
+      </p>
+      <p className="mt-4 break-all font-mono text-xs text-muted-foreground">{authPath}</p>
+    </div>
   );
 }
 
@@ -94,52 +81,45 @@ function DashboardLogin() {
       const payload = (await response.json()) as { error?: string };
 
       if (!response.ok) {
-        throw new Error(payload.error ?? "Sign in failed.");
+        throw new Error(payload.error ?? "That password didn't work. Try again.");
       }
 
       router.refresh();
     } catch (loginError) {
-      setError(loginError instanceof Error ? loginError.message : "Sign in failed.");
+      setError(
+        loginError instanceof Error ? loginError.message : "That password didn't work. Try again.",
+      );
     } finally {
       setIsSubmitting(false);
     }
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="mb-2 flex size-10 items-center justify-center rounded-md bg-muted">
-          <LockKeyhole aria-hidden="true" />
-        </div>
-        <CardTitle>Enter Dashboard Password</CardTitle>
-        <CardDescription>Use the password generated for this Aripa installation.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form className="flex flex-col gap-4" onSubmit={submit}>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="dashboard-password">Password</Label>
-            <Input
-              id="dashboard-password"
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              aria-invalid={error ? true : undefined}
-              autoFocus
-              required
-            />
-          </div>
+    <form className="mt-6 flex flex-col gap-4" onSubmit={submit}>
+      <h1 className="text-lg font-semibold tracking-tight">Sign in</h1>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="dashboard-password">Password</Label>
+        <Input
+          id="dashboard-password"
+          type="password"
+          autoComplete="current-password"
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? "password-error" : undefined}
+          autoFocus
+          required
+        />
+        {error ? (
+          <p id="password-error" className="text-sm text-muted-foreground" aria-live="polite">
+            {error}
+          </p>
+        ) : null}
+      </div>
 
-          {error ? (
-            <p className="rounded-md border bg-muted p-3 text-sm text-muted-foreground">{error}</p>
-          ) : null}
-
-          <Button type="submit" disabled={isSubmitting}>
-            <KeyRound aria-hidden="true" />
-            {isSubmitting ? "Unlocking" : "Unlock"}
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+      <Button type="submit" disabled={isSubmitting}>
+        {isSubmitting ? "Signing in…" : "Sign in"}
+      </Button>
+    </form>
   );
 }

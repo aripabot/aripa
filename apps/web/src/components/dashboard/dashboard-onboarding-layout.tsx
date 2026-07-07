@@ -1,10 +1,9 @@
 "use client";
 
 import type * as React from "react";
-import { LogOut, Save, Sparkles } from "lucide-react";
+import { LogOut } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { OnboardingProgress } from "@/components/dashboard/dashboard-onboarding-controls";
 
 export function DashboardOnboardingLayout({
@@ -40,100 +39,94 @@ export function DashboardOnboardingLayout({
   title: string;
   canGoBack: boolean;
 }) {
+  void showPrimarySaveIcon;
+
   return (
     <main id="main-content" className="min-h-screen bg-background">
-      <div className="grid min-h-screen lg:grid-cols-[17rem_1fr]">
-        <aside className="border-b bg-card/70 lg:border-b-0 lg:border-r">
-          <div className="flex h-full flex-col gap-5 p-4">
-            <div className="flex items-center gap-3">
+      <div className="mx-auto grid min-h-screen w-full max-w-[88rem] lg:grid-cols-[13.5rem_1fr]">
+        <aside className="border-b lg:border-b-0 lg:border-r">
+          <div className="flex h-full flex-col gap-6 px-4 py-4 lg:sticky lg:top-0 lg:max-h-screen lg:py-6">
+            <div className="flex items-center gap-2.5">
               <picture>
                 <img
                   src="/aripa-mark-light.svg"
                   alt=""
-                  width="40"
-                  height="40"
+                  width="24"
+                  height="24"
                   fetchPriority="high"
-                  className="size-10 rounded-lg dark:hidden"
+                  className="size-6 rounded-md dark:hidden"
                 />
                 <img
                   src="/aripa-mark-dark.svg"
                   alt=""
-                  width="40"
-                  height="40"
+                  width="24"
+                  height="24"
                   fetchPriority="high"
-                  className="hidden size-10 rounded-lg dark:block"
+                  className="hidden size-6 rounded-md dark:block"
                 />
               </picture>
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold">Aripa</p>
-                <p className="text-xs text-muted-foreground">First-Run Setup</p>
-              </div>
+              <span className="text-sm font-semibold tracking-tight">Aripa</span>
             </div>
 
             <OnboardingProgress activeProgressIndex={activeProgressIndex} />
 
-            <div className="mt-auto">
-              <Button type="button" variant="outline" className="w-full" onClick={onSignOut}>
+            <div className="mt-auto hidden px-1.5 lg:block">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-8 text-muted-foreground hover:text-foreground"
+                aria-label="Sign out"
+                title="Sign out"
+                onClick={onSignOut}
+              >
                 <LogOut aria-hidden="true" />
-                Sign Out
               </Button>
             </div>
           </div>
         </aside>
 
-        <section className="flex min-w-0 flex-col gap-5 p-4 sm:p-6">
-          <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
-            <div className="min-w-0">
-              <p className="text-sm text-muted-foreground">No config.json was found.</p>
-              <h1 className="text-2xl font-semibold tracking-normal text-pretty">
-                Configure Aripa
-              </h1>
-              <p className="mt-1 max-w-2xl text-sm text-muted-foreground text-pretty"></p>
+        <section className="min-w-0 px-5 py-8 sm:px-8 lg:py-10">
+          <div className="mx-auto grid w-full max-w-lg gap-6">
+            <div>
+              <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
+              <p className="mt-1 text-sm text-muted-foreground">{description}</p>
             </div>
-            <div className="rounded-md border bg-card px-3 py-2 text-sm text-muted-foreground">
-              <span className="break-all">{configPath}</span>
-            </div>
-          </div>
 
-          <Card>
-            <CardHeader>
-              <div className="mb-2 flex size-10 items-center justify-center rounded-md bg-muted">
-                <Sparkles aria-hidden="true" />
-              </div>
-              <CardTitle>{title}</CardTitle>
-              <CardDescription>{description}</CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-5">
-              {loadingOptions ? (
-                <p className="text-sm text-muted-foreground" aria-live="polite">
-                  Loading setup options…
-                </p>
-              ) : (
-                stepContent
-              )}
+            {loadingOptions ? (
+              <p className="text-sm text-muted-foreground" aria-live="polite">
+                Loading…
+              </p>
+            ) : (
+              stepContent
+            )}
 
-              {error ? (
-                <p className="rounded-md border bg-muted px-3 py-2 text-sm" aria-live="polite">
-                  {error}
-                </p>
-              ) : null}
-              {message ? (
-                <p className="rounded-md border bg-muted px-3 py-2 text-sm" aria-live="polite">
-                  {message}
-                </p>
-              ) : null}
+            {error ? (
+              <p className="text-sm text-muted-foreground" aria-live="polite">
+                {error}
+              </p>
+            ) : null}
+            {message ? (
+              <p className="text-sm text-muted-foreground" aria-live="polite">
+                {message}
+              </p>
+            ) : null}
 
-              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
-                <Button type="button" variant="outline" onClick={onBack} disabled={!canGoBack}>
+            <div className="flex items-center justify-between gap-2 border-t pt-5">
+              {canGoBack ? (
+                <Button type="button" variant="ghost" onClick={onBack}>
                   Back
                 </Button>
-                <Button type="button" onClick={onContinue} disabled={primaryDisabled}>
-                  {showPrimarySaveIcon ? <Save aria-hidden="true" /> : null}
-                  {primaryLabel}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+              ) : (
+                <span />
+              )}
+              <Button type="button" onClick={onContinue} disabled={primaryDisabled}>
+                {primaryLabel}
+              </Button>
+            </div>
+
+            <p className="break-all font-mono text-xs text-muted-foreground">{configPath}</p>
+          </div>
         </section>
       </div>
     </main>

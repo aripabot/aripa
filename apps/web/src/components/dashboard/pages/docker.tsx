@@ -1,18 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { Play, RefreshCw, Square } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConfirmActionButton } from "@/components/dashboard/components/confirm-action-button";
 import {
-  DeploymentMetric,
+  DeploymentDetail,
   DockerCommandOutput,
 } from "@/components/dashboard/components/docker-display";
 import { ErrorPanel, LoadingPanel } from "@/components/dashboard/components/panels";
+import { StatusText } from "@/components/dashboard/components/status-dot";
+import type { StatusTone } from "@/components/dashboard/components/status-dot";
 import { formatDateTime } from "@/components/dashboard/lib/format";
-import { badgeToneClass } from "@/components/dashboard/lib/tone";
 import { runDockerDeploymentCommand } from "@/lib/api";
 import type {
   DockerDeploymentAction,
@@ -45,8 +45,10 @@ export function DockerDeploymentsPage({
       onStatusChange(result.status);
       setMessage(
         result.exitCode === 0
-          ? `${dockerActionLabel(action)} completed.`
-          : `${dockerActionLabel(action)} exited with code ${result.exitCode}.`,
+          ? action === "start"
+            ? "Deployment started"
+            : "Deployment stopped"
+          : `Command failed with exit code ${result.exitCode}`,
       );
     } catch (error) {
       setMessage(readableError(error));
@@ -56,143 +58,114 @@ export function DockerDeploymentsPage({
   }
 
   if (deployment.status === "loading") {
-    return <LoadingPanel label="Loading Docker deployment" />;
+    return <LoadingPanel label="Loading" />;
   }
 
   if (deployment.status === "error") {
     return (
-      <ErrorPanel
-        title="Docker deployment unavailable"
-        message={deployment.error}
-        onRetry={onRefresh}
-      />
+      <ErrorPanel title="Deployment unavailable" message={deployment.error} onRetry={onRefresh} />
     );
   }
 
   const startScript = deployment.data.scripts.find((script) => script.action === "start");
   const stopScript = deployment.data.scripts.find((script) => script.action === "stop");
+  const missingScripts = deployment.data.scripts.filter((script) => !script.available);
   const running = deployment.data.state === "running";
 
   return (
-    <div className="grid gap-5">
-      <section className="overflow-hidden rounded-lg border bg-card">
-        <div className="flex flex-col gap-4 border-b p-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-3">
-              <span
-                className={`inline-flex items-center gap-2 rounded-md px-2.5 py-1 text-sm font-medium ${dockerStateClass(
-                  deployment.data.state,
-                )}`}
-              >
-                <span className="size-2 rounded-full bg-current" aria-hidden="true" />
-                {deployment.data.stateLabel}
-              </span>
-              <p className="break-words text-sm text-muted-foreground">{deployment.data.detail}</p>
-            </div>
+    <div className="grid max-w-2xl gap-8">
+      <section className="grid gap-5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-baseline gap-2.5">
+            <StatusText tone={dockerTone(deployment.data.state)} className="font-medium">
+              {deployment.data.stateLabel}
+            </StatusText>
+            <span className="truncate text-sm text-muted-foreground">
+              {deployment.data.detail}
+            </span>
           </div>
-          <Button type="button" variant="outline" onClick={onRefresh}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-8 shrink-0 text-muted-foreground hover:text-foreground"
+            aria-label="Refresh"
+            title="Refresh"
+            onClick={onRefresh}
+          >
             <RefreshCw aria-hidden="true" />
-            Refresh
           </Button>
         </div>
 
-        <div className="grid divide-y sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4">
-          <DeploymentMetric label="Status" value={deployment.data.stateLabel} />
-          <DeploymentMetric
+        <div className="grid gap-5 border-y py-5 sm:grid-cols-3">
+          <DeploymentDetail
             label="Container"
             value={deployment.data.containerName}
-            detail={
-              deployment.data.containerId ? `ID ${deployment.data.containerId}` : "Not created"
-            }
+            detail={deployment.data.containerId ?? undefined}
           />
-          <DeploymentMetric
+          <DeploymentDetail
             label="Image"
             value={deployment.data.imageName}
-            detail={deployment.data.imageId ? `ID ${deployment.data.imageId}` : "Not built"}
+            detail={deployment.data.imageId ?? undefined}
           />
-          <DeploymentMetric
+          <DeploymentDetail
             label="Started"
             value={
-              deployment.data.startedAt ? formatDateTime(deployment.data.startedAt) : "Not started"
+              deployment.data.startedAt ? formatDateTime(deployment.data.startedAt) : "Not running"
             }
           />
         </div>
       </section>
 
       <section className="grid gap-4">
-        <Card>
-          <CardHeader>
-            <CardTitle>Deployment Controls</CardTitle>
-            <CardDescription>Start, restart, or stop the local Docker deployment.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-4">
-            {message ? (
-              <p className="rounded-md border bg-background px-3 py-2 text-sm" aria-live="polite">
-                {message}
-              </p>
-            ) : null}
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <ConfirmActionButton
-                title={running ? "Restart Deployment" : "Start Deployment"}
-                description={
-                  running
-                    ? "Restart the Docker deployment now. The bot may be briefly unavailable."
-                    : "Start the Docker deployment now."
-                }
-                confirmLabel={running ? "Restart Deployment" : "Start Deployment"}
+        <div className="flex flex-wrap items-center gap-2">
+          <ConfirmActionButton
+            title={running ? "Restart deployment" : "Start deployment"}
+            description={
+              running
+                ? "The bot goes offline briefly while the container restarts."
+                : "Builds the image if needed and starts the container."
+            }
+            confirmLabel={running ? "Restart" : "Start"}
+            disabled={runningAction !== null || startScript?.available !== true}
+            onConfirm={() => void runAction("start")}
+            trigger={
+              <Button
+                type="button"
                 disabled={runningAction !== null || startScript?.available !== true}
-                onConfirm={() => void runAction("start")}
-                trigger={
-                  <Button
-                    type="button"
-                    disabled={runningAction !== null || startScript?.available !== true}
-                  >
-                    <Play aria-hidden="true" />
-                    {runningAction === "start"
-                      ? "Starting…"
-                      : running
-                        ? "Restart Deployment"
-                        : "Start Deployment"}
-                  </Button>
-                }
-              />
-              <ConfirmActionButton
-                title="Stop Deployment"
-                description="Stop the Docker deployment now. Aripa will be offline until it is started again."
-                confirmLabel="Stop Deployment"
+              >
+                {runningAction === "start" ? "Starting…" : running ? "Restart" : "Start"}
+              </Button>
+            }
+          />
+          <ConfirmActionButton
+            title="Stop deployment"
+            description="The bot goes offline until the deployment is started again."
+            confirmLabel="Stop deployment"
+            disabled={runningAction !== null || stopScript?.available !== true}
+            onConfirm={() => void runAction("stop")}
+            trigger={
+              <Button
+                type="button"
+                variant="outline"
                 disabled={runningAction !== null || stopScript?.available !== true}
-                onConfirm={() => void runAction("stop")}
-                trigger={
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={runningAction !== null || stopScript?.available !== true}
-                  >
-                    <Square aria-hidden="true" />
-                    {runningAction === "stop" ? "Stopping…" : "Stop Deployment"}
-                  </Button>
-                }
-              />
-            </div>
-            <div className="grid gap-2">
-              {deployment.data.scripts.map((script) => (
-                <div
-                  key={script.action}
-                  className="flex flex-col gap-2 rounded-md border bg-background p-3 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium">{script.label}</p>
-                  </div>
-                  <span
-                    className={`w-fit rounded-sm px-1.5 py-0.5 text-xs ${badgeToneClass(script.available ? "default" : "muted")}`}
-                  >
-                    {script.available ? "Available" : "Missing"}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+              >
+                {runningAction === "stop" ? "Stopping…" : "Stop"}
+              </Button>
+            }
+          />
+          {message ? (
+            <p className="text-sm text-muted-foreground" aria-live="polite">
+              {message}
+            </p>
+          ) : null}
+        </div>
+        {missingScripts.length > 0 ? (
+          <p className="text-sm text-muted-foreground">
+            {missingScripts.map((script) => script.label).join(" and ")} unavailable on this
+            machine.
+          </p>
+        ) : null}
       </section>
 
       {commandResult ? <DockerCommandOutput result={commandResult} /> : null}
@@ -200,22 +173,13 @@ export function DockerDeploymentsPage({
   );
 }
 
-function dockerStateClass(state: DockerDeploymentStatus["state"]): string {
+function dockerTone(state: DockerDeploymentStatus["state"]): StatusTone {
   switch (state) {
     case "running":
-      return badgeToneClass("success");
+      return "ok";
     case "stopped":
-      return badgeToneClass("danger");
+      return "danger";
     case "unknown":
-      return badgeToneClass("muted");
-  }
-}
-
-function dockerActionLabel(action: DockerDeploymentAction): string {
-  switch (action) {
-    case "start":
-      return "Start Deployment";
-    case "stop":
-      return "Stop Deployment";
+      return "neutral";
   }
 }

@@ -4,10 +4,9 @@ import { formatCount } from "@/components/dashboard/lib/format";
 
 export function Metric({ label, value }: { label: string; value: number }) {
   return (
-    <div className="p-4">
-      <p className="text-sm text-muted-foreground">{label}</p>
-      <p className="mt-2 text-3xl font-semibold tracking-normal">{formatCount(value)}</p>
-      <p className="mt-1 h-5 text-sm text-muted-foreground" aria-hidden="true" />
+    <div className="min-w-0">
+      <p className="text-2xl font-semibold tracking-tight tabular-nums">{formatCount(value)}</p>
+      <p className="mt-0.5 truncate text-sm text-muted-foreground">{label}</p>
     </div>
   );
 }

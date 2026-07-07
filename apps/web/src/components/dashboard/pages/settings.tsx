@@ -2,10 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type * as React from "react";
-import { Save } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -15,8 +13,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Field, SwitchField } from "@/components/dashboard/components/fields";
-import { ModelCard } from "@/components/dashboard/components/model-card";
+import { Field, SettingsSection, SwitchField } from "@/components/dashboard/components/fields";
+import { ModelFields } from "@/components/dashboard/components/model-card";
 import { formatTime } from "@/components/dashboard/lib/format";
 import { saveConfig } from "@/lib/api";
 import type { DashboardStatus, SaveConfigResponse } from "@/lib/api-types";
@@ -73,7 +71,7 @@ export function SettingsPage({
       const result = await saveConfig({ config: nextConfig });
       setConfig(result.config);
       setAllowlistInput(result.config.allowlistedServerIds.join("\n"));
-      setMessage(`Saved ${formatTime(result.savedAt)}.`);
+      setMessage(`Saved at ${formatTime(result.savedAt)}`);
       onSaved(result);
     } catch (error) {
       setMessage(readableError(error));
@@ -96,202 +94,185 @@ export function SettingsPage({
   }
 
   return (
-    <form className="grid gap-5" onSubmit={submit}>
-      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-        <p className="break-words text-sm text-muted-foreground">
-          Changes are written to {status.configPath}.
+    <form className="grid max-w-2xl gap-8" onSubmit={submit}>
+      <div className="flex items-center justify-between gap-4">
+        <p className="min-w-0 truncate text-sm text-muted-foreground" aria-live="polite">
+          {message ?? (dirty ? "Unsaved changes" : "")}
         </p>
-        <Button type="submit" disabled={saving}>
-          <Save aria-hidden="true" />
-          {saving ? "Saving…" : "Save Settings"}
+        <Button type="submit" disabled={saving || !dirty}>
+          {saving ? "Saving…" : "Save changes"}
         </Button>
       </div>
-      {message ? (
-        <p className="rounded-md border bg-card px-3 py-2 text-sm" aria-live="polite">
-          {message}
-        </p>
-      ) : null}
 
-      <div className="grid gap-4 xl:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardTitle>Identity</CardTitle>
-            <CardDescription>How Aripa presents itself.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-4">
-            <Field label="Bot name" htmlFor="name">
-              <Input
-                id="name"
-                name="name"
-                autoComplete="off"
-                value={config.name}
-                onChange={(event) => setConfig({ ...config, name: event.target.value })}
-                required
-              />
-            </Field>
-            <Field label="Operator user ID" htmlFor="operator">
-              <Input
-                id="operator"
-                name="operator-user-id"
-                autoComplete="off"
-                inputMode="numeric"
-                value={config.operatorUserId ?? ""}
-                onChange={(event) =>
-                  setConfig({ ...config, operatorUserId: event.target.value.trim() || null })
-                }
-                placeholder="Optional Discord user ID…"
-                spellCheck={false}
-              />
-            </Field>
-            <Field label="Style" htmlFor="style">
-              <Select
-                value={config.stylePrompt}
-                onValueChange={(value) => setConfig({ ...config, stylePrompt: value })}
-              >
-                <SelectTrigger id="style">
-                  <SelectValue placeholder="Choose a style" />
-                </SelectTrigger>
-                <SelectContent>
-                  {status.styles.map((style) => (
-                    <SelectItem key={style.value} value={style.value}>
-                      {style.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-          </CardContent>
-        </Card>
+      <SettingsSection title="Identity">
+        <Field label="Name" htmlFor="name">
+          <Input
+            id="name"
+            name="name"
+            autoComplete="off"
+            value={config.name}
+            onChange={(event) => setConfig({ ...config, name: event.target.value })}
+            required
+          />
+        </Field>
+        <Field
+          label="Operator user ID"
+          htmlFor="operator"
+          hint="This Discord user can run operator commands."
+        >
+          <Input
+            id="operator"
+            name="operator-user-id"
+            autoComplete="off"
+            inputMode="numeric"
+            className="max-w-xs"
+            value={config.operatorUserId ?? ""}
+            onChange={(event) =>
+              setConfig({ ...config, operatorUserId: event.target.value.trim() || null })
+            }
+            spellCheck={false}
+          />
+        </Field>
+        <Field label="Style" htmlFor="style">
+          <Select
+            value={config.stylePrompt}
+            onValueChange={(value) => setConfig({ ...config, stylePrompt: value })}
+          >
+            <SelectTrigger id="style" className="max-w-xs">
+              <SelectValue placeholder="Style" />
+            </SelectTrigger>
+            <SelectContent>
+              {status.styles.map((style) => (
+                <SelectItem key={style.value} value={style.value}>
+                  {style.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+      </SettingsSection>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Access Controls</CardTitle>
-            <CardDescription>Servers allowed to use Aripa.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-4">
-            <Field label="Server allowlist" htmlFor="allowlist">
-              <Textarea
-                id="allowlist"
-                name="allowlisted-server-ids"
-                autoComplete="off"
-                value={allowlistInput}
-                onChange={(event) => setAllowlistInput(event.target.value)}
-                placeholder="One Discord server ID per line…"
-                spellCheck={false}
-              />
-            </Field>
-          </CardContent>
-        </Card>
+      <SettingsSection title="Access">
+        <Field
+          label="Server allowlist"
+          htmlFor="allowlist"
+          hint="One server ID per line. Only these servers can use the bot."
+        >
+          <Textarea
+            id="allowlist"
+            name="allowlisted-server-ids"
+            autoComplete="off"
+            className="font-mono"
+            value={allowlistInput}
+            onChange={(event) => setAllowlistInput(event.target.value)}
+            spellCheck={false}
+          />
+        </Field>
+      </SettingsSection>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Agent Controls</CardTitle>
-            <CardDescription>Limits and privacy defaults for agent replies.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-4">
-            <Field label="Rate limit" htmlFor="rate-limit">
-              <Input
-                id="rate-limit"
-                name="agent-rate-limit"
-                autoComplete="off"
-                inputMode="numeric"
-                value={config.agentRateLimitMessagesPerMinute ?? ""}
-                onChange={(event) =>
-                  setConfig({
-                    ...config,
-                    agentRateLimitMessagesPerMinute:
-                      event.target.value.trim() === "" ? null : Number(event.target.value),
-                  })
-                }
-                placeholder="Off…"
-              />
-            </Field>
-            <Field label="Timeout" htmlFor="timeout">
-              <Input
-                id="timeout"
-                name="agent-timeout"
-                autoComplete="off"
-                inputMode="numeric"
-                value={config.agentTimeoutMs}
-                onChange={(event) =>
-                  setConfig({ ...config, agentTimeoutMs: Number(event.target.value) })
-                }
-              />
-            </Field>
-            <Field label="Global concurrency" htmlFor="global-concurrency">
-              <Input
-                id="global-concurrency"
-                name="agent-global-concurrency"
-                autoComplete="off"
-                inputMode="numeric"
-                value={config.agentMaxConcurrentRequests}
-                onChange={(event) =>
-                  setConfig({ ...config, agentMaxConcurrentRequests: Number(event.target.value) })
-                }
-              />
-            </Field>
-            <Field label="Per-server concurrency" htmlFor="guild-concurrency">
-              <Input
-                id="guild-concurrency"
-                name="agent-guild-concurrency"
-                autoComplete="off"
-                inputMode="numeric"
-                value={config.agentMaxConcurrentRequestsPerGuild}
-                onChange={(event) =>
-                  setConfig({
-                    ...config,
-                    agentMaxConcurrentRequestsPerGuild: Number(event.target.value),
-                  })
-                }
-              />
-            </Field>
-            <SwitchField
-              label="Private logs"
-              checked={config.logPrivacy}
-              onCheckedChange={(checked) => setConfig({ ...config, logPrivacy: checked })}
-            />
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-3">
-        <ModelCard
-          title="Agent Model"
-          model={config.models.agent}
-          providers={status.providers.filter((provider) => provider !== "google")}
-          reasoningEfforts={status.reasoningEfforts}
-          onChange={(patch) => updateModel("agent", patch)}
-        />
-        <ModelCard
-          title="Summarizer Model"
-          model={config.models.summarizer}
-          providers={status.providers.filter((provider) => provider !== "google")}
-          reasoningEfforts={status.reasoningEfforts}
-          onChange={(patch) => updateModel("summarizer", patch)}
-        />
-        <Card>
-          <CardHeader>
-            <CardTitle>Web Search</CardTitle>
-            <CardDescription>Optional search model for recent context.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-4">
-            <SwitchField
-              label="Enable web search"
-              checked={hasWebModel}
-              onCheckedChange={(enabled) =>
+      <SettingsSection title="Limits">
+        <div className="grid gap-5 sm:grid-cols-2">
+          <Field label="Rate limit" htmlFor="rate-limit" hint="Messages per minute. Empty for no limit.">
+            <Input
+              id="rate-limit"
+              name="agent-rate-limit"
+              autoComplete="off"
+              inputMode="numeric"
+              value={config.agentRateLimitMessagesPerMinute ?? ""}
+              onChange={(event) =>
                 setConfig({
                   ...config,
-                  models: { ...config.models, web: { ...config.models.web, enabled } },
+                  agentRateLimitMessagesPerMinute:
+                    event.target.value.trim() === "" ? null : Number(event.target.value),
                 })
               }
             />
-            <Field label="Model" htmlFor="web-model">
+          </Field>
+          <Field label="Timeout" htmlFor="timeout" hint="Milliseconds before a reply is abandoned.">
+            <Input
+              id="timeout"
+              name="agent-timeout"
+              autoComplete="off"
+              inputMode="numeric"
+              value={config.agentTimeoutMs}
+              onChange={(event) =>
+                setConfig({ ...config, agentTimeoutMs: Number(event.target.value) })
+              }
+            />
+          </Field>
+          <Field label="Concurrent replies" htmlFor="global-concurrency">
+            <Input
+              id="global-concurrency"
+              name="agent-global-concurrency"
+              autoComplete="off"
+              inputMode="numeric"
+              value={config.agentMaxConcurrentRequests}
+              onChange={(event) =>
+                setConfig({ ...config, agentMaxConcurrentRequests: Number(event.target.value) })
+              }
+            />
+          </Field>
+          <Field label="Concurrent replies per server" htmlFor="guild-concurrency">
+            <Input
+              id="guild-concurrency"
+              name="agent-guild-concurrency"
+              autoComplete="off"
+              inputMode="numeric"
+              value={config.agentMaxConcurrentRequestsPerGuild}
+              onChange={(event) =>
+                setConfig({
+                  ...config,
+                  agentMaxConcurrentRequestsPerGuild: Number(event.target.value),
+                })
+              }
+            />
+          </Field>
+        </div>
+        <SwitchField
+          label="Private logs"
+          hint="Keep message content out of the runtime logs."
+          checked={config.logPrivacy}
+          onCheckedChange={(checked) => setConfig({ ...config, logPrivacy: checked })}
+        />
+      </SettingsSection>
+
+      <SettingsSection title="Models">
+        <div className="grid gap-8 sm:grid-cols-2">
+          <ModelFields
+            title="Replies"
+            model={config.models.agent}
+            providers={status.providers.filter((provider) => provider !== "google")}
+            reasoningEfforts={status.reasoningEfforts}
+            onChange={(patch) => updateModel("agent", patch)}
+          />
+          <ModelFields
+            title="Summaries"
+            model={config.models.summarizer}
+            providers={status.providers.filter((provider) => provider !== "google")}
+            reasoningEfforts={status.reasoningEfforts}
+            onChange={(patch) => updateModel("summarizer", patch)}
+          />
+        </div>
+        <div className="grid gap-4 border-t pt-5">
+          <SwitchField
+            label="Web search"
+            hint="Let replies pull in recent information."
+            checked={hasWebModel}
+            onCheckedChange={(enabled) =>
+              setConfig({
+                ...config,
+                models: { ...config.models, web: { ...config.models.web, enabled } },
+              })
+            }
+          />
+          {hasWebModel ? (
+            <Field label="Search model" htmlFor="web-model">
               <Input
                 id="web-model"
                 name="web-model"
                 autoComplete="off"
+                className="max-w-xs"
                 value={config.models.web.model}
-                disabled={!hasWebModel}
                 onChange={(event) =>
                   setConfig({
                     ...config,
@@ -303,9 +284,13 @@ export function SettingsPage({
                 }
               />
             </Field>
-          </CardContent>
-        </Card>
-      </div>
+          ) : null}
+        </div>
+      </SettingsSection>
+
+      <p className="break-all border-t pt-5 font-mono text-xs text-muted-foreground">
+        {status.configPath}
+      </p>
     </form>
   );
 }

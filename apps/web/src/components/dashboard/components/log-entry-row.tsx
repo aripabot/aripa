@@ -3,35 +3,33 @@
 import type { DashboardLogEntry, LogEntryLevel } from "@/lib/api-types";
 import { formatTime } from "@/components/dashboard/lib/format";
 import { levelLabel } from "@/components/dashboard/lib/log-utils";
-import { badgeToneClass } from "@/components/dashboard/lib/tone";
 
 export function LogEntryRow({ entry }: { entry: DashboardLogEntry }) {
   const metadata = entry.metadata ? JSON.stringify(entry.metadata, null, 2) : null;
 
   return (
-    <article className="grid grid-cols-[9rem_5.5rem_8rem_minmax(0,1fr)] gap-3 px-4 py-3 text-sm [contain-intrinsic-size:88px] [content-visibility:auto]">
-      <time className="text-xs text-muted-foreground" dateTime={entry.timestamp ?? undefined}>
-        {entry.timestamp ? formatTime(entry.timestamp) : "No Time"}
+    <article className="grid grid-cols-[4.5rem_3.5rem_minmax(0,1fr)] gap-3 px-4 py-2 text-sm [contain-intrinsic-size:37px] [content-visibility:auto] sm:grid-cols-[4.5rem_3.5rem_8rem_minmax(0,1fr)]">
+      <time
+        className="font-mono text-xs leading-5 text-muted-foreground"
+        dateTime={entry.timestamp ?? undefined}
+      >
+        {entry.timestamp ? formatTime(entry.timestamp) : "—"}
       </time>
-      <div>
-        <span
-          className={`rounded-sm px-1.5 py-0.5 text-xs font-medium ${logLevelClass(entry.level)}`}
-        >
-          {levelLabel(entry.level)}
-        </span>
-      </div>
-      <p className="truncate text-xs text-muted-foreground">{entry.sourceName}</p>
+      <span className={`font-mono text-xs leading-5 ${logLevelClass(entry.level)}`}>
+        {levelLabel(entry.level)}
+      </span>
+      <span className="hidden truncate text-xs leading-5 text-muted-foreground sm:block">
+        {entry.sourceName}
+      </span>
       <div className="min-w-0">
         <p className="break-words font-mono text-xs leading-5" translate="no">
           {entry.message}
         </p>
         {metadata ? (
-          <details className="mt-2">
-            <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
-              Details
-            </summary>
+          <details className="mt-1">
+            <summary className="cursor-pointer text-xs text-muted-foreground">Details</summary>
             <pre
-              className="mt-2 overflow-auto rounded-md bg-background p-3 text-xs leading-5"
+              className="mt-2 overflow-auto rounded-md bg-muted/50 p-3 text-xs leading-5"
               translate="no"
             >
               {metadata}
@@ -47,15 +45,14 @@ function logLevelClass(level: LogEntryLevel): string {
   switch (level) {
     case "fatal":
     case "error":
-      return badgeToneClass("danger");
+      return "text-red-600 dark:text-red-400";
     case "warn":
-      return badgeToneClass("warning");
+      return "text-amber-600 dark:text-amber-400";
     case "info":
-      return badgeToneClass("info");
+      return "text-foreground";
     case "debug":
     case "trace":
-      return badgeToneClass("muted");
     case "unknown":
-      return "bg-background text-muted-foreground";
+      return "text-muted-foreground";
   }
 }

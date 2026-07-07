@@ -1,13 +1,9 @@
 "use client";
 
-import { Terminal } from "lucide-react";
-
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatTime } from "@/components/dashboard/lib/format";
-import { badgeToneClass } from "@/components/dashboard/lib/tone";
 import type { DockerDeploymentCommandResponse } from "@/lib/api-types";
 
-export function DeploymentMetric({
+export function DeploymentDetail({
   label,
   value,
   detail,
@@ -17,13 +13,13 @@ export function DeploymentMetric({
   detail?: string;
 }) {
   return (
-    <div className="min-w-0 p-4">
+    <div className="min-w-0">
       <p className="text-sm text-muted-foreground">{label}</p>
-      <p className="mt-2 truncate text-lg font-semibold tracking-normal" translate="no">
+      <p className="mt-0.5 truncate text-sm" translate="no" title={value}>
         {value}
       </p>
       {detail ? (
-        <p className="mt-1 truncate text-sm text-muted-foreground" translate="no">
+        <p className="truncate font-mono text-xs text-muted-foreground" translate="no">
           {detail}
         </p>
       ) : null}
@@ -35,35 +31,25 @@ export function DockerCommandOutput({ result }: { result: DockerDeploymentComman
   const output = [result.stdout.trim(), result.stderr.trim()].filter(Boolean).join("\n\n");
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0">
-            <CardTitle>Deployment Output</CardTitle>
-            <CardDescription>Completed at {formatTime(result.completedAt)}.</CardDescription>
-          </div>
-          <span
-            className={`w-fit rounded-sm px-1.5 py-0.5 text-xs ${badgeToneClass(result.exitCode === 0 ? "default" : "danger")}`}
-          >
-            Exit {result.exitCode}
-          </span>
-        </div>
-      </CardHeader>
-      <CardContent>
-        {output ? (
-          <pre
-            className="max-h-96 overflow-auto rounded-md bg-background p-3 font-mono text-xs leading-5"
-            translate="no"
-          >
-            {output}
-          </pre>
-        ) : (
-          <div className="flex items-start gap-3 rounded-md border bg-background p-3">
-            <Terminal aria-hidden="true" className="mt-0.5 size-4 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">The command completed without output.</p>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+    <section className="grid gap-3 border-t pt-6">
+      <div className="flex items-baseline justify-between gap-4">
+        <h2 className="text-sm font-medium">Output</h2>
+        <p className="text-sm text-muted-foreground">
+          {result.exitCode === 0
+            ? `Finished at ${formatTime(result.completedAt)}`
+            : `Failed with exit code ${result.exitCode}`}
+        </p>
+      </div>
+      {output ? (
+        <pre
+          className="max-h-96 overflow-auto rounded-lg border bg-muted/40 p-4 font-mono text-xs leading-5"
+          translate="no"
+        >
+          {output}
+        </pre>
+      ) : (
+        <p className="text-sm text-muted-foreground">The command finished without output.</p>
+      )}
+    </section>
   );
 }

@@ -130,7 +130,7 @@ export function ProviderSelect({
 
 export function OnboardingProgress({ activeProgressIndex }: { activeProgressIndex: number }) {
   return (
-    <nav aria-label="Onboarding progress" className="flex flex-col gap-1">
+    <nav aria-label="Onboarding progress" className="flex flex-col gap-0.5">
       {ONBOARDING_PROGRESS_STEPS.map((item, index) => {
         const itemProgressIndex = stepIndex(item.step);
         const active = itemProgressIndex === activeProgressIndex;
@@ -139,13 +139,14 @@ export function OnboardingProgress({ activeProgressIndex }: { activeProgressInde
           <div
             key={item.step}
             aria-current={active ? "step" : undefined}
-            className="flex h-10 items-center gap-3 rounded-md px-3 text-sm"
-            data-active={active ? "" : undefined}
+            className={`flex h-8 items-center gap-2.5 rounded-md px-3 text-sm ${
+              active ? "bg-muted font-medium text-foreground" : "text-muted-foreground"
+            }`}
           >
-            <span className="flex size-6 items-center justify-center rounded-md border bg-background text-xs text-muted-foreground">
-              {completed ? <CheckCircle2 aria-hidden="true" /> : index + 1}
+            <span className="w-4 text-xs tabular-nums">
+              {completed ? <CheckCircle2 aria-hidden="true" className="size-3.5" /> : index + 1}
             </span>
-            <span className="min-w-0 truncate font-medium">{item.label}</span>
+            <span className="min-w-0 truncate">{item.label}</span>
           </div>
         );
       })}
