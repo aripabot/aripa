@@ -18,10 +18,18 @@ import {
 } from "@aripabot/core/agent/tools/index.ts";
 import {
   fetchPreviousMessages,
+  fetchMessagesAfter,
   formatContextMessage,
+  summarizeConversationMemoryWithModel,
+  summarizeConversationMemoryWithNano,
   summarizeRequestContextWithModel,
   type ContextMessageLike,
 } from "@aripabot/core/agent/tools/request-context.ts";
+import {
+  ConversationMemoryStore,
+  createRawMemoryTurn,
+  type RawMemoryTurn,
+} from "@aripabot/core/agent/conversation-memory.ts";
 import type { ResolvedTextModel } from "@aripabot/core/agent/models.ts";
 import { errorSnapshot } from "@aripabot/core/shared/errors.ts";
 import { escapeRegExp } from "@aripabot/core/shared/text.ts";
@@ -32,7 +40,10 @@ const DEFAULT_BOT_NAME = "Aripa";
 const DEFAULT_STYLE_PROMPT_NAME = "match";
 const DEFAULT_MAX_AGENT_STEPS = 8;
 const DEFAULT_AGENT_CONTEXT_MESSAGE_COUNT = 3;
+const DEFAULT_AGENT_COLD_START_MESSAGE_COUNT = 5;
+const DEFAULT_AGENT_GAP_FILL_LIMIT = 10;
 const DEFAULT_AGENT_TIMEOUT_MS = 60_000;
+const DEFAULT_MEMORY_COMPACTION_TIMEOUT_MS = 30_000;
 const DEFAULT_TYPING_REFRESH_INTERVAL_MS = 8_000;
 const EMPTY_AGENT_PROMPT = "The user mentioned you without additional text. Respond naturally.";
 const EMPTY_AGENT_REPLY = "I'm here, but I couldn't produce a useful reply for that.";
@@ -76,9 +87,12 @@ export interface HandleAgentMentionOptions {
   maxSteps?: number;
   agentTimeoutMs?: number;
   defaultContextMessageCount?: number;
+  coldStartMessageCount?: number;
+  gapFillLimit?: number;
   agentConfirmationTimeoutMs?: number;
   typingRefreshIntervalMs?: number;
   guildConfigStore?: GuildConfigStore;
+  conversationMemory?: ConversationMemoryStore;
   loadPromptParts?: () => Promise<AgentPromptParts>;
   generateAgentText?: AgentTextGenerator;
   agentModel?: ResolvedTextModel;
@@ -109,9 +123,12 @@ export async function handleAgentMention({
   maxSteps = DEFAULT_MAX_AGENT_STEPS,
   agentTimeoutMs = DEFAULT_AGENT_TIMEOUT_MS,
   defaultContextMessageCount = DEFAULT_AGENT_CONTEXT_MESSAGE_COUNT,
+  coldStartMessageCount = DEFAULT_AGENT_COLD_START_MESSAGE_COUNT,
+  gapFillLimit = DEFAULT_AGENT_GAP_FILL_LIMIT,
   agentConfirmationTimeoutMs,
   typingRefreshIntervalMs = DEFAULT_TYPING_REFRESH_INTERVAL_MS,
   guildConfigStore,
+  conversationMemory,
   webSearchEnabled = true,
   loadPromptParts = () => loadAgentPromptParts(stylePromptName, webSearchEnabled),
   generateAgentText = runAgentTextGeneration,
@@ -146,7 +163,9 @@ export async function handleAgentMention({
     prompt = await buildDefaultAgentPrompt({
       message,
       assistantUserId: client.user?.id,
-      contextMessageCount: defaultContextMessageCount,
+      contextMessageCount: conversationMemory ? coldStartMessageCount : defaultContextMessageCount,
+      conversationMemory,
+      gapFillLimit,
       fallbackPrompt: prompt,
       log,
     });
@@ -229,7 +248,17 @@ export async function handleAgentMention({
     }
 
     const reply = normalizeAgentReply(result.text);
-    await safeReply(message, reply, log);
+    const replyMessage = await safeReply(message, reply, log);
+    recordAgentTurn({
+      message,
+      assistantUserId: client.user?.id,
+      reply,
+      replyMessage,
+      conversationMemory,
+      log,
+      summarizerModel,
+      logPrivacy,
+    });
 
     return {
       status: "completed",
@@ -248,6 +277,14 @@ export async function handleAgentMention({
       .error("Agent mention failed.");
 
     await safeReply(message, AGENT_ERROR_REPLY, log);
+    recordAgentTurn({
+      message,
+      assistantUserId: client.user?.id,
+      conversationMemory,
+      log,
+      summarizerModel,
+      logPrivacy,
+    });
 
     return {
       status: "failed",
@@ -319,12 +356,16 @@ export async function buildDefaultAgentPrompt({
   message,
   assistantUserId = message.client.user?.id,
   contextMessageCount = DEFAULT_AGENT_CONTEXT_MESSAGE_COUNT,
+  conversationMemory,
+  gapFillLimit = DEFAULT_AGENT_GAP_FILL_LIMIT,
   fallbackPrompt,
   log = defaultLog,
 }: {
   message: Message;
   assistantUserId?: string;
   contextMessageCount?: number;
+  conversationMemory?: ConversationMemoryStore;
+  gapFillLimit?: number;
   fallbackPrompt?: string;
   log?: LogLayer;
 }): Promise<string> {
@@ -333,6 +374,66 @@ export async function buildDefaultAgentPrompt({
     invokerId: message.author.id,
     assistantUserId,
   });
+
+  if (conversationMemory) {
+    const memoryContext = conversationMemory.getContext(message.channelId, {
+      invokerId: message.author.id,
+      assistantUserId,
+    });
+
+    if (memoryContext) {
+      const seenMessageIds = new Set([...memoryContext.messageIds, currentMessage.id]);
+      const promptParts: string[] = [];
+      const memoryLines = [...memoryContext.formattedTurns];
+      const gapFillMessages = await fetchGapFillMessages({
+        message,
+        lastSeenMessageId: memoryContext.lastSeenMessageId,
+        seenMessageIds,
+        gapFillLimit,
+        conversationMemory,
+        assistantUserId,
+        log,
+      });
+      const replyReference = await fetchReplyReferenceMessage({
+        message,
+        seenMessageIds,
+        assistantUserId,
+        log,
+      });
+
+      if (gapFillMessages.length > 0) {
+        memoryLines.push(
+          ...gapFillMessages.map((entry) =>
+            formatContextMessage(entry, {
+              invokerId: message.author.id,
+              assistantUserId,
+            }),
+          ),
+        );
+      }
+
+      if (memoryContext.summary || memoryLines.length > 0) {
+        promptParts.push(formatConversationMemoryBlock(memoryContext.summary, memoryLines));
+      }
+
+      if (replyReference) {
+        promptParts.push(
+          [
+            "## Replied-to message",
+            "The user is replying to this message:",
+            formatContextMessage(replyReference, {
+              invokerId: message.author.id,
+              assistantUserId,
+            }),
+          ].join("\n\n"),
+        );
+      }
+
+      promptParts.push(currentPrompt);
+      return promptParts.join("\n\n");
+    }
+  }
+
   const previousLimit = Math.max(0, contextMessageCount - 1);
 
   if (previousLimit === 0) {
@@ -356,6 +457,121 @@ export async function buildDefaultAgentPrompt({
       .warn("Failed to load default agent context.");
 
     return fallbackPrompt ?? currentPrompt;
+  }
+}
+
+function formatConversationMemoryBlock(
+  summary: string | null,
+  formattedTurns: readonly string[],
+): string {
+  return [
+    "## Conversation memory",
+    "This is prior conversation the assistant participated in for this channel.",
+    summary ? `Summary: ${summary}` : "",
+    formattedTurns.length > 0 ? formattedTurns.join("\n\n") : "",
+  ]
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0)
+    .join("\n\n");
+}
+
+async function fetchGapFillMessages({
+  message,
+  lastSeenMessageId,
+  seenMessageIds,
+  gapFillLimit,
+  conversationMemory,
+  assistantUserId,
+  log,
+}: {
+  message: Message;
+  lastSeenMessageId: string | null;
+  seenMessageIds: Set<string>;
+  gapFillLimit: number;
+  conversationMemory: ConversationMemoryStore;
+  assistantUserId?: string;
+  log: LogLayer;
+}): Promise<RawMemoryTurn[]> {
+  if (!lastSeenMessageId || gapFillLimit <= 0) {
+    return [];
+  }
+
+  try {
+    const fetchedMessages = await fetchMessagesAfter(message, lastSeenMessageId, gapFillLimit);
+    const gapFillMessages = fetchedMessages
+      .filter((entry) => !seenMessageIds.has(entry.id))
+      .map((entry) => createRawMemoryTurn(entry));
+    const promptMessages: RawMemoryTurn[] = [];
+
+    if (fetchedMessages.length === gapFillLimit) {
+      const skippedTurn = conversationMemory.recordSkippedMessages(
+        message.channelId,
+        lastSeenMessageId,
+      );
+      promptMessages.push(skippedTurn);
+      seenMessageIds.add(skippedTurn.id);
+    }
+
+    if (gapFillMessages.length > 0) {
+      conversationMemory.recordTurn(message.channelId, gapFillMessages);
+      promptMessages.push(...gapFillMessages);
+
+      for (const entry of gapFillMessages) {
+        seenMessageIds.add(entry.id);
+      }
+    }
+
+    return promptMessages;
+  } catch (error) {
+    log
+      .withError(error)
+      .withMetadata({
+        ...createAgentMessageLogMetadata(message),
+        lastSeenMessageId,
+        gapFillLimit,
+        assistantUserId,
+      })
+      .warn("Failed to gap fill conversation memory.");
+    return [];
+  }
+}
+
+async function fetchReplyReferenceMessage({
+  message,
+  seenMessageIds,
+  assistantUserId,
+  log,
+}: {
+  message: Message;
+  seenMessageIds: Set<string>;
+  assistantUserId?: string;
+  log: LogLayer;
+}): Promise<RawMemoryTurn | null> {
+  const referencedMessageId = message.reference?.messageId;
+
+  if (!referencedMessageId || seenMessageIds.has(referencedMessageId)) {
+    return null;
+  }
+
+  if (!("fetchReference" in message) || typeof message.fetchReference !== "function") {
+    return null;
+  }
+
+  try {
+    const referencedMessage = await message.fetchReference();
+    const turn = createRawMemoryTurn(referencedMessage);
+    seenMessageIds.add(turn.id);
+    return turn;
+  } catch (error) {
+    log
+      .withError(error)
+      .withMetadata({
+        ...createAgentMessageLogMetadata(message),
+        referencedMessageId,
+        assistantUserId,
+      })
+      .warn("Failed to fetch agent reply reference.");
+    return null;
   }
 }
 
@@ -489,6 +705,77 @@ function createCurrentContextMessage(
       tag: message.author.tag,
     },
   };
+}
+
+function recordAgentTurn({
+  message,
+  assistantUserId,
+  reply,
+  replyMessage,
+  conversationMemory,
+  log,
+  summarizerModel,
+  logPrivacy,
+}: {
+  message: Message;
+  assistantUserId?: string;
+  reply?: string;
+  replyMessage?: Message | null;
+  conversationMemory?: ConversationMemoryStore;
+  log: LogLayer;
+  summarizerModel?: ResolvedTextModel;
+  logPrivacy?: boolean;
+}): void {
+  if (!conversationMemory) {
+    return;
+  }
+
+  const turns = [createRawMemoryTurn(createCurrentContextMessage(message, assistantUserId))];
+
+  if (reply && replyMessage) {
+    turns.push(
+      createRawMemoryTurn({
+        id: replyMessage.id,
+        content: reply,
+        createdTimestamp: replyMessage.createdTimestamp,
+        author: {
+          id: replyMessage.author.id,
+          bot: replyMessage.author.bot,
+          username: replyMessage.author.username,
+          tag: replyMessage.author.tag,
+        },
+      }),
+    );
+  }
+
+  conversationMemory.recordTurn(message.channelId, turns);
+
+  if (!conversationMemory.needsCompaction(message.channelId)) {
+    return;
+  }
+
+  const timeout = createAgentTimeout(DEFAULT_MEMORY_COMPACTION_TIMEOUT_MS);
+  const summarize = summarizerModel
+    ? (
+        formattedMessages: readonly string[],
+        options?: { abortSignal?: AbortSignal; previousSummary?: string | null },
+      ) =>
+        summarizeConversationMemoryWithModel(formattedMessages, {
+          ...summarizerModel,
+          abortSignal: options?.abortSignal,
+          previousSummary: options?.previousSummary,
+        })
+    : summarizeConversationMemoryWithNano;
+
+  void conversationMemory
+    .compact(message.channelId, summarize, {
+      invokerId: message.author.id,
+      assistantUserId,
+      log,
+      abortSignal: timeout.signal,
+      logPrivacy,
+    })
+    .finally(timeout.clear);
 }
 
 function createAgentMessageLogMetadata(message: Message): Record<string, unknown> {

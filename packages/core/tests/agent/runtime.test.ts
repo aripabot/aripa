@@ -12,6 +12,7 @@ import {
   loadAgentPromptParts,
   shouldHandleAgentMention,
 } from "@aripabot/core/agent/runtime.ts";
+import { ConversationMemoryStore } from "@aripabot/core/agent/conversation-memory.ts";
 
 interface CapturingLog {
   entries: Array<{
@@ -207,6 +208,128 @@ describe("buildDefaultAgentPrompt", () => {
       ].join("\n\n"),
     );
   });
+
+  test("uses conversation memory, gap fill, replied-to message, and current message in order", async () => {
+    const conversationMemory = new ConversationMemoryStore();
+    conversationMemory.recordTurn("channel-1", [
+      createPreviousMessage("memory-1", "user-1", "remember this", 1, {
+        username: "alice",
+      }),
+      createPreviousMessage("memory-2", "bot-1", "I remembered it", 2, {
+        bot: true,
+        username: "Airpod",
+      }),
+    ]);
+
+    const prompt = await buildDefaultAgentPrompt({
+      message: createMessage("<@bot-1> what now?", {
+        afterMessages: [
+          createPreviousMessage("gap-1", "user-2", "intervening context", 3, {
+            username: "bob",
+          }),
+          createPreviousMessage("message-1", "user-1", "<@bot-1> what now?", 4, {
+            username: "alice",
+          }),
+        ],
+        referencedMessage: createPreviousMessage("referenced-1", "bot-1", "the prior answer", 2, {
+          bot: true,
+          username: "Airpod",
+        }),
+      }),
+      assistantUserId: "bot-1",
+      conversationMemory,
+      gapFillLimit: 10,
+      log: createLog(),
+    });
+
+    expect(prompt).toBe(
+      [
+        "## Conversation memory",
+        "This is prior conversation the assistant participated in for this channel.",
+        [
+          "user (username: alice, id: user-1): remember this",
+          "assistant: I remembered it",
+          "CONTEXT ONLY, MAY BE USEFUL. DO NOT RESPOND DIRECTLY TO THIS MESSAGE\nuser (username: bob, id: user-2): intervening context",
+        ].join("\n\n"),
+        "## Replied-to message",
+        "The user is replying to this message:",
+        "assistant: the prior answer",
+        "user (username: alice, id: user-1): what now?",
+      ].join("\n\n"),
+    );
+
+    expect(
+      conversationMemory.getContext("channel-1", {
+        invokerId: "user-1",
+        assistantUserId: "bot-1",
+      })?.formattedTurns,
+    ).toContain(
+      "CONTEXT ONLY, MAY BE USEFUL. DO NOT RESPOND DIRECTLY TO THIS MESSAGE\nuser (username: bob, id: user-2): intervening context",
+    );
+  });
+
+  test("uses configured cold-start message count when memory has no channel entry", async () => {
+    const prompt = await buildDefaultAgentPrompt({
+      message: createMessage("<@bot-1> cold start", {
+        previousMessages: [
+          createPreviousMessage("previous-1", "user-2", "one", 1, { username: "bob" }),
+          createPreviousMessage("previous-2", "user-3", "two", 2, { username: "casey" }),
+          createPreviousMessage("previous-3", "user-4", "three", 3, { username: "drew" }),
+          createPreviousMessage("previous-4", "user-1", "four", 4, { username: "alice" }),
+        ],
+      }),
+      assistantUserId: "bot-1",
+      conversationMemory: new ConversationMemoryStore(),
+      contextMessageCount: 5,
+      log: createLog(),
+    });
+
+    expect(prompt).toBe(
+      [
+        "CONTEXT ONLY, MAY BE USEFUL. DO NOT RESPOND DIRECTLY TO THIS MESSAGE\nuser (username: bob, id: user-2): one",
+        "CONTEXT ONLY, MAY BE USEFUL. DO NOT RESPOND DIRECTLY TO THIS MESSAGE\nuser (username: casey, id: user-3): two",
+        "CONTEXT ONLY, MAY BE USEFUL. DO NOT RESPOND DIRECTLY TO THIS MESSAGE\nuser (username: drew, id: user-4): three",
+        "user (username: alice, id: user-1): four",
+        "user (username: alice, id: user-1): cold start",
+      ].join("\n\n"),
+    );
+  });
+
+  test("continues with ledger context when gap fill fails", async () => {
+    const conversationMemory = new ConversationMemoryStore();
+    const log = createCapturingLog();
+    conversationMemory.recordTurn("channel-1", [
+      createPreviousMessage("memory-1", "user-1", "remember this", 1, {
+        username: "alice",
+      }),
+    ]);
+
+    const prompt = await buildDefaultAgentPrompt({
+      message: createMessage("<@bot-1> keep going", {
+        fetchAfterError: new Error("missing access"),
+      }),
+      assistantUserId: "bot-1",
+      conversationMemory,
+      log: log as never,
+    });
+
+    expect(prompt).toContain("user (username: alice, id: user-1): remember this");
+    expect(prompt).toContain("user (username: alice, id: user-1): keep going");
+    expect(log.entries).toContainEqual({
+      level: "warn",
+      message: "Failed to gap fill conversation memory.",
+      metadata: {
+        guildId: "guild-1",
+        channelId: "channel-1",
+        messageId: "message-1",
+        userId: "user-1",
+        lastSeenMessageId: "memory-1",
+        gapFillLimit: 10,
+        assistantUserId: "bot-1",
+      },
+      error: new Error("missing access"),
+    });
+  });
 });
 
 describe("loadAgentPromptParts", () => {
@@ -297,6 +420,111 @@ describe("handleAgentMention", () => {
       "run_action",
       "search_web",
     ]);
+  });
+
+  test("records successful turns in conversation memory with the bot reply id", async () => {
+    const conversationMemory = new ConversationMemoryStore();
+
+    await handleAgentMention({
+      client: createClient("bot-1"),
+      message: createMessage("<@bot-1> remember the plan"),
+      prefix: "-",
+      actions: new ActionDirectory(),
+      conversationMemory,
+      log: createLog(),
+      loadPromptParts: async () => ({
+        defaultPrompt: "default instructions",
+        webPrompt: "web instructions",
+        stylePrompt: "match style",
+        metadataPrompt: "metadata header",
+      }),
+      generateAgentText: async () => ({ text: "Plan remembered." }),
+    });
+
+    expect(
+      conversationMemory.getContext("channel-1", {
+        invokerId: "user-1",
+        assistantUserId: "bot-1",
+      }),
+    ).toMatchObject({
+      lastSeenMessageId: "reply-1",
+      formattedTurns: [
+        "user (username: alice, id: user-1): remember the plan",
+        "assistant: Plan remembered.",
+      ],
+    });
+  });
+
+  test("records failed turns without the generic error reply", async () => {
+    const conversationMemory = new ConversationMemoryStore();
+
+    const result = await handleAgentMention({
+      client: createClient("bot-1"),
+      message: createMessage("<@bot-1> this will fail"),
+      prefix: "-",
+      actions: new ActionDirectory(),
+      conversationMemory,
+      log: createLog(),
+      loadPromptParts: async () => ({
+        defaultPrompt: "default instructions",
+        webPrompt: "web instructions",
+        stylePrompt: "match style",
+        metadataPrompt: "metadata header",
+      }),
+      generateAgentText: async () => {
+        throw new Error("model failed");
+      },
+    });
+
+    expect(result.status).toBe("failed");
+    expect(
+      conversationMemory.getContext("channel-1", {
+        invokerId: "user-1",
+        assistantUserId: "bot-1",
+      }),
+    ).toMatchObject({
+      lastSeenMessageId: "message-1",
+      formattedTurns: ["user (username: alice, id: user-1): this will fail"],
+    });
+  });
+
+  test("keeps prompt compatibility when no memory store is supplied", async () => {
+    const captured: AgentTextOptions[] = [];
+
+    await handleAgentMention({
+      client: createClient("bot-1"),
+      message: createMessage("<@bot-1> please check this", {
+        previousMessages: [
+          createPreviousMessage("previous-1", "user-2", "extra background", 1, {
+            username: "bob",
+          }),
+          createPreviousMessage("previous-2", "user-1", "my earlier ask", 2, {
+            username: "alice",
+          }),
+        ],
+      }),
+      prefix: "-",
+      actions: new ActionDirectory(),
+      log: createLog(),
+      loadPromptParts: async () => ({
+        defaultPrompt: "default instructions",
+        webPrompt: "web instructions",
+        stylePrompt: "match style",
+        metadataPrompt: "metadata header",
+      }),
+      generateAgentText: async (options) => {
+        captured.push(options);
+        return { text: "Got it." };
+      },
+    });
+
+    expect(captured[0]?.prompt).toBe(
+      [
+        "CONTEXT ONLY, MAY BE USEFUL. DO NOT RESPOND DIRECTLY TO THIS MESSAGE\nuser (username: bob, id: user-2): extra background",
+        "user (username: alice, id: user-1): my earlier ask",
+        "user (username: alice, id: user-1): please check this",
+      ].join("\n\n"),
+    );
   });
 
   test("omits the web tool when web search is disabled", async () => {
@@ -677,6 +905,9 @@ function createMessage(
     replies?: string[];
     typingCalls?: number[];
     previousMessages?: ReturnType<typeof createPreviousMessage>[];
+    afterMessages?: ReturnType<typeof createPreviousMessage>[];
+    referencedMessage?: ReturnType<typeof createPreviousMessage>;
+    fetchAfterError?: Error;
     confirmationReactionEmoji?: string;
     confirmationDelayMs?: number;
   } = {},
@@ -745,15 +976,39 @@ function createMessage(
         options.typingCalls?.push(Date.now());
       },
       messages: {
-        fetch: async ({ before, limit }: { before: string; limit: number }) => {
+        fetch: async ({
+          before,
+          after,
+          limit,
+        }: {
+          before?: string;
+          after?: string;
+          limit: number;
+        }) => {
+          if (after) {
+            if (options.fetchAfterError) {
+              throw options.fetchAfterError;
+            }
+
+            const selected = (options.afterMessages ?? []).slice(-limit).reverse();
+            return new Map(selected.map((message) => [message.id, message]));
+          }
+
           expect(before).toBe("message-1");
-          const previousMessages = options.previousMessages ?? [];
-          const selected = previousMessages.slice(-limit).reverse();
+          const selected = (options.previousMessages ?? []).slice(-limit).reverse();
           return new Map(selected.map((message) => [message.id, message]));
         },
       },
     },
     inGuild: () => options.inGuild ?? true,
+    reference: options.referencedMessage ? { messageId: options.referencedMessage.id } : null,
+    fetchReference: async () => {
+      if (!options.referencedMessage) {
+        throw new Error("No referenced message configured.");
+      }
+
+      return options.referencedMessage;
+    },
     reply: async ({ content: replyContent, embeds }: { content?: string; embeds?: unknown[] }) => {
       if (replyContent) {
         options.replies?.push(replyContent);
@@ -763,7 +1018,16 @@ function createMessage(
         return confirmationMessage;
       }
 
-      return { content: replyContent };
+      return {
+        id: "reply-1",
+        content: replyContent,
+        createdTimestamp: 10_000,
+        author: {
+          id: botId,
+          bot: true,
+          username: "Airpod",
+        },
+      };
     },
   } as never;
 }

@@ -99,11 +99,11 @@ export class ConversationMemoryStore {
     this.evictLru();
   }
 
-  recordSkippedMessages(channelId: string, afterMessageId: string): void {
+  recordSkippedMessages(channelId: string, afterMessageId: string): RawMemoryTurn {
     const now = this.now();
     this.sweep(now);
     const entry = this.getOrCreateEntry(channelId, now);
-    entry.turns.push({
+    const turn: RawMemoryTurn = {
       id: `skipped-after-${afterMessageId}`,
       content: SKIPPED_MESSAGES_CONTENT,
       createdTimestamp: now,
@@ -112,9 +112,11 @@ export class ConversationMemoryStore {
         bot: true,
         username: "system",
       },
-    });
+    };
+    entry.turns.push(turn);
     this.touch(entry, now);
     this.evictLru();
+    return turn;
   }
 
   needsCompaction(channelId: string): boolean {
