@@ -150,3 +150,6 @@ vite.config.ts.timestamp-*
 config.json
 .aripa-dashboard-auth.json
 AUDIT.html
+
+
+*SPEC*.md
