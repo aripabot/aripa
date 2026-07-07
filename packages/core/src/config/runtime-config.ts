@@ -42,6 +42,7 @@ export interface RuntimeJsonConfig {
   models: RuntimeModelConfig;
   providers: RuntimeProviderConfig;
   updates: RuntimeUpdateConfig;
+  memory: RuntimeMemoryConfig;
 }
 
 export interface RuntimeModelSelection {
@@ -75,6 +76,16 @@ export interface RuntimeUpdateConfig {
   releasePublicKeyPem?: string;
   releasePublicKeyPemBase64?: string;
   autoInstall: RuntimeAutoUpdateConfig;
+}
+
+export interface RuntimeMemoryConfig {
+  enabled: boolean;
+  idleTtlMinutes: number;
+  maxChannels: number;
+  maxVerbatimChars: number;
+  keepRecentTurns: number;
+  gapFillLimit: number;
+  coldStartMessageCount: number;
 }
 
 export interface RuntimeAutoUpdateConfig {
@@ -121,6 +132,15 @@ export const DEFAULT_RUNTIME_CONFIG: RuntimeJsonConfig = {
       preset: "weekly-sunday-4am",
       cronExpression: "0 4 * * 0",
     },
+  },
+  memory: {
+    enabled: true,
+    idleTtlMinutes: 30,
+    maxChannels: 500,
+    maxVerbatimChars: 6_000,
+    keepRecentTurns: 6,
+    gapFillLimit: 10,
+    coldStartMessageCount: 5,
   },
 };
 
@@ -220,6 +240,7 @@ const runtimeConfigSchema = z
       models: createRuntimeModelConfigSchema(),
       providers: providerConfigSchema.catch({}),
       updates: createRuntimeUpdateConfigSchema(),
+      memory: createRuntimeMemoryConfigSchema(),
     }),
   )
   .transform(
@@ -228,6 +249,7 @@ const runtimeConfigSchema = z
       models: cloneRuntimeModelConfig(config.models),
       providers: { ...config.providers },
       updates: { ...config.updates, autoInstall: { ...config.updates.autoInstall } },
+      memory: { ...config.memory },
     }),
   );
 
@@ -245,6 +267,7 @@ export function cloneDefaultRuntimeConfig(): RuntimeJsonConfig {
       ...DEFAULT_RUNTIME_CONFIG.updates,
       autoInstall: { ...DEFAULT_RUNTIME_CONFIG.updates.autoInstall },
     },
+    memory: { ...DEFAULT_RUNTIME_CONFIG.memory },
   };
 }
 
@@ -352,6 +375,23 @@ function createRuntimeUpdateConfigSchema() {
           }),
         )
         .catch(DEFAULT_RUNTIME_CONFIG.updates.autoInstall),
+    }),
+  );
+}
+
+function createRuntimeMemoryConfigSchema() {
+  return z.preprocess(
+    (value) => (isPlainObject(value) ? value : {}),
+    z.object({
+      enabled: z.boolean().catch(DEFAULT_RUNTIME_CONFIG.memory.enabled),
+      idleTtlMinutes: positiveIntegerConfigSchema(DEFAULT_RUNTIME_CONFIG.memory.idleTtlMinutes),
+      maxChannels: positiveIntegerConfigSchema(DEFAULT_RUNTIME_CONFIG.memory.maxChannels),
+      maxVerbatimChars: positiveIntegerConfigSchema(DEFAULT_RUNTIME_CONFIG.memory.maxVerbatimChars),
+      keepRecentTurns: positiveIntegerConfigSchema(DEFAULT_RUNTIME_CONFIG.memory.keepRecentTurns),
+      gapFillLimit: positiveIntegerConfigSchema(DEFAULT_RUNTIME_CONFIG.memory.gapFillLimit),
+      coldStartMessageCount: positiveIntegerConfigSchema(
+        DEFAULT_RUNTIME_CONFIG.memory.coldStartMessageCount,
+      ),
     }),
   );
 }

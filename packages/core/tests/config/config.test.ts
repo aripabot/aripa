@@ -29,6 +29,15 @@ describe("parseRuntimeJsonConfig", () => {
         agentMaxConcurrentRequests: 8,
         agentMaxConcurrentRequestsPerGuild: 3,
         logPrivacy: true,
+        memory: {
+          enabled: false,
+          idleTtlMinutes: 45,
+          maxChannels: 250,
+          maxVerbatimChars: 12_000,
+          keepRecentTurns: 8,
+          gapFillLimit: 15,
+          coldStartMessageCount: 7,
+        },
         models: {
           agent: {
             provider: "openrouter",
@@ -71,6 +80,15 @@ describe("parseRuntimeJsonConfig", () => {
       agentMaxConcurrentRequests: 8,
       agentMaxConcurrentRequestsPerGuild: 3,
       logPrivacy: true,
+      memory: {
+        enabled: false,
+        idleTtlMinutes: 45,
+        maxChannels: 250,
+        maxVerbatimChars: 12_000,
+        keepRecentTurns: 8,
+        gapFillLimit: 15,
+        coldStartMessageCount: 7,
+      },
       models: {
         agent: {
           provider: "openrouter",
@@ -130,6 +148,22 @@ describe("parseRuntimeJsonConfig", () => {
       agentMaxConcurrentRequests: DEFAULT_RUNTIME_CONFIG.agentMaxConcurrentRequests,
       agentMaxConcurrentRequestsPerGuild: DEFAULT_RUNTIME_CONFIG.agentMaxConcurrentRequestsPerGuild,
     });
+  });
+
+  test("falls back to safe memory defaults", () => {
+    expect(
+      parseRuntimeJsonConfig({
+        memory: {
+          enabled: true,
+          idleTtlMinutes: 0,
+          maxChannels: -1,
+          maxVerbatimChars: 1.5,
+          keepRecentTurns: 0,
+          gapFillLimit: -10,
+          coldStartMessageCount: Number.NaN,
+        },
+      }).memory,
+    ).toEqual(DEFAULT_RUNTIME_CONFIG.memory);
   });
 });
 

@@ -8,6 +8,7 @@ import { getMuteScheduler } from "@aripabot/core/moderation/mute-scheduler.ts";
 import { handleAgentMention, shouldHandleAgentMention } from "@aripabot/core/agent/runtime.ts";
 import { AgentRateLimiter, formatRateLimitRetryAfter } from "@aripabot/core/agent/rate-limit.ts";
 import { AgentConcurrencyLimiter } from "@aripabot/core/agent/concurrency.ts";
+import { ConversationMemoryStore } from "@aripabot/core/agent/conversation-memory.ts";
 import { safeReply } from "@aripabot/core/bot/action-context.ts";
 import {
   resolveAgentTextModel,
@@ -25,6 +26,14 @@ const agentConcurrencyLimiter = new AgentConcurrencyLimiter({
   maxGlobal: config.agentMaxConcurrentRequests,
   maxPerGuild: config.agentMaxConcurrentRequestsPerGuild,
 });
+const conversationMemory = config.memory.enabled
+  ? new ConversationMemoryStore({
+      idleTtlMs: config.memory.idleTtlMinutes * 60_000,
+      maxChannels: config.memory.maxChannels,
+      maxVerbatimChars: config.memory.maxVerbatimChars,
+      keepRecentTurns: config.memory.keepRecentTurns,
+    })
+  : undefined;
 const agentModel = resolveAgentTextModel(config.models.agent, config.providers);
 const summarizerModel = resolveSummarizerTextModel(config.models.summarizer, config.providers);
 const webModel = config.models.web.enabled
@@ -132,6 +141,9 @@ client.on(Events.MessageCreate, (message) => {
           agentModel,
           summarizerModel,
           webSearchEnabled: config.models.web.enabled,
+          conversationMemory,
+          coldStartMessageCount: config.memory.coldStartMessageCount,
+          gapFillLimit: config.memory.gapFillLimit,
           ...(webModel ? { webModel } : {}),
         });
       } finally {

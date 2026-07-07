@@ -23,6 +23,7 @@ export {
   parseRuntimeProviderConfig,
   type ConfigurableRuntimeModelProvider,
   type RuntimeJsonConfig,
+  type RuntimeMemoryConfig,
   type RuntimeModelConfig,
   type RuntimeModelProvider,
   type RuntimeModelSelection,
@@ -60,6 +61,7 @@ export const config = {
   models: runtimeConfig.models,
   providers: runtimeConfig.providers,
   updates: runtimeConfig.updates,
+  memory: runtimeConfig.memory,
 } as const;
 
 export function requireToken(): string {

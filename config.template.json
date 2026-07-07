@@ -6,6 +6,15 @@
   "agentMaxConcurrentRequests": 4,
   "agentMaxConcurrentRequestsPerGuild": 2,
   "logPrivacy": true,
+  "memory": {
+    "enabled": true,
+    "idleTtlMinutes": 30,
+    "maxChannels": 500,
+    "maxVerbatimChars": 6000,
+    "keepRecentTurns": 6,
+    "gapFillLimit": 10,
+    "coldStartMessageCount": 5
+  },
   "models": {
     "agent": {
       "provider": "openai",
