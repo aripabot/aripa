@@ -287,7 +287,9 @@ function muteLabel(mute: DashboardStatus["operations"]["activeMutes"][number]): 
   }
 }
 
-function muteTone(status: DashboardStatus["operations"]["activeMutes"][number]["status"]): StatusTone {
+function muteTone(
+  status: DashboardStatus["operations"]["activeMutes"][number]["status"],
+): StatusTone {
   switch (status) {
     case "active":
       return "ok";

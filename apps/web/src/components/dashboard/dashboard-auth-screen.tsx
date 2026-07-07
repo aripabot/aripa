@@ -50,8 +50,8 @@ function DashboardPasswordSetup({ authPath }: { authPath: string }) {
     <div className="mt-6">
       <h1 className="text-lg font-semibold tracking-tight">Create a password</h1>
       <p className="mt-1 text-sm text-muted-foreground">
-        The dashboard needs a password before it can open. Run this once, then keep the password
-        it prints — it isn't shown again.
+        The dashboard needs a password before it can open. Run this once, then keep the password it
+        prints — it isn't shown again.
       </p>
       <p className="mt-4 rounded-lg border bg-muted/40 px-3.5 py-2.5 font-mono text-sm">
         bun run dashboard:password

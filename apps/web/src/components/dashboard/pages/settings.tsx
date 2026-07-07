@@ -172,7 +172,11 @@ export function SettingsPage({
 
       <SettingsSection title="Limits">
         <div className="grid gap-5 sm:grid-cols-2">
-          <Field label="Rate limit" htmlFor="rate-limit" hint="Messages per minute. Empty for no limit.">
+          <Field
+            label="Rate limit"
+            htmlFor="rate-limit"
+            hint="Messages per minute. Empty for no limit."
+          >
             <Input
               id="rate-limit"
               name="agent-rate-limit"

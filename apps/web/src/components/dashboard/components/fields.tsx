@@ -49,13 +49,7 @@ export function SwitchField({
   );
 }
 
-export function SettingsSection({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
+export function SettingsSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="grid gap-5 border-t pt-6">
       <h2 className="text-sm font-medium">{title}</h2>

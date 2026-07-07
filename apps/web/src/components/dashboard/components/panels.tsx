@@ -39,9 +39,7 @@ export function EmptyPanel({ title, message }: { title: string; message?: string
   return (
     <div className="flex min-h-36 flex-col items-center justify-center gap-1 rounded-lg border border-dashed px-6 py-8 text-center">
       <p className="text-sm font-medium">{title}</p>
-      {message ? (
-        <p className="mx-auto max-w-md text-sm text-muted-foreground">{message}</p>
-      ) : null}
+      {message ? <p className="mx-auto max-w-md text-sm text-muted-foreground">{message}</p> : null}
     </div>
   );
 }

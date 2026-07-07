@@ -80,9 +80,7 @@ export function DockerDeploymentsPage({
             <StatusText tone={dockerTone(deployment.data.state)} className="font-medium">
               {deployment.data.stateLabel}
             </StatusText>
-            <span className="truncate text-sm text-muted-foreground">
-              {deployment.data.detail}
-            </span>
+            <span className="truncate text-sm text-muted-foreground">{deployment.data.detail}</span>
           </div>
           <Button
             type="button"
