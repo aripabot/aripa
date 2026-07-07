@@ -488,6 +488,40 @@ describe("handleAgentMention", () => {
     });
   });
 
+  test("starts compaction after replying without waiting for it", async () => {
+    const conversationMemory = new ConversationMemoryStore({ maxVerbatimChars: 1 });
+    let compactStarted = false;
+    let compactResolved = false;
+    conversationMemory.compact = async () => {
+      compactStarted = true;
+      await sleep(25);
+      compactResolved = true;
+    };
+
+    await handleAgentMention({
+      client: createClient("bot-1"),
+      message: createMessage("<@bot-1> compact this"),
+      prefix: "-",
+      actions: new ActionDirectory(),
+      conversationMemory,
+      log: createLog(),
+      loadPromptParts: async () => ({
+        defaultPrompt: "default instructions",
+        webPrompt: "web instructions",
+        stylePrompt: "match style",
+        metadataPrompt: "metadata header",
+      }),
+      generateAgentText: async () => ({ text: "Compaction can happen later." }),
+    });
+
+    expect(compactStarted).toBe(true);
+    expect(compactResolved).toBe(false);
+
+    await sleep(35);
+
+    expect(compactResolved).toBe(true);
+  });
+
   test("keeps prompt compatibility when no memory store is supplied", async () => {
     const captured: AgentTextOptions[] = [];
 
