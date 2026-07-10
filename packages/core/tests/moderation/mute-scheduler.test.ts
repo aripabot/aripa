@@ -284,6 +284,52 @@ describe("MuteScheduler", () => {
       store.close();
     }
   });
+
+  test("ignores an expiry from a replaced mute generation", async () => {
+    const store = new ActiveMuteStore(":memory:");
+    const guildConfigStore = new GuildConfigStore(":memory:");
+    const removedRoles: string[] = [];
+
+    try {
+      const first = store.upsertRoleMute({
+        guildId: "guild-1",
+        userId: "user-1",
+        muteRoleId: "role-1",
+        expiresAt: new Date(Date.now() - 60_000).toISOString(),
+      });
+      const current = store.upsertRoleMute({
+        guildId: "guild-1",
+        userId: "user-1",
+        muteRoleId: "role-1",
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      });
+      const scheduler = new MuteScheduler(store, createLog(), guildConfigStore, 60_000, 0);
+
+      await scheduler.start({
+        guilds: {
+          fetch: async () => ({
+            members: {
+              fetch: async () => ({
+                id: "user-1",
+                guild: { id: "guild-1" },
+                roles: { remove: async (roleId: string) => removedRoles.push(roleId) },
+              }),
+            },
+            roles: { cache: new Map([["role-1", { id: "role-1" }]]) },
+          }),
+        },
+      } as never);
+
+      await scheduler.processExpiry(first);
+
+      expect(removedRoles).toEqual([]);
+      expect(store.get("guild-1", "user-1")?.generation).toBe(current.generation);
+      scheduler.stop();
+    } finally {
+      guildConfigStore.close();
+      store.close();
+    }
+  });
 });
 
 function createFailingUnmuteClient(modLogMessages: CapturedEmbedMessage[]) {
