@@ -1,4 +1,6 @@
 import { describe, expect, test } from "vitest";
+import { Database } from "bun:sqlite";
+import { rm } from "node:fs/promises";
 import { ActiveMuteStore } from "@aripabot/core/moderation/active-mute-store.ts";
 
 describe("ActiveMuteStore", () => {
@@ -52,6 +54,67 @@ describe("ActiveMuteStore", () => {
       expect(store.deleteIfGeneration("guild-1", "user-1", second.record.generation)).toBe(true);
     } finally {
       store.close();
+    }
+  });
+
+  test("never reuses a generation after deleting a mute", () => {
+    const store = new ActiveMuteStore(":memory:");
+
+    try {
+      const first = store.upsertRoleMute({
+        guildId: "guild-1",
+        userId: "user-1",
+        muteRoleId: "role-1",
+      });
+      store.deleteIfGeneration(first.guildId, first.userId, first.generation);
+      const replacement = store.upsertRoleMute({
+        guildId: first.guildId,
+        userId: first.userId,
+        muteRoleId: "role-1",
+      });
+
+      expect(replacement.generation).toBe(first.generation + 1);
+    } finally {
+      store.close();
+    }
+  });
+
+  test("migrates existing rows into generation tracking", async () => {
+    const path = `${Bun.env.TMPDIR || "/tmp"}/aripa-active-mute-${crypto.randomUUID()}.sqlite`;
+    const legacyDatabase = new Database(path);
+    legacyDatabase.run(`
+      CREATE TABLE active_mute (
+        guild_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        mute_mode TEXT NOT NULL,
+        mute_role_id TEXT NOT NULL,
+        expires_at TEXT,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (guild_id, user_id)
+      )
+    `);
+    legacyDatabase
+      .query(
+        `INSERT INTO active_mute (guild_id, user_id, mute_mode, mute_role_id, expires_at)
+         VALUES (?, ?, 'role', ?, ?)`,
+      )
+      .run("guild-1", "user-1", "role-1", null);
+    legacyDatabase.close();
+
+    const store = new ActiveMuteStore(path);
+    try {
+      expect(store.get("guild-1", "user-1")).toMatchObject({ generation: 1 });
+      expect(
+        store.upsertRoleMute({
+          guildId: "guild-1",
+          userId: "user-1",
+          muteRoleId: "role-2",
+        }).generation,
+      ).toBe(2);
+    } finally {
+      store.close();
+      await rm(path, { force: true });
     }
   });
 
