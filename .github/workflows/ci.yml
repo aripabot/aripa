@@ -22,6 +22,9 @@ jobs:
       - name: Lint
         run: bunx turbo lint
 
+      - name: Format check
+        run: bun run format:check
+
       - name: Typecheck
         run: bunx turbo typecheck
 

@@ -21,44 +21,22 @@
       "outputs": []
     },
     "@aripabot/web#build": {
-      "outputs": [
-        ".next/**",
-        "!.next/cache/**",
-        "!.next/dev/**"
-      ]
+      "outputs": [".next/**", "!.next/cache/**", "!.next/dev/**"]
     },
     "lint": {
-      "inputs": [
-        "src/**",
-        "tests/**",
-        "tsconfig.json",
-        "package.json",
-        "!**/.DS_Store"
-      ]
+      "inputs": ["src/**", "tests/**", "tsconfig.json", "package.json", "!**/.DS_Store"]
     },
     "format": {
       "cache": false
     },
     "test": {
       "dependsOn": ["^typecheck"],
-      "inputs": [
-        "src/**",
-        "tests/**",
-        "tsconfig.json",
-        "package.json",
-        "!**/.DS_Store"
-      ],
+      "inputs": ["src/**", "tests/**", "tsconfig.json", "package.json", "!**/.DS_Store"],
       "outputs": []
     },
     "typecheck": {
       "dependsOn": ["^typecheck"],
-      "inputs": [
-        "src/**",
-        "tests/**",
-        "tsconfig.json",
-        "package.json",
-        "!**/.DS_Store"
-      ]
+      "inputs": ["src/**", "tests/**", "tsconfig.json", "package.json", "!**/.DS_Store"]
     }
   }
 }
