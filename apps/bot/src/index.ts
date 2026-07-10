@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url";
-import { Client, Events, GatewayIntentBits, Partials } from "discord.js";
+import { Client, Events, GatewayIntentBits, Partials, type Message } from "discord.js";
 import { loadActions } from "@aripabot/core/bot/action-loader.ts";
 import { config, isGuildAllowed, requireToken } from "@aripabot/core/config/config.ts";
 import { log } from "@aripabot/core/config/logger.ts";
@@ -69,8 +69,8 @@ client.once(Events.ClientReady, async (readyClient) => {
     .info("Aripa is ready.");
 });
 
-client.on(Events.MessageCreate, (message) => {
-  void (async () => {
+async function dispatchMessage(message: Message): Promise<void> {
+  try {
     if (!isGuildAllowed(message.guildId)) {
       return;
     }
@@ -160,7 +160,22 @@ client.on(Events.MessageCreate, (message) => {
       actions,
       log,
     });
-  })();
+  } catch (error) {
+    log
+      .withError(error)
+      .withMetadata({
+        stage: "dispatch",
+        guildId: message.guildId,
+        channelId: message.channelId,
+        messageId: message.id,
+        userId: message.author.id,
+      })
+      .error("Message dispatch failed.");
+  }
+}
+
+client.on(Events.MessageCreate, (message) => {
+  void dispatchMessage(message);
 });
 
 client.on(Events.Error, (error) => {
