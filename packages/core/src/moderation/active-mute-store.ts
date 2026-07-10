@@ -10,6 +10,7 @@ export interface ActiveMuteRecord {
   muteMode: "role";
   muteRoleId: string;
   expiresAt: string | null;
+  generation: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -20,6 +21,7 @@ interface ActiveMuteRow {
   mute_mode: string;
   mute_role_id: string;
   expires_at: string | null;
+  generation: number;
   created_at: string;
   updated_at: string;
 }
@@ -42,7 +44,7 @@ export class ActiveMuteStore {
   get(guildId: string, userId: string): ActiveMuteRecord | null {
     const row = this.db
       .query<ActiveMuteRow, [string, string]>(
-        `SELECT guild_id, user_id, mute_mode, mute_role_id, expires_at, created_at, updated_at
+        `SELECT guild_id, user_id, mute_mode, mute_role_id, expires_at, generation, created_at, updated_at
          FROM active_mute
          WHERE guild_id = ? AND user_id = ?`,
       )
@@ -54,7 +56,7 @@ export class ActiveMuteStore {
   listAll(): ActiveMuteRecord[] {
     return this.db
       .query<ActiveMuteRow, []>(
-        `SELECT guild_id, user_id, mute_mode, mute_role_id, expires_at, created_at, updated_at
+        `SELECT guild_id, user_id, mute_mode, mute_role_id, expires_at, generation, created_at, updated_at
          FROM active_mute`,
       )
       .all()
@@ -64,7 +66,7 @@ export class ActiveMuteStore {
   listExpiring(): ActiveMuteRecord[] {
     return this.db
       .query<ActiveMuteRow, []>(
-        `SELECT guild_id, user_id, mute_mode, mute_role_id, expires_at, created_at, updated_at
+        `SELECT guild_id, user_id, mute_mode, mute_role_id, expires_at, generation, created_at, updated_at
          FROM active_mute
          WHERE expires_at IS NOT NULL`,
       )
@@ -86,11 +88,43 @@ export class ActiveMuteStore {
            mute_mode = excluded.mute_mode,
            mute_role_id = excluded.mute_role_id,
            expires_at = excluded.expires_at,
+           generation = generation + 1,
            updated_at = CURRENT_TIMESTAMP`,
       )
       .run(options.guildId, options.userId, options.muteRoleId, options.expiresAt ?? null);
 
     return this.require(options.guildId, options.userId, "upserting active role mute");
+  }
+
+  upsertReturningPrevious(options: {
+    guildId: string;
+    userId: string;
+    muteRoleId: string;
+    expiresAt?: string | null;
+  }): { previous: ActiveMuteRecord | null; record: ActiveMuteRecord } {
+    const previous = this.get(options.guildId, options.userId);
+    const record = this.upsertRoleMute(options);
+    return { previous, record };
+  }
+
+  deleteIfGeneration(guildId: string, userId: string, generation: number): boolean {
+    const result = this.db
+      .query("DELETE FROM active_mute WHERE guild_id = ? AND user_id = ? AND generation = ?")
+      .run(guildId, userId, generation);
+    return result.changes > 0;
+  }
+
+  listDue(now: string, limit: number): ActiveMuteRecord[] {
+    return this.db
+      .query<ActiveMuteRow, [string, number]>(
+        `SELECT guild_id, user_id, mute_mode, mute_role_id, expires_at, generation, created_at, updated_at
+         FROM active_mute
+         WHERE expires_at IS NOT NULL AND expires_at <= ?
+         ORDER BY expires_at
+         LIMIT ?`,
+      )
+      .all(now, limit)
+      .map(mapRow);
   }
 
   delete(guildId: string, userId: string): void {
@@ -117,11 +151,19 @@ export class ActiveMuteStore {
         mute_mode TEXT NOT NULL,
         mute_role_id TEXT NOT NULL,
         expires_at TEXT,
+        generation INTEGER NOT NULL DEFAULT 1,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (guild_id, user_id)
       )
     `);
+    const columns = this.db.query<{ name: string }, []>("PRAGMA table_info(active_mute)").all();
+    if (!columns.some((column) => column.name === "generation")) {
+      this.db.run("ALTER TABLE active_mute ADD COLUMN generation INTEGER NOT NULL DEFAULT 1");
+    }
+    this.db.run(
+      "CREATE INDEX IF NOT EXISTS active_mute_due_expiry ON active_mute (expires_at) WHERE expires_at IS NOT NULL",
+    );
   }
 }
 
@@ -148,6 +190,7 @@ function mapRow(row: ActiveMuteRow): ActiveMuteRecord {
     muteMode: "role",
     muteRoleId: row.mute_role_id,
     expiresAt: row.expires_at,
+    generation: row.generation,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
