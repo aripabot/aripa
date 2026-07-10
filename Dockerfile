@@ -21,8 +21,11 @@ RUN bun install --frozen-lockfile --production
 FROM deps AS builder
 
 COPY package.json bun.lock tsconfig.json config.template.json ./
-COPY apps ./apps
-COPY packages ./packages
+COPY apps/web/next.config.ts apps/web/postcss.config.mjs apps/web/tsconfig.json apps/web/next-env.d.ts ./apps/web/
+COPY apps/web/public ./apps/web/public
+COPY apps/web/src ./apps/web/src
+COPY packages/core/src ./packages/core/src
+COPY apps/bot/src ./apps/bot/src
 COPY scripts/docker/start_docker.sh ./scripts/docker/start_docker.sh
 
 RUN bun run --cwd apps/web build

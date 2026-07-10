@@ -8,9 +8,14 @@ config.json
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
+**/.next
+**/.turbo
+**/dist
+**/coverage
 coverage
 node_modules
 docs
+temporary
 user-docs
 tests
 *.log
