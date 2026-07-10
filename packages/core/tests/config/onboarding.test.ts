@@ -10,6 +10,7 @@ import {
   validateOperatorUserId,
   writeRuntimeConfig,
 } from "@aripabot/core/config/onboarding.ts";
+import { DEFAULT_RUNTIME_CONFIG } from "@aripabot/core/config/runtime-config.ts";
 
 describe("parseAllowlistedServerIds", () => {
   test("splits comma and whitespace separated ids and removes duplicates", () => {
@@ -122,6 +123,7 @@ describe("buildRuntimeConfig", () => {
           cronExpression: "0 4 * * 0",
         },
       },
+      memory: DEFAULT_RUNTIME_CONFIG.memory,
     });
   });
 
@@ -151,6 +153,30 @@ describe("buildRuntimeConfig", () => {
           cronExpression: "0 4 * * *",
         },
       },
+    });
+  });
+
+  test("preserves runtime fields outside onboarding ownership", () => {
+    const config = buildRuntimeConfig(
+      {
+        allowlistedServerIds: ["123456789012345678"],
+      },
+      {
+        agentTimeoutMs: 90_000,
+        agentMaxConcurrentRequests: 9,
+        agentMaxConcurrentRequestsPerGuild: 4,
+        memory: {
+          ...DEFAULT_RUNTIME_CONFIG.memory,
+          maxChannels: 750,
+        },
+      },
+    );
+
+    expect(config).toMatchObject({
+      agentTimeoutMs: 90_000,
+      agentMaxConcurrentRequests: 9,
+      agentMaxConcurrentRequestsPerGuild: 4,
+      memory: { maxChannels: 750 },
     });
   });
 });
@@ -195,9 +221,9 @@ describe("writeRuntimeConfig", () => {
 
     expect(updated.existed).toBe(true);
     expect(await Bun.file(path).json()).toEqual({
-      name: "Aripa",
-      operatorUserId: null,
-      stylePrompt: "match",
+      name: "Test Aripa",
+      operatorUserId: "123456789012345678",
+      stylePrompt: "friendly",
       allowlistedServerIds: ["234567890123456789"],
       agentRateLimitMessagesPerMinute: 5,
       agentTimeoutMs: 60_000,
@@ -231,6 +257,7 @@ describe("writeRuntimeConfig", () => {
           cronExpression: "0 4 * * 0",
         },
       },
+      memory: DEFAULT_RUNTIME_CONFIG.memory,
     });
   });
 
@@ -269,7 +296,7 @@ describe("writeRuntimeConfig", () => {
         enabled: true,
       },
       name: "New",
-      operatorUserId: null,
+      operatorUserId: "111111111111111111",
       stylePrompt: "playful",
       agentRateLimitMessagesPerMinute: 3,
       agentTimeoutMs: 60_000,
@@ -304,6 +331,7 @@ describe("writeRuntimeConfig", () => {
           cronExpression: "0 4 * * 0",
         },
       },
+      memory: DEFAULT_RUNTIME_CONFIG.memory,
     });
   });
 });

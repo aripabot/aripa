@@ -1,6 +1,9 @@
 import {
   DEFAULT_RUNTIME_CONFIG,
   cloneRuntimeModelConfig,
+  parseRuntimeJsonConfig,
+  parseRuntimeJsonConfigForMutation,
+  type RuntimeJsonConfig,
   type RuntimeModelConfig,
   type RuntimeProviderConfig,
   type RuntimeUpdateConfig,
@@ -45,40 +48,35 @@ export interface WriteRuntimeConfigOptions {
 
 export interface WriteRuntimeConfigResult {
   path: string;
-  config: Record<string, unknown>;
+  config: RuntimeConfigDocument;
   existed: boolean;
 }
+
+export type RuntimeConfigDocument = RuntimeJsonConfig & Record<string, unknown>;
 
 export interface ReleaseSigningKeyPair {
   privateKeyPemBase64: string;
   publicKeyPemBase64: string;
 }
 
-const DEFAULT_ONBOARDING_CONFIG = {
-  name: DEFAULT_RUNTIME_CONFIG.name,
-  operatorUserId: DEFAULT_RUNTIME_CONFIG.operatorUserId,
-  stylePrompt: DEFAULT_RUNTIME_CONFIG.stylePrompt,
-  agentRateLimitMessagesPerMinute: DEFAULT_RUNTIME_CONFIG.agentRateLimitMessagesPerMinute,
-  logPrivacy: DEFAULT_RUNTIME_CONFIG.logPrivacy,
-} as const;
-
 export function buildRuntimeConfig(
   input: RuntimeOnboardingInput,
   baseConfig: Record<string, unknown> = {},
-): Record<string, unknown> {
-  const name = input.name?.trim() || DEFAULT_ONBOARDING_CONFIG.name;
-  const operatorUserId = input.operatorUserId?.trim() || null;
-  const stylePrompt = input.stylePrompt?.trim() || DEFAULT_ONBOARDING_CONFIG.stylePrompt;
+): RuntimeConfigDocument {
+  const baseRuntimeConfig = parseRuntimeJsonConfig(baseConfig);
+  const name = input.name?.trim() || baseRuntimeConfig.name;
+  const operatorUserId = input.operatorUserId?.trim() || baseRuntimeConfig.operatorUserId;
+  const stylePrompt = input.stylePrompt?.trim() || baseRuntimeConfig.stylePrompt;
   const allowlistedServerIds = [
     ...new Set(input.allowlistedServerIds.map((entry) => entry.trim()).filter(Boolean)),
   ];
   const agentRateLimitMessagesPerMinute =
     input.agentRateLimitMessagesPerMinute === undefined
-      ? DEFAULT_ONBOARDING_CONFIG.agentRateLimitMessagesPerMinute
+      ? baseRuntimeConfig.agentRateLimitMessagesPerMinute
       : input.agentRateLimitMessagesPerMinute;
-  const logPrivacy = input.logPrivacy ?? DEFAULT_ONBOARDING_CONFIG.logPrivacy;
-  const updates = input.updates ?? DEFAULT_RUNTIME_CONFIG.updates;
-  const githubRepo = updates.githubRepo.trim() || DEFAULT_RUNTIME_CONFIG.updates.githubRepo;
+  const logPrivacy = input.logPrivacy ?? baseRuntimeConfig.logPrivacy;
+  const updates = input.updates ?? baseRuntimeConfig.updates;
+  const githubRepo = updates.githubRepo.trim() || baseRuntimeConfig.updates.githubRepo;
   const updateConfig: RuntimeUpdateConfig = {
     enabled: updates.enabled,
     githubRepo,
@@ -118,23 +116,26 @@ export function buildRuntimeConfig(
     throw new Error(githubRepoValidationError);
   }
 
-  return {
-    ...baseConfig,
+  const config = parseRuntimeJsonConfigForMutation({
+    ...baseRuntimeConfig,
     name,
     operatorUserId,
     stylePrompt,
     allowlistedServerIds,
     agentRateLimitMessagesPerMinute,
-    agentTimeoutMs: DEFAULT_RUNTIME_CONFIG.agentTimeoutMs,
-    agentMaxConcurrentRequests: DEFAULT_RUNTIME_CONFIG.agentMaxConcurrentRequests,
-    agentMaxConcurrentRequestsPerGuild: DEFAULT_RUNTIME_CONFIG.agentMaxConcurrentRequestsPerGuild,
+    agentTimeoutMs: baseRuntimeConfig.agentTimeoutMs,
+    agentMaxConcurrentRequests: baseRuntimeConfig.agentMaxConcurrentRequests,
+    agentMaxConcurrentRequestsPerGuild: baseRuntimeConfig.agentMaxConcurrentRequestsPerGuild,
     logPrivacy,
     models: input.models
       ? cloneRuntimeModelConfig(input.models)
-      : cloneRuntimeModelConfig(DEFAULT_RUNTIME_CONFIG.models),
-    providers: { ...(input.providers ?? DEFAULT_RUNTIME_CONFIG.providers) },
+      : cloneRuntimeModelConfig(baseRuntimeConfig.models),
+    providers: { ...(input.providers ?? baseRuntimeConfig.providers) },
     updates: updateConfig,
-  };
+    memory: { ...baseRuntimeConfig.memory },
+  });
+
+  return { ...baseConfig, ...config };
 }
 
 export async function loadExistingRuntimeConfig(
