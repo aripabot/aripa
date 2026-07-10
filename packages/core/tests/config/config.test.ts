@@ -8,6 +8,7 @@ import {
   isGuildAllowed,
   loadRuntimeJsonConfig,
   parseRuntimeJsonConfig,
+  parseRuntimeJsonConfigForMutation,
   resolveDatabasePath,
 } from "@aripabot/core/config/config.ts";
 
@@ -173,6 +174,38 @@ describe("loadRuntimeJsonConfig", () => {
     await expect(
       loadRuntimeJsonConfig(join(repositoryRoot, ".missing-config.json")),
     ).resolves.toEqual(DEFAULT_RUNTIME_CONFIG);
+  });
+});
+
+describe("parseRuntimeJsonConfigForMutation", () => {
+  test("rejects invalid supplied values instead of silently defaulting them", () => {
+    const config = structuredClone(DEFAULT_RUNTIME_CONFIG);
+    const invalidConfig = {
+      ...config,
+      models: {
+        ...config.models,
+        agent: {
+          ...config.models.agent,
+          provider: "invalid-provider",
+        },
+      },
+    };
+
+    expect(() => parseRuntimeJsonConfigForMutation(invalidConfig)).toThrow();
+    expect(() => parseRuntimeJsonConfigForMutation({ ...config, agentTimeoutMs: 0 })).toThrow();
+    expect(() =>
+      parseRuntimeJsonConfigForMutation({ ...config, updates: { enabled: true } }),
+    ).toThrow();
+  });
+
+  test("keeps mutation data equivalent to the submitted known config", () => {
+    const config = structuredClone(DEFAULT_RUNTIME_CONFIG);
+    config.name = "  Strict Aripa  ";
+
+    expect(parseRuntimeJsonConfigForMutation(config)).toMatchObject({
+      ...DEFAULT_RUNTIME_CONFIG,
+      name: "Strict Aripa",
+    });
   });
 });
 

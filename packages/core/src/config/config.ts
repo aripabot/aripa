@@ -19,6 +19,7 @@ export {
   isConfigurableRuntimeModelProvider,
   isRuntimeModelProvider,
   parseRuntimeJsonConfig,
+  parseRuntimeJsonConfigForMutation,
   parseRuntimeModelConfig,
   parseRuntimeProviderConfig,
   type ConfigurableRuntimeModelProvider,

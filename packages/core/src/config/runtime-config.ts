@@ -257,6 +257,10 @@ export function parseRuntimeJsonConfig(value: unknown): RuntimeJsonConfig {
   return runtimeConfigSchema.parse(value);
 }
 
+export function parseRuntimeJsonConfigForMutation(value: unknown): RuntimeJsonConfig {
+  return createStrictRuntimeConfigSchema().parse(value);
+}
+
 export function cloneDefaultRuntimeConfig(): RuntimeJsonConfig {
   return {
     ...DEFAULT_RUNTIME_CONFIG,
@@ -312,6 +316,108 @@ function createRuntimeModelConfigSchema() {
       web: createRuntimeWebModelSelectionSchema(),
     }),
   );
+}
+
+function createStrictRuntimeConfigSchema() {
+  return z
+    .object({
+      name: trimmedNonEmptyStringSchema,
+      operatorUserId: z.union([discordSnowflakeSchema, z.null()]),
+      stylePrompt: trimmedNonEmptyStringSchema,
+      allowlistedServerIds: z.array(discordSnowflakeSchema).transform((ids) => [...new Set(ids)]),
+      agentRateLimitMessagesPerMinute: z.union([z.number().int().positive(), z.null()]),
+      agentTimeoutMs: z.number().int().positive(),
+      agentMaxConcurrentRequests: z.number().int().positive(),
+      agentMaxConcurrentRequestsPerGuild: z.number().int().positive(),
+      logPrivacy: z.boolean(),
+      models: createStrictRuntimeModelConfigSchema(),
+      providers: z
+        .record(z.string(), createStrictRuntimeProviderSettingsSchema())
+        .refine((providers) => Object.keys(providers).every(isRuntimeModelProvider), {
+          message: "Provider is not supported.",
+        }),
+      updates: createStrictRuntimeUpdateConfigSchema(),
+      memory: createStrictRuntimeMemoryConfigSchema(),
+    })
+    .transform(
+      (config): RuntimeJsonConfig => ({
+        ...config,
+        models: cloneRuntimeModelConfig(config.models),
+        providers: { ...config.providers },
+        updates: { ...config.updates, autoInstall: { ...config.updates.autoInstall } },
+        memory: { ...config.memory },
+      }),
+    );
+}
+
+function createStrictRuntimeModelConfigSchema() {
+  return z.object({
+    agent: createStrictRuntimeModelSelectionSchema(CONFIGURABLE_MODEL_PROVIDERS),
+    summarizer: createStrictRuntimeModelSelectionSchema(CONFIGURABLE_MODEL_PROVIDERS),
+    web: z.object({
+      enabled: z.boolean(),
+      provider: z.literal("google"),
+      model: trimmedNonEmptyStringSchema,
+    }),
+  });
+}
+
+function createStrictRuntimeModelSelectionSchema(
+  allowedProviders: readonly RuntimeModelProvider[],
+) {
+  return z
+    .object({
+      provider: runtimeModelProviderSchema,
+      model: trimmedNonEmptyStringSchema,
+      reasoningEffort: reasoningEffortSchema.optional(),
+    })
+    .refine((selection) => allowedProviders.includes(selection.provider), {
+      message: "Model provider is not supported for this selection.",
+      path: ["provider"],
+    })
+    .transform(
+      (selection): RuntimeModelSelection => ({
+        provider: selection.provider,
+        model: selection.model,
+        ...(selection.reasoningEffort ? { reasoningEffort: selection.reasoningEffort } : {}),
+      }),
+    );
+}
+
+function createStrictRuntimeProviderSettingsSchema() {
+  return z.object({
+    baseURL: trimmedNonEmptyStringSchema.optional(),
+    apiKeyEnv: trimmedNonEmptyStringSchema.optional(),
+  });
+}
+
+function createStrictRuntimeUpdateConfigSchema() {
+  return z.object({
+    enabled: z.boolean(),
+    githubRepo: z
+      .string()
+      .trim()
+      .regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/),
+    releasePublicKeyPem: trimmedNonEmptyStringSchema.optional(),
+    releasePublicKeyPemBase64: trimmedNonEmptyStringSchema.optional(),
+    autoInstall: z.object({
+      enabled: z.boolean(),
+      preset: z.enum(AUTO_UPDATE_CRON_PRESETS.map((preset) => preset.id)),
+      cronExpression: z.enum(AUTO_UPDATE_CRON_PRESETS.map((preset) => preset.cronExpression)),
+    }),
+  });
+}
+
+function createStrictRuntimeMemoryConfigSchema() {
+  return z.object({
+    enabled: z.boolean(),
+    idleTtlMinutes: z.number().int().positive(),
+    maxChannels: z.number().int().positive(),
+    maxVerbatimChars: z.number().int().positive(),
+    keepRecentTurns: z.number().int().positive(),
+    gapFillLimit: z.number().int().positive(),
+    coldStartMessageCount: z.number().int().positive(),
+  });
 }
 
 function createRuntimeModelSelectionSchema(
