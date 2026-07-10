@@ -194,7 +194,7 @@ describe("muteMember", () => {
           guildConfigStore,
           activeMuteStore: {
             ...activeMuteStore,
-            upsertRoleMute() {
+            upsertReturningPrevious() {
               throw new Error("Database write failed");
             },
           } as never,

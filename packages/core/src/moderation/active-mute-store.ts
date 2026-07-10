@@ -107,6 +107,35 @@ export class ActiveMuteStore {
     return { previous, record };
   }
 
+  restore(record: ActiveMuteRecord | null): void {
+    if (!record) {
+      return;
+    }
+
+    this.db
+      .query(
+        `INSERT INTO active_mute (
+           guild_id, user_id, mute_mode, mute_role_id, expires_at, generation, created_at, updated_at
+         ) VALUES (?, ?, 'role', ?, ?, ?, ?, ?)
+         ON CONFLICT(guild_id, user_id) DO UPDATE SET
+           mute_mode = excluded.mute_mode,
+           mute_role_id = excluded.mute_role_id,
+           expires_at = excluded.expires_at,
+           generation = excluded.generation,
+           created_at = excluded.created_at,
+           updated_at = excluded.updated_at`,
+      )
+      .run(
+        record.guildId,
+        record.userId,
+        record.muteRoleId,
+        record.expiresAt,
+        record.generation,
+        record.createdAt,
+        record.updatedAt,
+      );
+  }
+
   deleteIfGeneration(guildId: string, userId: string, generation: number): boolean {
     const result = this.db
       .query("DELETE FROM active_mute WHERE guild_id = ? AND user_id = ? AND generation = ?")
