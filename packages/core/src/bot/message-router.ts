@@ -22,7 +22,7 @@ import { parsePrefixedCommand } from "@aripabot/core/commands/command-tokenizer.
 
 export type { AgentConfirmationStatus } from "@aripabot/core/bot/agent-confirmation.ts";
 
-interface HandleMessageOptions {
+export interface HandleMessageOptions {
   client: Client;
   message: Message;
   prefix: string;
@@ -32,6 +32,7 @@ interface HandleMessageOptions {
   agentConfirmationTimeoutMs?: number;
   agentConfirmationLifecycle?: AgentConfirmationLifecycle;
   guildConfigStore?: GuildConfigStore;
+  requestAgentConfirmation?: typeof requestAgentConfirmation;
 }
 
 export type HandleMessageResult =
@@ -77,6 +78,7 @@ export async function handleMessage({
   agentConfirmationTimeoutMs = DEFAULT_AGENT_CONFIRMATION_TIMEOUT_MS,
   agentConfirmationLifecycle,
   guildConfigStore = getGuildConfigStore(),
+  requestAgentConfirmation: confirmAgentAction = requestAgentConfirmation,
 }: HandleMessageOptions): Promise<HandleMessageResult | void> {
   if (message.author.bot || !message.content.startsWith(prefix)) {
     return;
@@ -194,7 +196,7 @@ export async function handleMessage({
   }
 
   if (shouldConfirmAgentAction(isAgent, requiredUserPermissions)) {
-    const confirmation = await requestAgentConfirmation({
+    const confirmation = await confirmAgentAction({
       message,
       actionCall: actionMetadata.requestedActionCall,
       timeoutMs: agentConfirmationTimeoutMs,

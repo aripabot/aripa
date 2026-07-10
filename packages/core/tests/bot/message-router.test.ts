@@ -358,6 +358,57 @@ describe("handleMessage agent confirmation", () => {
 });
 
 describe("handleMessage dynamic action permissions", () => {
+  test("currently rejects when dynamic permission resolution throws", async () => {
+    const actions = new ActionDirectory();
+    const action = {
+      name: "tag",
+      requiredUserPermissions: [],
+      resolveRequiredUserPermissions() {
+        throw new Error("permission resolution failed");
+      },
+      async execute() {
+        throw new Error("should not run");
+      },
+    } satisfies Action;
+    actions.add(action, "test");
+
+    await expect(
+      handleMessage({
+        client: {} as never,
+        message: createMessage("-tag add rules", []),
+        prefix: "-",
+        actions,
+        log: createLog(),
+      }),
+    ).rejects.toThrow("permission resolution failed");
+  });
+
+  test("currently rejects when confirmation setup throws", async () => {
+    const actions = new ActionDirectory();
+    const action = {
+      name: "ban",
+      requiredUserPermissions: ["BanMembers"],
+      async execute() {
+        throw new Error("should not run");
+      },
+    } satisfies Action;
+    actions.add(action, "test");
+
+    await expect(
+      handleMessage({
+        client: {} as never,
+        message: createConfirmableMessage("-ban user", []),
+        prefix: "-",
+        actions,
+        log: createLog(),
+        isAgent: true,
+        requestAgentConfirmation: async () => {
+          throw new Error("confirmation setup failed");
+        },
+      }),
+    ).rejects.toThrow("confirmation setup failed");
+  });
+
   test("denies agent actions using invocation-specific permissions before execution", async () => {
     const actions = new ActionDirectory();
     const tagAction = {
