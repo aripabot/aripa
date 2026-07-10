@@ -375,6 +375,7 @@ describe("applyReleaseUpdate", () => {
     try {
       await mkdir(join(source, "repo", "src"), { recursive: true });
       await Bun.write(join(source, "repo", "src", "index.ts"), "export const updated = true;\n");
+      await Bun.write(join(source, "repo", "package.json"), '{"name":"fixture"}\n');
       const fixture = await createSignedReleaseFixture({
         root,
         sourceDirectory: source,

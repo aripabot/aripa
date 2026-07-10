@@ -1,5 +1,5 @@
 // Bun-only module: release installation uses Bun file, environment, and process APIs.
-import { cp, mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readdir, rename, rm } from "node:fs/promises";
 import { createHash, createPublicKey, verify as verifySignature } from "node:crypto";
 import { basename, dirname, join } from "node:path";
 import { tmpdir } from "node:os";
@@ -196,6 +196,7 @@ export async function applyReleaseUpdate(
   const fetchImpl = options.fetchImpl ?? fetch;
   const lock = await acquireUpdateLock({ repositoryRoot: cwd, release: options.release.tagName });
   let tempDir: string | null = null;
+  let stagedRoot: string | null = null;
 
   try {
     tempDir = await mkdtemp(join(tmpdir(), "aripa-update-"));
@@ -221,13 +222,20 @@ export async function applyReleaseUpdate(
     await Bun.$`tar -xzf ${archivePath} -C ${tempDir}`.quiet();
     const sourceRoot = await findExtractedSourceRoot(tempDir);
 
-    options.onProgress?.("Applying release files...");
-    await syncSourceTree(sourceRoot, cwd);
+    stagedRoot = await createStagedReleaseTree(cwd);
+    const backupRoot = `${stagedRoot}.backup`;
+
+    options.onProgress?.("Staging release files...");
+    await syncSourceTree(sourceRoot, stagedRoot);
 
     if (installDependencies) {
       options.onProgress?.("Installing dependencies...");
-      await Bun.$`bun install --ignore-scripts --frozen-lockfile`.cwd(cwd).quiet();
+      await Bun.$`bun install --ignore-scripts --frozen-lockfile`.cwd(stagedRoot).quiet();
     }
+
+    await verifyStagedReleaseTree(stagedRoot);
+    options.onProgress?.("Applying release files...");
+    await swapStagedReleaseTree({ currentRoot: cwd, stagedRoot, backupRoot });
 
     return {
       release: options.release,
@@ -238,8 +246,49 @@ export async function applyReleaseUpdate(
     if (tempDir) {
       await rm(tempDir, { recursive: true, force: true });
     }
+    if (stagedRoot) {
+      await rm(stagedRoot, { recursive: true, force: true });
+    }
     await lock.release();
   }
+}
+
+async function createStagedReleaseTree(currentRoot: string): Promise<string> {
+  const stagedRoot = await mkdtemp(join(dirname(currentRoot), ".aripa-release-stage-"));
+  const entries = await readdir(currentRoot);
+
+  for (const entry of entries) {
+    if (["node_modules", ".turbo", ".next"].includes(entry)) {
+      continue;
+    }
+    await cp(join(currentRoot, entry), join(stagedRoot, entry), { recursive: true });
+  }
+  return stagedRoot;
+}
+
+async function verifyStagedReleaseTree(stagedRoot: string): Promise<void> {
+  for (const requiredPath of ["package.json"]) {
+    if (!(await Bun.file(join(stagedRoot, requiredPath)).exists())) {
+      throw new Error(`Staged release is missing required file: ${requiredPath}.`);
+    }
+  }
+}
+
+async function swapStagedReleaseTree(options: {
+  currentRoot: string;
+  stagedRoot: string;
+  backupRoot: string;
+}): Promise<void> {
+  await rename(options.currentRoot, options.backupRoot);
+
+  try {
+    await rename(options.stagedRoot, options.currentRoot);
+  } catch (error) {
+    await rename(options.backupRoot, options.currentRoot);
+    throw error;
+  }
+
+  await rm(options.backupRoot, { recursive: true, force: true });
 }
 
 export async function applyLatestReleaseUpdate(
