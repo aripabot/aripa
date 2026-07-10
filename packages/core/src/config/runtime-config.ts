@@ -97,7 +97,7 @@ export interface RuntimeAutoUpdateConfig {
 export const DEFAULT_MODEL_CONFIG: RuntimeModelConfig = {
   agent: {
     provider: "openai",
-    model: "gpt-5.5",
+    model: "gpt-5.6-terra",
     reasoningEffort: "low",
   },
   summarizer: {

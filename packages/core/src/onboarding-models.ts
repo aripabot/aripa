@@ -19,19 +19,24 @@ export const DEFAULT_ONBOARDING_MODEL_OPTIONS: OnboardingModelOptions = {
   agent: {
     openai: [
       {
+        name: "gpt-5.6-terra",
+        description: "OpenAI's medium-sized flagship model.",
+        value: "gpt-5.6-terra",
+      },
+      {
+        name: "gpt-5.6-sol",
+        description: "OpenAI's most capable flagship model.",
+        value: "gpt-5.6-sol",
+      },
+      {
+        name: "gpt-5.6-luna",
+        description: "OpenAI's low cost flagship model.",
+        value: "gpt-5.6-luna",
+      },
+      {
         name: "gpt-5.5",
-        description: "Latest high-capability OpenAI reasoning model.",
+        description: "OpenAI's previous generation model.",
         value: "gpt-5.5",
-      },
-      {
-        name: "gpt-5.4",
-        description: "Previous generation OpenAI reasoning model.",
-        value: "gpt-5.4",
-      },
-      {
-        name: "gpt-5.4-mini",
-        description: "Lower cost OpenAI reasoning model.",
-        value: "gpt-5.4-mini",
       },
     ],
     openrouter: [
