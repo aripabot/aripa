@@ -235,9 +235,8 @@ describe("unmuteMember", () => {
         guildConfigStore,
         activeMuteStore,
         scheduler: {
-          cancel: (nextGuildId: string, nextUserId: string) => {
+          clearScheduledExpiry: (nextGuildId: string, nextUserId: string) => {
             cancelled.push({ guildId: nextGuildId, userId: nextUserId });
-            activeMuteStore.delete(nextGuildId, nextUserId);
           },
         } as never,
       });
@@ -273,7 +272,7 @@ describe("unmuteMember", () => {
         guildConfigStore,
         activeMuteStore,
         scheduler: {
-          cancel: (nextGuildId: string, nextUserId: string) => {
+          clearScheduledExpiry: (nextGuildId: string, nextUserId: string) => {
             cancelled.push({ guildId: nextGuildId, userId: nextUserId });
           },
         } as never,

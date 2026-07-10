@@ -80,18 +80,40 @@ export class ActiveMuteStore {
     muteRoleId: string;
     expiresAt?: string | null;
   }): ActiveMuteRecord {
-    this.db
-      .query(
-        `INSERT INTO active_mute (guild_id, user_id, mute_mode, mute_role_id, expires_at)
-         VALUES (?, ?, 'role', ?, ?)
-         ON CONFLICT(guild_id, user_id) DO UPDATE SET
-           mute_mode = excluded.mute_mode,
-           mute_role_id = excluded.mute_role_id,
-           expires_at = excluded.expires_at,
-           generation = generation + 1,
-           updated_at = CURRENT_TIMESTAMP`,
-      )
-      .run(options.guildId, options.userId, options.muteRoleId, options.expiresAt ?? null);
+    this.db.run("BEGIN IMMEDIATE");
+
+    try {
+      const generation = this.nextGeneration(options.guildId, options.userId);
+      this.db
+        .query(
+          `INSERT INTO active_mute (guild_id, user_id, mute_mode, mute_role_id, expires_at, generation)
+           VALUES (?, ?, 'role', ?, ?, ?)
+           ON CONFLICT(guild_id, user_id) DO UPDATE SET
+             mute_mode = excluded.mute_mode,
+             mute_role_id = excluded.mute_role_id,
+             expires_at = excluded.expires_at,
+             generation = excluded.generation,
+             updated_at = CURRENT_TIMESTAMP`,
+        )
+        .run(
+          options.guildId,
+          options.userId,
+          options.muteRoleId,
+          options.expiresAt ?? null,
+          generation,
+        );
+      this.db
+        .query(
+          `INSERT INTO active_mute_generation (guild_id, user_id, generation)
+           VALUES (?, ?, ?)
+           ON CONFLICT(guild_id, user_id) DO UPDATE SET generation = excluded.generation`,
+        )
+        .run(options.guildId, options.userId, generation);
+      this.db.run("COMMIT");
+    } catch (error) {
+      this.db.run("ROLLBACK");
+      throw error;
+    }
 
     return this.require(options.guildId, options.userId, "upserting active role mute");
   }
@@ -193,6 +215,42 @@ export class ActiveMuteStore {
     this.db.run(
       "CREATE INDEX IF NOT EXISTS active_mute_due_expiry ON active_mute (expires_at) WHERE expires_at IS NOT NULL",
     );
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS active_mute_generation (
+        guild_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        generation INTEGER NOT NULL,
+        PRIMARY KEY (guild_id, user_id)
+      )
+    `);
+    this.db.run(`
+      INSERT OR IGNORE INTO active_mute_generation (guild_id, user_id, generation)
+      SELECT guild_id, user_id, generation FROM active_mute
+    `);
+    this.db.run(`
+      UPDATE active_mute_generation
+      SET generation = MAX(
+        active_mute_generation.generation,
+        COALESCE(
+          (
+            SELECT active_mute.generation
+            FROM active_mute
+            WHERE active_mute.guild_id = active_mute_generation.guild_id
+              AND active_mute.user_id = active_mute_generation.user_id
+          ),
+          0
+        )
+      )
+    `);
+  }
+
+  private nextGeneration(guildId: string, userId: string): number {
+    const row = this.db
+      .query<{ generation: number }, [string, string]>(
+        "SELECT generation FROM active_mute_generation WHERE guild_id = ? AND user_id = ?",
+      )
+      .get(guildId, userId);
+    return (row?.generation ?? 0) + 1;
   }
 }
 

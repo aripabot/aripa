@@ -9,7 +9,7 @@ import {
   type ActiveMuteStore,
 } from "@aripabot/core/moderation/active-mute-store.ts";
 import { getMuteScheduler, type MuteScheduler } from "@aripabot/core/moderation/mute-scheduler.ts";
-import { muteMutationKey, muteMutationLock } from "@aripabot/core/moderation/mute-mutation-lock.ts";
+import { MuteService } from "@aripabot/core/moderation/mute-service.ts";
 import {
   botCanManageMemberRoles,
   botCanManageRole,
@@ -76,6 +76,7 @@ export async function unmuteMember(
 
   const activeMuteStore = dependencies.activeMuteStore ?? getActiveMuteStore();
   const scheduler = dependencies.scheduler ?? getMuteScheduler(context.log);
+  const muteService = new MuteService(activeMuteStore);
   const reason = parsedInvocation.args.slice(1).join(" ").trim() || null;
   const activeMute = activeMuteStore.get(context.message.guildId, subject.user.id);
   const timeoutActive = subject.member.communicationDisabledUntilTimestamp
@@ -113,16 +114,20 @@ export async function unmuteMember(
       }
 
       if (!parsedInvocation.dryRun) {
-        await muteMutationLock.run(muteMutationKey(guildId, subject.user.id), async () => {
-          await member.roles.remove(muteRole.id, buildAuditReason(context, "Unmute", reason));
-          scheduler.cancel(guildId, subject.user.id);
+        await muteService.removeRoleMute({
+          record: activeMute,
+          removeRole: async () => {
+            await member.roles.remove(muteRole.id, buildAuditReason(context, "Unmute", reason));
+          },
+          cancelTimer: () => scheduler.clearScheduledExpiry(guildId, subject.user.id),
         });
       }
     }
 
     if (!parsedInvocation.dryRun && (!muteRole || !subject.member.roles.cache.has(muteRole.id))) {
-      await muteMutationLock.run(muteMutationKey(guildId, subject.user.id), async () => {
-        scheduler.cancel(guildId, subject.user.id);
+      await muteService.clearRoleMute({
+        record: activeMute,
+        cancelTimer: () => scheduler.clearScheduledExpiry(guildId, subject.user.id),
       });
     }
   }

@@ -16,7 +16,7 @@ import {
   getRoleMuteUnmuteReason,
 } from "@aripabot/core/moderation/moderation-helpers.ts";
 import { errorMessage } from "@aripabot/core/shared/errors.ts";
-import { muteMutationKey, muteMutationLock } from "@aripabot/core/moderation/mute-mutation-lock.ts";
+import { MuteService } from "@aripabot/core/moderation/mute-service.ts";
 
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
 const DEFAULT_RETRY_DELAY_MS = 30_000;
@@ -35,6 +35,7 @@ export class MuteScheduler {
   private readonly timers = new Map<string, Timer>();
   private readonly processing = new Set<string>();
   private readonly failureState = new Map<string, MuteFailureState>();
+  private readonly muteService: MuteService;
   private client: Client | null = null;
   private sweepTimer: Timer | null = null;
 
@@ -48,7 +49,9 @@ export class MuteScheduler {
     private readonly maxRetryDelayMs = DEFAULT_MAX_RETRY_DELAY_MS,
     private readonly retryJitterRatio = DEFAULT_RETRY_JITTER_RATIO,
     private readonly random = Math.random,
-  ) {}
+  ) {
+    this.muteService = new MuteService(store);
+  }
 
   async start(client: Client): Promise<void> {
     this.client = client;
@@ -91,7 +94,10 @@ export class MuteScheduler {
           expiresAt: record.expiresAt,
         })
         .warn("Active mute has an invalid expiry timestamp. Clearing it.");
-      this.store.deleteIfGeneration(record.guildId, record.userId, record.generation);
+      await this.muteService.clearRoleMute({
+        record,
+        cancelTimer: () => this.clearTimer(key),
+      });
       this.clearFailureState(record.guildId, record.userId);
       return;
     }
@@ -111,16 +117,13 @@ export class MuteScheduler {
     this.timers.set(key, timer);
   }
 
-  cancel(guildId: string, userId: string): void {
+  clearScheduledExpiry(guildId: string, userId: string): void {
     this.clearTimer(recordKey(guildId, userId));
-    this.store.delete(guildId, userId);
     this.clearFailureState(guildId, userId);
   }
 
   async processExpiry(record: ActiveMuteRecord): Promise<void> {
-    return muteMutationLock.run(muteMutationKey(record.guildId, record.userId), async () => {
-      await this.processExpiryLocked(record);
-    });
+    await this.processExpiryLocked(record);
   }
 
   private async processExpiryLocked(record: ActiveMuteRecord): Promise<void> {
@@ -156,8 +159,7 @@ export class MuteScheduler {
       });
 
       if (!guild) {
-        this.store.deleteIfGeneration(record.guildId, record.userId, record.generation);
-        this.clearFailureState(record.guildId, record.userId);
+        await this.clearExpiredRecord(record);
         return;
       }
 
@@ -175,8 +177,7 @@ export class MuteScheduler {
         });
 
       if (!member) {
-        this.store.deleteIfGeneration(record.guildId, record.userId, record.generation);
-        this.clearFailureState(record.guildId, record.userId);
+        await this.clearExpiredRecord(record);
         return;
       }
 
@@ -198,18 +199,17 @@ export class MuteScheduler {
             roleId: record.muteRoleId,
           })
           .warn("Mute role is missing while processing mute expiry. Clearing active mute record.");
-        this.store.deleteIfGeneration(record.guildId, record.userId, record.generation);
+        await this.clearExpiredRecord(record);
+        return;
+      }
+
+      const outcome = await this.muteService.expireRoleMute({
+        record,
+        removeRole: () => this.removeRoleMute(member, role.id),
+      });
+      if (outcome === "completed") {
         this.clearFailureState(record.guildId, record.userId);
-        return;
       }
-
-      if (this.store.get(record.guildId, record.userId)?.generation !== record.generation) {
-        return;
-      }
-
-      await this.removeRoleMute(member, role.id);
-      this.store.deleteIfGeneration(record.guildId, record.userId, record.generation);
-      this.clearFailureState(record.guildId, record.userId);
     } catch (error) {
       const failure = this.recordFailure(record);
       this.log
@@ -273,6 +273,16 @@ export class MuteScheduler {
         .withMetadata({ guildId: member.guild.id, userId: member.id, roleId })
         .warn("Failed to remove expiring mute role.");
       throw error;
+    }
+  }
+
+  private async clearExpiredRecord(record: ActiveMuteRecord): Promise<void> {
+    const outcome = await this.muteService.clearRoleMute({
+      record,
+      cancelTimer: () => this.clearScheduledExpiry(record.guildId, record.userId),
+    });
+    if (outcome === "completed") {
+      this.clearFailureState(record.guildId, record.userId);
     }
   }
 

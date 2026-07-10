@@ -10,11 +10,10 @@ import {
 } from "@aripabot/core/config/guild-config-store.ts";
 import {
   getActiveMuteStore,
-  type ActiveMuteRecord,
   type ActiveMuteStore,
 } from "@aripabot/core/moderation/active-mute-store.ts";
 import { getMuteScheduler, type MuteScheduler } from "@aripabot/core/moderation/mute-scheduler.ts";
-import { muteMutationKey, muteMutationLock } from "@aripabot/core/moderation/mute-mutation-lock.ts";
+import { MuteService } from "@aripabot/core/moderation/mute-service.ts";
 import {
   botCanManageRole,
   botCanManageMemberRoles,
@@ -357,48 +356,29 @@ async function applyPersistentRoleMute(options: {
     reason,
     durationMs,
   } = options;
-  return muteMutationLock.run(muteMutationKey(guildId, userId), async () => {
-    const auditReason = buildAuditReason(context, "Mute", reason);
-    let previousMute: ActiveMuteRecord | null = null;
-    let replacementWritten = false;
-
-    await member.roles.add(muteRoleId, auditReason);
-
-    try {
-      const expiresAt = durationMs ? new Date(Date.now() + durationMs).toISOString() : null;
-      const replacement = activeMuteStore.upsertReturningPrevious({
-        guildId,
-        userId,
-        muteRoleId,
-        expiresAt,
-      });
-      previousMute = replacement.previous;
-      replacementWritten = true;
-      await scheduler.schedule(replacement.record);
-    } catch (error) {
-      if (previousMute) {
-        activeMuteStore.restore(previousMute);
-        await scheduler.schedule(previousMute);
-      } else if (replacementWritten) {
-        activeMuteStore.delete(guildId, userId);
+  const muteService = new MuteService(activeMuteStore);
+  await muteService.applyRoleMute({
+    guildId,
+    userId,
+    muteRoleId,
+    expiresAt: durationMs ? new Date(Date.now() + durationMs).toISOString() : null,
+    addRole: async () => {
+      await member.roles.add(muteRoleId, buildAuditReason(context, "Mute", reason));
+    },
+    schedule: (record) => scheduler.schedule(record),
+    rollbackNewRole: async () => {
+      try {
+        await member.roles.remove(muteRoleId, buildAuditReason(context, "Mute Rollback", reason));
+      } catch (rollbackError) {
+        context.log
+          .withError(rollbackError)
+          .withMetadata({
+            guildId: context.message.guildId,
+            userId,
+            muteRoleId,
+          })
+          .error("Failed to roll back mute role after persistence error.");
       }
-
-      if (!previousMute) {
-        try {
-          await member.roles.remove(muteRoleId, buildAuditReason(context, "Mute Rollback", reason));
-        } catch (rollbackError) {
-          context.log
-            .withError(rollbackError)
-            .withMetadata({
-              guildId: context.message.guildId,
-              userId,
-              muteRoleId,
-            })
-            .error("Failed to roll back mute role after persistence error.");
-        }
-      }
-
-      throw error;
-    }
+    },
   });
 }
