@@ -1,6 +1,10 @@
 import { join } from "node:path";
 
-import { applyReleaseUpdate, fetchGitHubReleases } from "@aripabot/core/update/release-updater.ts";
+import {
+  applyReleaseUpdate,
+  fetchGitHubReleases,
+  resolveReleaseTrustPolicy,
+} from "@aripabot/core/update/release-updater.ts";
 
 import type { UpdateInstallResponse } from "@/lib/api-types";
 import { readConfig } from "@/server/config-store";
@@ -28,8 +32,11 @@ export async function installRelease(tagName: string): Promise<UpdateInstallResp
     release,
     token: process.env.GITHUB_TOKEN?.trim() || null,
     installDependencies: true,
-    releasePublicKeyPem: config.updates.releasePublicKeyPem,
-    releasePublicKeyPemBase64: config.updates.releasePublicKeyPemBase64,
+    ...resolveReleaseTrustPolicy({
+      repo: config.updates.githubRepo,
+      releasePublicKeyPem: config.updates.releasePublicKeyPem,
+      releasePublicKeyPemBase64: config.updates.releasePublicKeyPemBase64,
+    }),
     onProgress: (message) => {
       progress.push(message);
     },

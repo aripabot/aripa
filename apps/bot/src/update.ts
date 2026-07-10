@@ -5,12 +5,12 @@ import { colors } from "@aripabot/core/onboarding-wizard/theme.ts";
 import { loadRuntimeJsonConfig } from "@aripabot/core/config/config.ts";
 import {
   DEFAULT_GITHUB_REPO,
-  DEFAULT_RELEASE_PUBLIC_KEY_PEM_B64,
   applyLatestReleaseUpdate,
   applyReleaseUpdate,
   fetchGitHubReleases,
   formatReleaseDate,
   formatReleaseName,
+  resolveReleaseTrustPolicy,
   type GitHubRelease,
 } from "@aripabot/core/update/release-updater.ts";
 import type { MinimalKeyEvent } from "@aripabot/core/onboarding-wizard/types.ts";
@@ -39,7 +39,6 @@ const updateConfig = {
     runtimeConfig.updates.githubRepo ||
     DEFAULT_GITHUB_REPO,
 };
-const isOfficialUpdateRepo = updateConfig.githubRepo === DEFAULT_GITHUB_REPO;
 const dryRunUpdates = Bun.env.DRY_RUN_UPDATES?.trim() === "true";
 const updateLatest = Bun.argv.slice(2).includes("--latest");
 
@@ -98,10 +97,11 @@ async function runLatestUpdate(): Promise<void> {
       repo: updateConfig.githubRepo,
       token: Bun.env.GITHUB_TOKEN?.trim() || null,
       installDependencies: true,
-      releasePublicKeyPem: updateConfig.releasePublicKeyPem,
-      releasePublicKeyPemBase64:
-        updateConfig.releasePublicKeyPemBase64 ||
-        (isOfficialUpdateRepo ? DEFAULT_RELEASE_PUBLIC_KEY_PEM_B64 : undefined),
+      ...resolveReleaseTrustPolicy({
+        repo: updateConfig.githubRepo,
+        releasePublicKeyPem: updateConfig.releasePublicKeyPem,
+        releasePublicKeyPemBase64: updateConfig.releasePublicKeyPemBase64,
+      }),
       onProgress: (progress) => {
         console.log(progress);
       },
@@ -391,10 +391,11 @@ async function applySelectedRelease(
       release,
       token: Bun.env.GITHUB_TOKEN?.trim() || null,
       installDependencies: true,
-      releasePublicKeyPem: updateConfig.releasePublicKeyPem,
-      releasePublicKeyPemBase64:
-        updateConfig.releasePublicKeyPemBase64 ||
-        (isOfficialUpdateRepo ? DEFAULT_RELEASE_PUBLIC_KEY_PEM_B64 : undefined),
+      ...resolveReleaseTrustPolicy({
+        repo: updateConfig.githubRepo,
+        releasePublicKeyPem: updateConfig.releasePublicKeyPem,
+        releasePublicKeyPemBase64: updateConfig.releasePublicKeyPemBase64,
+      }),
       onProgress: (progress) => {
         message = progress;
         render();

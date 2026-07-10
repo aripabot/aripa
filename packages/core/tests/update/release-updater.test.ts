@@ -9,15 +9,31 @@ import {
   applyLatestReleaseUpdate,
   buildAutoUpdateCronEntry,
   compareCurrentPackageVersionWithLatestReleaseVersion,
+  DEFAULT_RELEASE_PUBLIC_KEY_PEM_B64,
   fetchGitHubReleases,
   formatReleaseName,
   removeManagedAutoUpdateCronContent,
   removeAutoUpdateCron,
+  resolveReleaseTrustPolicy,
   shouldPreserveUpdatePath,
   syncSourceTree,
   updateManagedAutoUpdateCronContent,
   type GitHubRelease,
 } from "@aripabot/core/update/release-updater.ts";
+
+describe("resolveReleaseTrustPolicy", () => {
+  test("uses the official release key when no key is configured", () => {
+    expect(
+      resolveReleaseTrustPolicy({ repo: "aripabot/aripa", env: {} }).releasePublicKeyPemBase64,
+    ).toBe(DEFAULT_RELEASE_PUBLIC_KEY_PEM_B64);
+  });
+
+  test("rejects custom repositories without a configured key before download", () => {
+    expect(() => resolveReleaseTrustPolicy({ repo: "fork/aripa", env: {} })).toThrow(
+      "Release verification public key is required",
+    );
+  });
+});
 
 describe("fetchGitHubReleases", () => {
   test("sorts published releases newest first and marks pre-releases", async () => {

@@ -11,6 +11,7 @@ import {
   updateManagedAutoUpdateCronContent,
 } from "@aripabot/core/update/auto-update-cron-content.ts";
 import {
+  DEFAULT_GITHUB_REPO,
   fetchGitHubReleaseByTagName,
   fetchGitHubReleases,
   githubHeaders,
@@ -101,6 +102,41 @@ export interface ApplyReleaseResult {
   release: GitHubRelease;
   updatedPath: string;
   installedDependencies: boolean;
+}
+
+export interface ReleaseTrustPolicy {
+  releasePublicKeyPem?: string;
+  releasePublicKeyPemBase64?: string;
+}
+
+export function resolveReleaseTrustPolicy(options: {
+  repo: string;
+  releasePublicKeyPem?: string;
+  releasePublicKeyPemBase64?: string;
+  env?: Record<string, string | undefined>;
+}): ReleaseTrustPolicy {
+  const env = options.env ?? Bun.env;
+  const hasEnvironmentKey = Boolean(
+    env[RELEASE_PUBLIC_KEY_ENV]?.trim() || env[RELEASE_PUBLIC_KEY_BASE64_ENV]?.trim(),
+  );
+  const releasePublicKeyPem = options.releasePublicKeyPem?.trim() || undefined;
+  const releasePublicKeyPemBase64 = options.releasePublicKeyPemBase64?.trim() || undefined;
+
+  if (
+    !hasEnvironmentKey &&
+    !releasePublicKeyPem &&
+    !releasePublicKeyPemBase64 &&
+    options.repo !== DEFAULT_GITHUB_REPO
+  ) {
+    throw new Error(`Release verification public key is required for ${options.repo}.`);
+  }
+
+  return {
+    ...(releasePublicKeyPem ? { releasePublicKeyPem } : {}),
+    releasePublicKeyPemBase64:
+      releasePublicKeyPemBase64 ??
+      (options.repo === DEFAULT_GITHUB_REPO ? DEFAULT_RELEASE_PUBLIC_KEY_PEM_B64 : undefined),
+  };
 }
 
 export async function compareCurrentPackageVersionWithLatestReleaseVersion(
