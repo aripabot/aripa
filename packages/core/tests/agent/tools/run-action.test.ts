@@ -146,6 +146,7 @@ describe("executeRunAction", () => {
         agentReplies: [],
         error: {
           kind: "discord_missing_permissions",
+          stage: "execute",
           message: "Discord denied the required permissions.",
           errorName: "DiscordAPIError",
           code: "50013",
@@ -167,6 +168,7 @@ describe("executeRunAction", () => {
         message: "Discord denied the required permissions.",
         actionError: {
           kind: "discord_missing_permissions",
+          stage: "execute",
           message: "Discord denied the required permissions.",
           errorName: "DiscordAPIError",
           code: "50013",

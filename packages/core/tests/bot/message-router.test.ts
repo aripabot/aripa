@@ -358,7 +358,7 @@ describe("handleMessage agent confirmation", () => {
 });
 
 describe("handleMessage dynamic action permissions", () => {
-  test("currently rejects when dynamic permission resolution throws", async () => {
+  test("contains dynamic permission resolution failures", async () => {
     const actions = new ActionDirectory();
     const action = {
       name: "tag",
@@ -372,18 +372,25 @@ describe("handleMessage dynamic action permissions", () => {
     } satisfies Action;
     actions.add(action, "test");
 
-    await expect(
-      handleMessage({
-        client: {} as never,
-        message: createMessage("-tag add rules", []),
-        prefix: "-",
-        actions,
-        log: createLog(),
-      }),
-    ).rejects.toThrow("permission resolution failed");
+    const replies: string[] = [];
+
+    const result = await handleMessage({
+      client: {} as never,
+      message: createMessage("-tag add rules", replies),
+      prefix: "-",
+      actions,
+      log: createLog(),
+    });
+
+    expect(result).toMatchObject({
+      status: "failed",
+      action: "tag",
+      error: { stage: "authorize" },
+    });
+    expect(replies).toEqual(["That action failed. I logged the details so it can be fixed."]);
   });
 
-  test("currently rejects when confirmation setup throws", async () => {
+  test("contains confirmation setup failures", async () => {
     const actions = new ActionDirectory();
     const action = {
       name: "ban",
@@ -394,19 +401,31 @@ describe("handleMessage dynamic action permissions", () => {
     } satisfies Action;
     actions.add(action, "test");
 
-    await expect(
-      handleMessage({
-        client: {} as never,
-        message: createConfirmableMessage("-ban user", []),
-        prefix: "-",
-        actions,
-        log: createLog(),
-        isAgent: true,
-        requestAgentConfirmation: async () => {
-          throw new Error("confirmation setup failed");
-        },
-      }),
-    ).rejects.toThrow("confirmation setup failed");
+    const result = await handleMessage({
+      client: {} as never,
+      message: createConfirmableMessage("-ban user", []),
+      prefix: "-",
+      actions,
+      log: createLog(),
+      isAgent: true,
+      requestAgentConfirmation: async () => {
+        throw new Error("confirmation setup failed");
+      },
+    });
+
+    expect(result).toMatchObject({
+      status: "failed",
+      action: "ban",
+      error: { stage: "confirm" },
+    });
+    expect(parseAgentReplies(result)).toEqual([
+      {
+        type: "action_reply",
+        action: "ban",
+        ok: false,
+        message: "That action failed. I logged the details so it can be fixed.",
+      },
+    ]);
   });
 
   test("denies agent actions using invocation-specific permissions before execution", async () => {
@@ -492,6 +511,71 @@ describe("handleMessage dynamic action permissions", () => {
         message: "Confirmation was cancelled, so I did not run that action.",
       },
     ]);
+  });
+});
+
+describe("handleMessage pipeline boundaries", () => {
+  test("contains tag lookup failures", async () => {
+    const replies: string[] = [];
+
+    const result = await handleMessage({
+      client: {} as never,
+      message: createMessage("-rules", replies),
+      prefix: "-",
+      actions: new ActionDirectory(),
+      log: createLog(),
+      guildConfigStore: {
+        getTag() {
+          throw new Error("tag lookup failed");
+        },
+      } as never,
+    });
+
+    expect(result).toMatchObject({
+      status: "failed",
+      action: "rules",
+      error: { stage: "resolve" },
+    });
+    expect(replies).toEqual(["That action failed. I logged the details so it can be fixed."]);
+  });
+
+  test("contains action context failures", async () => {
+    const actions = new ActionDirectory();
+    const action = {
+      name: "ban",
+      requiredUserPermissions: [],
+      async execute() {
+        throw new Error("should not run");
+      },
+    } satisfies Action;
+    actions.add(action, "test");
+
+    const replies: string[] = [];
+    const message = createMessage("-ban user", replies) as {
+      member: unknown;
+      channel: { permissionsFor: () => never };
+    };
+    message.member = {};
+    message.channel = {
+      permissionsFor() {
+        throw new Error("permission lookup failed");
+      },
+    };
+
+    const result = await handleMessage({
+      client: {} as never,
+      message: message as never,
+      prefix: "-",
+      actions,
+      log: createLog(),
+    });
+
+    expect(result).toMatchObject({
+      status: "failed",
+      action: "ban",
+      error: { stage: "authorize" },
+    });
+    expect(replies).toEqual(["That action failed. I logged the details so it can be fixed."]);
   });
 });
 

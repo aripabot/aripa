@@ -63,10 +63,20 @@ export type HandleMessageResult =
 
 export interface ActionErrorSnapshot {
   kind: "discord_missing_permissions" | "action_failed";
+  stage: CommandPipelineStage;
   message: string;
   errorName?: string;
   code?: string;
 }
+
+export type CommandPipelineStage =
+  | "classify"
+  | "parse"
+  | "resolve"
+  | "authorize"
+  | "confirm"
+  | "execute"
+  | "deliver";
 
 export async function handleMessage({
   client,
@@ -107,39 +117,8 @@ export async function handleMessage({
   }
 
   const parsed = parsedResult.command;
-  const action = actions.find(parsed.name);
-
-  if (!action) {
-    const tagResult = await handleTagInvocation({
-      message,
-      parsedName: parsed.name,
-      parsedArgs: parsed.args,
-      log,
-      isAgent,
-      store: guildConfigStore,
-    });
-
-    if (tagResult) {
-      return tagResult;
-    }
-
-    const replyMessage = `Unknown action: \`${parsed.name}\`. Try \`${prefix}help\`.`;
-    const agentReplies = isAgent ? [formatAgentReply(parsed.name, replyMessage, false)] : [];
-
-    if (!isAgent) {
-      await safeReply(message, replyMessage, log);
-    }
-
-    return {
-      status: "unknown_action",
-      action: parsed.name,
-      isAgent,
-      agentReplies,
-    };
-  }
-
   const actionMetadata = {
-    action: action.name,
+    action: parsed.name,
     requestedAction: parsed.name,
     requestedActionCall: renderActionCall(prefix, parsed.name, parsed.rawArgs),
     guildId: message.guildId,
@@ -147,89 +126,133 @@ export async function handleMessage({
     messageId: message.id,
     userId: message.author.id,
   };
+  let actionName = parsed.name;
+  let agentReplies: string[] = [];
+  let stage: CommandPipelineStage = "resolve";
 
-  log.withMetadata(actionMetadata).info("Action requested.");
+  try {
+    const action = actions.find(parsed.name);
 
-  const startedAt = performance.now();
-  const context = createActionContext({
-    client,
-    message,
-    args: parsed.args,
-    argTokens: parsed.tokens.slice(1),
-    tokens: parsed.tokens,
-    rawArgs: parsed.rawArgs,
-    prefix,
-    actionName: parsed.name,
-    actions,
-    log,
-    isAgent,
-  });
-  const requiredUserPermissions = await getEffectiveRequiredUserPermissions(action, context);
-  const missingUserPermissions = getMissingUserPermissions(
-    requiredUserPermissions,
-    context.invoker.can,
-  );
+    if (!action) {
+      const tagResult = await handleTagInvocation({
+        message,
+        parsedName: parsed.name,
+        parsedArgs: parsed.args,
+        log,
+        isAgent,
+        store: guildConfigStore,
+      });
 
-  if (missingUserPermissions.length > 0) {
-    log
-      .withMetadata({
-        ...actionMetadata,
-        missingUserPermissions: missingUserPermissions.map(String),
-      })
-      .warn("Action denied by user permission guard.");
+      if (tagResult) {
+        return tagResult;
+      }
 
-    await deliverRouterReply({
+      const replyMessage = `Unknown action: \`${parsed.name}\`. Try \`${prefix}help\`.`;
+      const unknownActionAgentReplies = isAgent
+        ? [formatAgentReply(parsed.name, replyMessage, false)]
+        : [];
+
+      stage = "deliver";
+      if (!isAgent) {
+        await safeReply(message, replyMessage, log);
+      }
+
+      return {
+        status: "unknown_action",
+        action: parsed.name,
+        isAgent,
+        agentReplies: unknownActionAgentReplies,
+      };
+    }
+
+    actionMetadata.action = action.name;
+    actionName = action.name;
+    log.withMetadata(actionMetadata).info("Action requested.");
+
+    const startedAt = performance.now();
+    stage = "authorize";
+    const context = createActionContext({
+      client,
       message,
+      args: parsed.args,
+      argTokens: parsed.tokens.slice(1),
+      tokens: parsed.tokens,
+      rawArgs: parsed.rawArgs,
+      prefix,
+      actionName: parsed.name,
+      actions,
       log,
       isAgent,
-      agentReplies: context.agentReplies,
-      actionName: action.name,
-      content: `You do not have permission to run that action. Missing: ${formatPermissions(missingUserPermissions)}.`,
     });
-    return {
-      status: "denied",
-      action: action.name,
-      isAgent,
-      agentReplies: context.agentReplies,
-      missingUserPermissions: missingUserPermissions.map(String),
-    };
-  }
+    agentReplies = context.agentReplies;
+    const requiredUserPermissions = await getEffectiveRequiredUserPermissions(action, context);
+    const missingUserPermissions = getMissingUserPermissions(
+      requiredUserPermissions,
+      context.invoker.can,
+    );
 
-  if (shouldConfirmAgentAction(isAgent, requiredUserPermissions)) {
-    const confirmation = await confirmAgentAction({
-      message,
-      actionCall: actionMetadata.requestedActionCall,
-      timeoutMs: agentConfirmationTimeoutMs,
-      log,
-      actionMetadata,
-      lifecycle: agentConfirmationLifecycle,
-    });
-
-    if (confirmation.status !== "confirmed") {
+    if (missingUserPermissions.length > 0) {
       log
-        .withMetadata({ ...actionMetadata, confirmationStatus: confirmation.status })
-        .info("Agent action was not confirmed.");
+        .withMetadata({
+          ...actionMetadata,
+          missingUserPermissions: missingUserPermissions.map(String),
+        })
+        .warn("Action denied by user permission guard.");
+
+      stage = "deliver";
       await deliverRouterReply({
         message,
         log,
         isAgent,
         agentReplies: context.agentReplies,
         actionName: action.name,
-        content: getAgentConfirmationFailureReply(confirmation.status),
+        content: `You do not have permission to run that action. Missing: ${formatPermissions(missingUserPermissions)}.`,
       });
       return {
-        status: "unconfirmed",
+        status: "denied",
         action: action.name,
         isAgent,
         agentReplies: context.agentReplies,
-        confirmationStatus: confirmation.status,
+        missingUserPermissions: missingUserPermissions.map(String),
       };
     }
-  }
 
-  log.withMetadata(actionMetadata).info("Running action.");
+    if (shouldConfirmAgentAction(isAgent, requiredUserPermissions)) {
+      stage = "confirm";
+      const confirmation = await confirmAgentAction({
+        message,
+        actionCall: actionMetadata.requestedActionCall,
+        timeoutMs: agentConfirmationTimeoutMs,
+        log,
+        actionMetadata,
+        lifecycle: agentConfirmationLifecycle,
+      });
 
-  try {
+      if (confirmation.status !== "confirmed") {
+        log
+          .withMetadata({ ...actionMetadata, confirmationStatus: confirmation.status })
+          .info("Agent action was not confirmed.");
+        stage = "deliver";
+        await deliverRouterReply({
+          message,
+          log,
+          isAgent,
+          agentReplies: context.agentReplies,
+          actionName: action.name,
+          content: getAgentConfirmationFailureReply(confirmation.status),
+        });
+        return {
+          status: "unconfirmed",
+          action: action.name,
+          isAgent,
+          agentReplies: context.agentReplies,
+          confirmationStatus: confirmation.status,
+        };
+      }
+    }
+
+    log.withMetadata(actionMetadata).info("Running action.");
+    stage = "execute";
     const result = await action.execute(context);
 
     if (isAgent && typeof result === "string" && !context.agentReplies.includes(result)) {
@@ -251,16 +274,17 @@ export async function handleMessage({
       message,
       error,
       log,
-      actionMetadata,
+      { ...actionMetadata, stage },
       isAgent,
-      context.agentReplies,
-      action.name,
+      agentReplies,
+      actionName,
+      stage,
     );
     return {
       status: "failed",
-      action: action.name,
+      action: actionName,
       isAgent,
-      agentReplies: context.agentReplies,
+      agentReplies,
       error: errorSnapshot,
     };
   }
@@ -361,6 +385,7 @@ async function handleActionError(
   isAgent: boolean,
   agentReplies: string[],
   actionName: string,
+  stage: CommandPipelineStage,
 ): Promise<ActionErrorSnapshot> {
   log.withError(error).withMetadata(actionMetadata).error("Action failed.");
 
@@ -375,6 +400,7 @@ async function handleActionError(
     });
     return {
       kind: "discord_missing_permissions",
+      stage,
       message: "Discord denied the required permissions.",
       errorName: getErrorName(error),
       code: getErrorCode(error),
@@ -391,6 +417,7 @@ async function handleActionError(
   });
   return {
     kind: "action_failed",
+    stage,
     message: "The action threw before it could complete.",
     errorName: getErrorName(error),
     code: getErrorCode(error),
