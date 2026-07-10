@@ -24,6 +24,7 @@ const DEFAULT_SWEEP_INTERVAL_MS = 60_000;
 const DEFAULT_MAX_RETRY_DELAY_MS = 15 * 60_000;
 const DEFAULT_FAILURE_REPORT_INTERVAL_MS = 15 * 60_000;
 const DEFAULT_RETRY_JITTER_RATIO = 0.2;
+const DUE_MUTE_CONCURRENCY = 4;
 
 interface MuteFailureState {
   failures: number;
@@ -299,8 +300,14 @@ export class MuteScheduler {
   }
 
   private async sweepExpiredMutes(): Promise<void> {
-    for (const record of this.store.listDue(new Date().toISOString(), 100)) {
-      await this.processExpiry(record);
+    const dueRecords = this.store.listDue(new Date().toISOString(), 100);
+
+    for (let offset = 0; offset < dueRecords.length; offset += DUE_MUTE_CONCURRENCY) {
+      await Promise.all(
+        dueRecords.slice(offset, offset + DUE_MUTE_CONCURRENCY).map((record) => {
+          return this.processExpiry(record);
+        }),
+      );
     }
   }
 
