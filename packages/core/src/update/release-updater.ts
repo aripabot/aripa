@@ -5,6 +5,7 @@ import { basename, dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 
 import { AUTO_UPDATE_CRON_PRESETS } from "@aripabot/core/update/auto-update-cron.ts";
+import { acquireUpdateLock } from "@aripabot/core/update/update-lock.ts";
 import {
   buildAutoUpdateCronEntry,
   removeManagedAutoUpdateCronContent,
@@ -192,10 +193,12 @@ export async function applyReleaseUpdate(
 ): Promise<ApplyReleaseResult> {
   const cwd = options.cwd ?? process.cwd();
   const installDependencies = options.installDependencies ?? true;
-  const tempDir = await mkdtemp(join(tmpdir(), "aripa-update-"));
   const fetchImpl = options.fetchImpl ?? fetch;
+  const lock = await acquireUpdateLock({ repositoryRoot: cwd, release: options.release.tagName });
+  let tempDir: string | null = null;
 
   try {
+    tempDir = await mkdtemp(join(tmpdir(), "aripa-update-"));
     options.onProgress?.(`Verifying ${options.release.tagName}...`);
     const manifest = await fetchAndVerifyReleaseManifest({
       release: options.release,
@@ -232,7 +235,10 @@ export async function applyReleaseUpdate(
       installedDependencies: installDependencies,
     };
   } finally {
-    await rm(tempDir, { recursive: true, force: true });
+    if (tempDir) {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+    await lock.release();
   }
 }
 
