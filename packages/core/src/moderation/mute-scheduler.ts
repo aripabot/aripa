@@ -16,6 +16,7 @@ import {
   getRoleMuteUnmuteReason,
 } from "@aripabot/core/moderation/moderation-helpers.ts";
 import { errorMessage } from "@aripabot/core/shared/errors.ts";
+import { muteMutationKey, muteMutationLock } from "@aripabot/core/moderation/mute-mutation-lock.ts";
 
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
 const DEFAULT_RETRY_DELAY_MS = 30_000;
@@ -116,6 +117,12 @@ export class MuteScheduler {
   }
 
   async processExpiry(record: ActiveMuteRecord): Promise<void> {
+    return muteMutationLock.run(muteMutationKey(record.guildId, record.userId), async () => {
+      await this.processExpiryLocked(record);
+    });
+  }
+
+  private async processExpiryLocked(record: ActiveMuteRecord): Promise<void> {
     if (!this.client) {
       return;
     }
