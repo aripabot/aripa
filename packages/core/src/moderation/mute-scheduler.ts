@@ -89,7 +89,7 @@ export class MuteScheduler {
           expiresAt: record.expiresAt,
         })
         .warn("Active mute has an invalid expiry timestamp. Clearing it.");
-      this.store.delete(record.guildId, record.userId);
+      this.store.deleteIfGeneration(record.guildId, record.userId, record.generation);
       this.clearFailureState(record.guildId, record.userId);
       return;
     }
@@ -103,7 +103,7 @@ export class MuteScheduler {
 
     const timeoutDelay = Math.min(delay, MAX_TIMER_DELAY_MS);
     const timer = setTimeout(() => {
-      void this.handleTimer(record.guildId, record.userId);
+      void this.handleTimer(record.guildId, record.userId, record.generation);
     }, timeoutDelay);
 
     this.timers.set(key, timer);
@@ -121,6 +121,10 @@ export class MuteScheduler {
     }
 
     const key = recordKey(record.guildId, record.userId);
+
+    if (this.store.get(record.guildId, record.userId)?.generation !== record.generation) {
+      return;
+    }
 
     if (this.processing.has(key)) {
       return;
@@ -144,7 +148,7 @@ export class MuteScheduler {
       });
 
       if (!guild) {
-        this.store.delete(record.guildId, record.userId);
+        this.store.deleteIfGeneration(record.guildId, record.userId, record.generation);
         this.clearFailureState(record.guildId, record.userId);
         return;
       }
@@ -163,7 +167,7 @@ export class MuteScheduler {
         });
 
       if (!member) {
-        this.store.delete(record.guildId, record.userId);
+        this.store.deleteIfGeneration(record.guildId, record.userId, record.generation);
         this.clearFailureState(record.guildId, record.userId);
         return;
       }
@@ -186,13 +190,17 @@ export class MuteScheduler {
             roleId: record.muteRoleId,
           })
           .warn("Mute role is missing while processing mute expiry. Clearing active mute record.");
-        this.store.delete(record.guildId, record.userId);
+        this.store.deleteIfGeneration(record.guildId, record.userId, record.generation);
         this.clearFailureState(record.guildId, record.userId);
         return;
       }
 
+      if (this.store.get(record.guildId, record.userId)?.generation !== record.generation) {
+        return;
+      }
+
       await this.removeRoleMute(member, role.id);
-      this.store.delete(record.guildId, record.userId);
+      this.store.deleteIfGeneration(record.guildId, record.userId, record.generation);
       this.clearFailureState(record.guildId, record.userId);
     } catch (error) {
       const failure = this.recordFailure(record);
@@ -217,11 +225,11 @@ export class MuteScheduler {
     }
   }
 
-  private async handleTimer(guildId: string, userId: string): Promise<void> {
+  private async handleTimer(guildId: string, userId: string, generation: number): Promise<void> {
     try {
       const record = this.store.get(guildId, userId);
 
-      if (!record) {
+      if (!record || record.generation !== generation) {
         this.clearTimer(recordKey(guildId, userId));
         return;
       }
@@ -284,13 +292,7 @@ export class MuteScheduler {
   }
 
   private async sweepExpiredMutes(): Promise<void> {
-    for (const record of this.store.listExpiring()) {
-      const expiresAtMs = record.expiresAt ? Date.parse(record.expiresAt) : NaN;
-
-      if (!Number.isFinite(expiresAtMs) || expiresAtMs > Date.now()) {
-        continue;
-      }
-
+    for (const record of this.store.listDue(new Date().toISOString(), 100)) {
       await this.processExpiry(record);
     }
   }
@@ -301,7 +303,7 @@ export class MuteScheduler {
 
     const timer = setTimeout(
       () => {
-        void this.handleTimer(record.guildId, record.userId);
+        void this.handleTimer(record.guildId, record.userId, record.generation);
       },
       Math.min(retryDelayMs, MAX_TIMER_DELAY_MS),
     );
