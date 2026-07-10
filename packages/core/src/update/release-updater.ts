@@ -300,6 +300,7 @@ export function shouldPreserveUpdatePath(relativePath: string): boolean {
 
   const fileName = normalized.at(-1) ?? "";
   return (
+    fileName === ".aripa-update.lock" ||
     fileName === "config.json" ||
     fileName === ".env" ||
     fileName.startsWith(".env.") ||
@@ -527,12 +528,10 @@ async function syncDirectory(
     () => [],
   );
 
-  if (relativeBase) {
-    for (const entry of destinationEntries) {
-      const entryRelativePath = join(relativeBase, entry.name);
-      if (!sourceEntryNames.has(entry.name) && !shouldPreserveUpdatePath(entryRelativePath)) {
-        await rm(join(destinationDirectory, entry.name), { recursive: true, force: true });
-      }
+  for (const entry of destinationEntries) {
+    const entryRelativePath = join(relativeBase, entry.name);
+    if (!sourceEntryNames.has(entry.name) && !shouldPreserveUpdatePath(entryRelativePath)) {
+      await rm(join(destinationDirectory, entry.name), { recursive: true, force: true });
     }
   }
 

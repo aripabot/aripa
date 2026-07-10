@@ -234,6 +234,7 @@ describe("syncSourceTree", () => {
       await Bun.write(join(destination, ".env"), "TOKEN=local\n");
       await Bun.write(join(destination, "aripa.sqlite"), "database\n");
       await Bun.write(join(destination, "local-notes.md"), "keep me\n");
+      await Bun.write(join(destination, "removed-at-root.md"), "remove me\n");
 
       await syncSourceTree(source, destination);
 
@@ -249,7 +250,8 @@ describe("syncSourceTree", () => {
       );
       await expect(Bun.file(join(destination, ".env")).text()).resolves.toBe("TOKEN=local\n");
       await expect(Bun.file(join(destination, "aripa.sqlite")).text()).resolves.toBe("database\n");
-      await expect(Bun.file(join(destination, "local-notes.md")).text()).resolves.toBe("keep me\n");
+      expect(await Bun.file(join(destination, "local-notes.md")).exists()).toBe(false);
+      expect(await Bun.file(join(destination, "removed-at-root.md")).exists()).toBe(false);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
