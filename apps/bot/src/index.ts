@@ -9,6 +9,7 @@ import { handleAgentMention, shouldHandleAgentMention } from "@aripabot/core/age
 import { AgentRateLimiter, formatRateLimitRetryAfter } from "@aripabot/core/agent/rate-limit.ts";
 import { AgentConcurrencyLimiter } from "@aripabot/core/agent/concurrency.ts";
 import { ConversationMemoryStore } from "@aripabot/core/agent/conversation-memory.ts";
+import { AgentTraceStore, resolveAgentTracePath } from "@aripabot/core/agent/traces.ts";
 import { safeReply } from "@aripabot/core/bot/action-context.ts";
 import {
   resolveAgentTextModel,
@@ -34,6 +35,7 @@ const conversationMemory = config.memory.enabled
       keepRecentTurns: config.memory.keepRecentTurns,
     })
   : undefined;
+const agentTraceStore = new AgentTraceStore(resolveAgentTracePath(config.databasePath));
 const agentModel = resolveAgentTextModel(config.models.agent, config.providers);
 const summarizerModel = resolveSummarizerTextModel(config.models.summarizer, config.providers);
 const webModel = config.models.web.enabled
@@ -142,6 +144,7 @@ async function dispatchMessage(message: Message): Promise<void> {
           summarizerModel,
           webSearchEnabled: config.models.web.enabled,
           conversationMemory,
+          traceRecorder: agentTraceStore,
           coldStartMessageCount: config.memory.coldStartMessageCount,
           gapFillLimit: config.memory.gapFillLimit,
           ...(webModel ? { webModel } : {}),

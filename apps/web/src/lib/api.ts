@@ -13,6 +13,8 @@ import type {
   ReleasesResponse,
   SaveConfigRequest,
   SaveConfigResponse,
+  TraceResponse,
+  TracesResponse,
   UpdateInstallRequest,
   UpdateInstallResponse,
 } from "@/lib/api-types";
@@ -74,6 +76,14 @@ export function generateSigningKey(): Promise<GenerateSigningKeyResponse> {
 
 export function getLogs(): Promise<LogsResponse> {
   return requestJson<LogsResponse>("/api/logs");
+}
+
+export function getTraces(): Promise<TracesResponse> {
+  return requestJson<TracesResponse>("/api/traces");
+}
+
+export function getTrace(traceId: string): Promise<TraceResponse> {
+  return requestJson<TraceResponse>(`/api/traces/${encodeURIComponent(traceId)}`);
 }
 
 export function getReleases(): Promise<ReleasesResponse> {

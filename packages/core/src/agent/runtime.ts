@@ -30,8 +30,9 @@ import {
   createRawMemoryTurn,
   type RawMemoryTurn,
 } from "@aripabot/core/agent/conversation-memory.ts";
+import type { AgentTraceRecorder, AgentTraceUsage } from "@aripabot/core/agent/traces.ts";
 import type { ResolvedTextModel } from "@aripabot/core/agent/models.ts";
-import { errorSnapshot } from "@aripabot/core/shared/errors.ts";
+import { errorMessage, errorSnapshot } from "@aripabot/core/shared/errors.ts";
 import { escapeRegExp } from "@aripabot/core/shared/text.ts";
 import { unrefTimer } from "@aripabot/core/shared/timers.ts";
 import packageJson from "../../package.json" with { type: "json" };
@@ -93,6 +94,7 @@ export interface HandleAgentMentionOptions {
   typingRefreshIntervalMs?: number;
   guildConfigStore?: GuildConfigStore;
   conversationMemory?: ConversationMemoryStore;
+  traceRecorder?: AgentTraceRecorder;
   loadPromptParts?: () => Promise<AgentPromptParts>;
   generateAgentText?: AgentTextGenerator;
   agentModel?: ResolvedTextModel;
@@ -129,6 +131,7 @@ export async function handleAgentMention({
   typingRefreshIntervalMs = DEFAULT_TYPING_REFRESH_INTERVAL_MS,
   guildConfigStore,
   conversationMemory,
+  traceRecorder,
   webSearchEnabled = true,
   loadPromptParts = () => loadAgentPromptParts(stylePromptName, webSearchEnabled),
   generateAgentText = runAgentTextGeneration,
@@ -148,6 +151,10 @@ export async function handleAgentMention({
   if (!shouldHandleAgentMention(message, client)) {
     return { status: "ignored" };
   }
+  const guildId = message.guildId;
+  if (!guildId) {
+    return { status: "ignored" };
+  }
 
   let prompt = formatSingleMessagePrompt(
     message,
@@ -158,6 +165,7 @@ export async function handleAgentMention({
     log,
     intervalMs: typingRefreshIntervalMs,
   });
+  let traceId: string | null = null;
 
   try {
     prompt = await buildDefaultAgentPrompt({
@@ -173,6 +181,21 @@ export async function handleAgentMention({
     const system = buildAgentSystemPrompt(promptParts, createAgentMetadata(now, botName), {
       prefix,
     });
+    traceId = startAgentTrace(
+      traceRecorder,
+      {
+        guildId,
+        channelId: message.channelId,
+        messageId: message.id,
+        userId: message.author.id,
+        private: logPrivacy,
+        system,
+        prompt,
+      },
+      log,
+    );
+    const modelSpanIds = new Map<number, string>();
+    let confirmationSpanId: string | null = null;
     const tools = createAgentTools({
       client,
       message,
@@ -186,8 +209,30 @@ export async function handleAgentMention({
       webModel,
       logPrivacy,
       agentConfirmationLifecycle: {
-        onWaitStart: typingIndicator.pause,
-        onWaitEnd: () => typingIndicator.resume({ immediate: true }),
+        onWaitStart: () => {
+          typingIndicator.pause();
+          if (!traceId) return;
+          confirmationSpanId = startAgentTraceSpan(
+            traceRecorder,
+            {
+              traceId,
+              kind: "tool",
+              name: "User confirmation",
+              parentSpanId: [...modelSpanIds.values()].at(-1),
+            },
+            log,
+          );
+        },
+        onWaitEnd: () => {
+          typingIndicator.resume({ immediate: true });
+          if (!traceId || !confirmationSpanId) return;
+          finishAgentTraceSpan(
+            traceRecorder,
+            { traceId, spanId: confirmationSpanId, status: "completed" },
+            log,
+          );
+          confirmationSpanId = null;
+        },
       },
     });
 
@@ -211,7 +256,65 @@ export async function handleAgentMention({
         tools,
         stopWhen: stepCountIs(maxSteps),
         abortSignal: timeout.signal,
+        experimental_onStepStart: (event) => {
+          if (!traceId) return;
+          const spanId = startAgentTraceSpan(
+            traceRecorder,
+            {
+              traceId,
+              kind: "model",
+              name: event.model.modelId,
+              stepNumber: event.stepNumber,
+              detail: logPrivacy
+                ? null
+                : {
+                    provider: event.model.provider,
+                    system: event.system,
+                    messages: event.messages,
+                  },
+            },
+            log,
+          );
+          if (spanId) modelSpanIds.set(event.stepNumber, spanId);
+        },
+        onStepFinish: (event) => {
+          if (!traceId) return;
+          const spanId = modelSpanIds.get(event.stepNumber);
+          if (!spanId) return;
+          finishAgentTraceSpan(
+            traceRecorder,
+            {
+              traceId,
+              spanId,
+              status: "completed",
+              detail: {
+                provider: event.model.provider,
+                modelId: event.model.modelId,
+                finishReason: event.finishReason,
+                ...(logPrivacy ? {} : { text: event.text }),
+              },
+              usage: createAgentTraceUsage(event.usage),
+            },
+            log,
+          );
+        },
         experimental_onToolCallStart: (event) => {
+          if (traceId) {
+            startAgentTraceSpan(
+              traceRecorder,
+              {
+                traceId,
+                spanId: event.toolCall.toolCallId,
+                kind: "tool",
+                name: event.toolCall.toolName,
+                stepNumber: event.stepNumber,
+                parentSpanId:
+                  event.stepNumber === undefined ? undefined : modelSpanIds.get(event.stepNumber),
+                detail: logPrivacy ? null : { input: event.toolCall.input },
+              },
+              log,
+            );
+          }
           log
             .withMetadata({
               ...createAgentMessageLogMetadata(message),
@@ -229,8 +332,33 @@ export async function handleAgentMention({
           };
 
           if (event.success) {
+            if (traceId) {
+              finishAgentTraceSpan(
+                traceRecorder,
+                {
+                  traceId,
+                  spanId: event.toolCall.toolCallId,
+                  status: "completed",
+                  detail: logPrivacy ? null : { output: event.output },
+                },
+                log,
+              );
+            }
             log.withMetadata(metadata).info("Agent tool call completed.");
             return;
+          }
+
+          if (traceId) {
+            finishAgentTraceSpan(
+              traceRecorder,
+              {
+                traceId,
+                spanId: event.toolCall.toolCallId,
+                status: "failed",
+                error: errorMessage(event.error),
+              },
+              log,
+            );
           }
 
           log
@@ -248,7 +376,17 @@ export async function handleAgentMention({
     }
 
     const reply = normalizeAgentReply(result.text);
+    const replySpanId = traceId
+      ? startAgentTraceSpan(traceRecorder, { traceId, kind: "reply", name: "Discord reply" }, log)
+      : null;
     const replyMessage = await safeReply(message, reply, log);
+    if (traceId && replySpanId) {
+      finishAgentTraceSpan(
+        traceRecorder,
+        { traceId, spanId: replySpanId, status: "completed" },
+        log,
+      );
+    }
     recordAgentTurn({
       message,
       assistantUserId: client.user?.id,
@@ -259,6 +397,17 @@ export async function handleAgentMention({
       summarizerModel,
       logPrivacy,
     });
+    if (traceId) {
+      finishAgentTrace(
+        traceRecorder,
+        {
+          traceId,
+          status: "completed",
+          ...(logPrivacy ? {} : { reply }),
+        },
+        log,
+      );
+    }
 
     return {
       status: "completed",
@@ -266,6 +415,13 @@ export async function handleAgentMention({
       reply,
     };
   } catch (error) {
+    if (traceId) {
+      finishAgentTrace(
+        traceRecorder,
+        { traceId, status: "failed", error: errorMessage(error) },
+        log,
+      );
+    }
     log
       .withError(error)
       .withMetadata({
@@ -294,6 +450,74 @@ export async function handleAgentMention({
   } finally {
     typingIndicator.stop();
   }
+}
+
+function startAgentTrace(
+  recorder: AgentTraceRecorder | undefined,
+  input: Parameters<AgentTraceRecorder["startTrace"]>[0],
+  log: LogLayer,
+): string | null {
+  if (!recorder) return null;
+  try {
+    return recorder.startTrace(input);
+  } catch (error) {
+    log.withError(error).warn("Failed to start agent trace.");
+    return null;
+  }
+}
+
+function startAgentTraceSpan(
+  recorder: AgentTraceRecorder | undefined,
+  input: Parameters<AgentTraceRecorder["startSpan"]>[0],
+  log: LogLayer,
+): string | null {
+  if (!recorder) return null;
+  try {
+    return recorder.startSpan(input);
+  } catch (error) {
+    log.withError(error).warn("Failed to record agent trace span.");
+    return null;
+  }
+}
+
+function finishAgentTraceSpan(
+  recorder: AgentTraceRecorder | undefined,
+  input: Parameters<AgentTraceRecorder["finishSpan"]>[0],
+  log: LogLayer,
+): void {
+  if (!recorder) return;
+  try {
+    recorder.finishSpan(input);
+  } catch (error) {
+    log.withError(error).warn("Failed to finish agent trace span.");
+  }
+}
+
+function finishAgentTrace(
+  recorder: AgentTraceRecorder | undefined,
+  input: Parameters<AgentTraceRecorder["finishTrace"]>[0],
+  log: LogLayer,
+): void {
+  if (!recorder) return;
+  try {
+    recorder.finishTrace(input);
+  } catch (error) {
+    log.withError(error).warn("Failed to finish agent trace.");
+  }
+}
+
+function createAgentTraceUsage(usage: {
+  inputTokens: number | undefined;
+  outputTokens: number | undefined;
+  inputTokenDetails: { cacheReadTokens: number | undefined };
+  outputTokenDetails: { reasoningTokens: number | undefined };
+}): AgentTraceUsage {
+  return {
+    inputTokens: usage.inputTokens ?? null,
+    outputTokens: usage.outputTokens ?? null,
+    reasoningTokens: usage.outputTokenDetails.reasoningTokens ?? null,
+    cachedInputTokens: usage.inputTokenDetails.cacheReadTokens ?? null,
+  };
 }
 
 function createAgentTimeout(timeoutMs: number): {

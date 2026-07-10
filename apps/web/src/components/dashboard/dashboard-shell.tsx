@@ -16,7 +16,7 @@ import type { CompleteOnboardingResponse, DashboardStatus } from "@/lib/api-type
 import { cn } from "@/lib/utils";
 import type { LoadState } from "@/server/dashboard-page-data";
 
-export type View = "overview" | "logs" | "updates" | "docker-deployments" | "settings";
+export type View = "overview" | "traces" | "logs" | "updates" | "docker-deployments" | "settings";
 type ThemeMode = "system" | "light" | "dark";
 type ResolvedTheme = "light" | "dark";
 
@@ -28,6 +28,7 @@ interface DashboardShellRenderContext {
 
 const views: Array<{ id: View; label: string; href: string }> = [
   { id: "overview", label: "Overview", href: "/" },
+  { id: "traces", label: "Traces", href: "/traces" },
   { id: "logs", label: "Logs", href: "/logs" },
   { id: "updates", label: "Updates", href: "/updates" },
   { id: "docker-deployments", label: "Docker", href: "/docker-deployments" },
@@ -134,7 +135,7 @@ export function DashboardShell({
     <div className="min-h-screen bg-background">
       <div className="mx-auto grid min-h-screen w-full max-w-[88rem] lg:grid-cols-[13.5rem_1fr]">
         <aside
-          className="border-b lg:border-b-0 lg:border-r"
+          className="min-w-0 border-b lg:border-b-0 lg:border-r"
           style={{ viewTransitionName: "dashboard-sidebar" } as React.CSSProperties}
         >
           <div className="flex h-full flex-col gap-6 px-4 py-4 lg:sticky lg:top-0 lg:max-h-screen lg:px-4 lg:py-6">

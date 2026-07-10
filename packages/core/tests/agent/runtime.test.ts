@@ -360,6 +360,57 @@ describe("loadAgentPromptParts", () => {
 });
 
 describe("handleAgentMention", () => {
+  test("records privacy-aware agent traces", async () => {
+    const events: Array<{ method: string; input: unknown }> = [];
+    const traceRecorder = {
+      startTrace(input: unknown) {
+        events.push({ method: "startTrace", input });
+        return "trace-1";
+      },
+      startSpan(input: unknown) {
+        events.push({ method: "startSpan", input });
+        return "span-1";
+      },
+      finishSpan(input: unknown) {
+        events.push({ method: "finishSpan", input });
+      },
+      finishTrace(input: unknown) {
+        events.push({ method: "finishTrace", input });
+      },
+    };
+
+    await handleAgentMention({
+      client: createClient("bot-1"),
+      message: createMessage("<@bot-1> show the exact context"),
+      prefix: "-",
+      actions: new ActionDirectory(),
+      logPrivacy: false,
+      traceRecorder,
+      loadPromptParts: async () => ({
+        defaultPrompt: "default instructions",
+        webPrompt: "web instructions",
+        stylePrompt: "match style",
+        metadataPrompt: "metadata header",
+      }),
+      generateAgentText: async () => ({ text: "Visible reply." }),
+    });
+
+    expect(events.at(0)).toMatchObject({
+      method: "startTrace",
+      input: {
+        guildId: "guild-1",
+        channelId: "channel-1",
+        private: false,
+        prompt: expect.stringContaining("show the exact context"),
+        system: expect.stringContaining("default instructions"),
+      },
+    });
+    expect(events).toContainEqual({
+      method: "finishTrace",
+      input: { traceId: "trace-1", status: "completed", reply: "Visible reply." },
+    });
+  });
+
   test("runs the AI SDK agent loop and replies with the generated text", async () => {
     const replies: string[] = [];
     const captured: AgentTextOptions[] = [];

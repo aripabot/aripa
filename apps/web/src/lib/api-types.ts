@@ -11,6 +11,7 @@ import type {
   AutoUpdateCronPresetId,
 } from "@aripabot/core/update/auto-update-cron.ts";
 import type { GitHubRelease } from "@aripabot/core/update/release-updater.ts";
+import type { AgentTrace } from "@aripabot/core/agent/traces.ts";
 
 export interface DashboardStatus {
   appName: string;
@@ -187,6 +188,16 @@ export interface LogsResponse {
   sources: DashboardLogSource[];
   entries: DashboardLogEntry[];
   files: LocalLogFile[];
+}
+
+export interface TracesResponse {
+  traces: AgentTrace[];
+  latestSequence: number;
+}
+
+export interface TraceResponse {
+  trace: AgentTrace;
+  latestSequence: number;
 }
 
 export interface ReleasesResponse {
