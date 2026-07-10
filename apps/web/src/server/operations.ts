@@ -1,10 +1,12 @@
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
 import { access } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { Database as SQLiteDatabase } from "bun:sqlite";
 
 import type { RuntimeJsonConfig } from "@aripabot/core/config/runtime-config.ts";
+import { createRuntimePaths } from "@aripabot/core/config/runtime-paths.ts";
 
 import type {
   ActiveMuteSummary,
@@ -16,7 +18,6 @@ import type {
 } from "@/lib/api-types";
 import { DOCKER_CONTAINER_NAME, isInsideDockerRuntime } from "@/server/docker-runtime";
 import { readableError } from "@/lib/errors";
-import { getEnv } from "@/server/env";
 import { channelKey, getDiscordDirectory, memberKey, roleKey } from "@/server/discord-directory";
 
 const appRoot = process.cwd();
@@ -432,29 +433,7 @@ function countBy<T>(items: readonly T[], getKey: (item: T) => string): Map<strin
 }
 
 export async function resolveDatabasePath(): Promise<string> {
-  const configuredPath = getEnv("DATABASE_PATH")?.trim();
-
-  if (configuredPath) {
-    return configuredPath;
-  }
-
-  const candidates = [
-    join(repositoryRoot, "apps", "bot", "aripa.sqlite"),
-    join(repositoryRoot, "aripa.sqlite"),
-    join(repositoryRoot, "packages", "core", "aripa.sqlite"),
-    join(appRoot, "aripa.sqlite"),
-  ];
-
-  for (const candidate of candidates) {
-    try {
-      await access(candidate);
-      return candidate;
-    } catch {
-      continue;
-    }
-  }
-
-  return join(repositoryRoot, "aripa.sqlite");
+  return createRuntimePaths({ repositoryRoot, fileExists: existsSync }).databasePath;
 }
 
 interface LocalOperationsState {

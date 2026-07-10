@@ -8,10 +8,11 @@ import { cloneDefaultRuntimeConfig } from "@aripabot/core/config/runtime-config.
 import { GuildConfigStore } from "@aripabot/core/config/guild-config-store.ts";
 import { ActiveMuteStore } from "@aripabot/core/moderation/active-mute-store.ts";
 import { resetDiscordDirectoryCacheForTests } from "@/server/discord-directory";
-import { getDashboardOperations } from "@/server/operations";
+import { getDashboardOperations, resolveDatabasePath } from "@/server/operations";
 
 describe("dashboard operations", () => {
   const previousToken = process.env.TOKEN;
+  const previousDatabasePath = process.env.DATABASE_PATH;
 
   afterEach(() => {
     vi.restoreAllMocks();
@@ -21,6 +22,12 @@ describe("dashboard operations", () => {
       delete process.env.TOKEN;
     } else {
       process.env.TOKEN = previousToken;
+    }
+
+    if (previousDatabasePath === undefined) {
+      delete process.env.DATABASE_PATH;
+    } else {
+      process.env.DATABASE_PATH = previousDatabasePath;
     }
   });
 
@@ -40,6 +47,12 @@ describe("dashboard operations", () => {
         tags: 0,
       });
     });
+  });
+
+  test("uses the configured database path shared with the bot runtime", async () => {
+    process.env.DATABASE_PATH = "/tmp/aripa-shared.sqlite";
+
+    await expect(resolveDatabasePath()).resolves.toBe("/tmp/aripa-shared.sqlite");
   });
 
   test("reads existing guild config, tags, and active mutes", async () => {

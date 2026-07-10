@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createRuntimePaths } from "@aripabot/core/config/runtime-paths.ts";
 import {
   cloneDefaultRuntimeConfig,
   parseRuntimeJsonConfig,
@@ -35,12 +35,7 @@ export {
 } from "@aripabot/core/config/runtime-config.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
-const defaultRuntimeConfigPath = join(repositoryRoot, "config.json");
-const defaultDatabasePath = join(repositoryRoot, "aripa.sqlite");
-const legacyDatabasePaths = [
-  join(repositoryRoot, "apps", "bot", "aripa.sqlite"),
-  join(repositoryRoot, "packages", "core", "aripa.sqlite"),
-] as const;
+const runtimePaths = createRuntimePaths({ repositoryRoot, fileExists: existsSync });
 
 const runtimeConfig = await loadRuntimeJsonConfig();
 
@@ -83,17 +78,11 @@ export function resolveDatabasePath(
   env: Record<string, string | undefined> = process.env,
   fileExists: (path: string) => boolean = existsSync,
 ): string {
-  const configuredPath = env.DATABASE_PATH?.trim();
-
-  if (configuredPath) {
-    return configuredPath;
-  }
-
-  return [defaultDatabasePath, ...legacyDatabasePaths].find(fileExists) ?? defaultDatabasePath;
+  return createRuntimePaths({ repositoryRoot, env, fileExists }).databasePath;
 }
 
 export async function loadRuntimeJsonConfig(
-  pathOrUrl: string | URL = process.env.CONFIG_PATH?.trim() || defaultRuntimeConfigPath,
+  pathOrUrl: string | URL = runtimePaths.configPath,
 ): Promise<RuntimeJsonConfig> {
   try {
     return parseRuntimeJsonConfig(JSON.parse(await readFile(pathOrUrl, "utf8")));

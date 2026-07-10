@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createRuntimePaths } from "@aripabot/core/config/runtime-paths.ts";
 import {
   DEFAULT_RUNTIME_CONFIG,
   config,
@@ -190,6 +191,15 @@ describe("resolveDatabasePath", () => {
     const legacyBotPath = join(repositoryRoot, "apps", "bot", "aripa.sqlite");
 
     expect(resolveDatabasePath({}, (path) => path === legacyBotPath)).toBe(legacyBotPath);
+  });
+
+  test("uses the same database path factory as other runtime entrypoints", () => {
+    const botDatabase = join(repositoryRoot, "apps", "bot", "aripa.sqlite");
+    const fileExists = (path: string) => path === botDatabase;
+
+    expect(resolveDatabasePath({}, fileExists)).toBe(
+      createRuntimePaths({ repositoryRoot, fileExists }).databasePath,
+    );
   });
 });
 
