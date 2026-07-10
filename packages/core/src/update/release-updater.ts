@@ -221,6 +221,8 @@ export async function applyReleaseUpdate(
     options.onProgress?.("Extracting source archive...");
     const archiveMembers = await Bun.$`tar -tzf ${archivePath}`.text();
     validateReleaseArchiveMembers(archiveMembers.split("\n").filter(Boolean));
+    const archiveDetails = await Bun.$`tar -tvzf ${archivePath}`.text();
+    validateReleaseArchiveEntryTypes(archiveDetails.split("\n").filter(Boolean));
     await Bun.$`tar -xzf ${archivePath} -C ${tempDir}`.quiet();
     const sourceRoot = await findExtractedSourceRoot(tempDir);
 
@@ -371,6 +373,15 @@ export function validateReleaseArchiveMembers(members: readonly string[]): void 
       normalized.includes("\0")
     ) {
       throw new Error(`Release archive contains an unsafe path: ${member}.`);
+    }
+  }
+}
+
+export function validateReleaseArchiveEntryTypes(entries: readonly string[]): void {
+  for (const entry of entries) {
+    const type = entry.at(0);
+    if (type !== "-" && type !== "d") {
+      throw new Error(`Release archive contains an unsupported entry type: ${entry}.`);
     }
   }
 }

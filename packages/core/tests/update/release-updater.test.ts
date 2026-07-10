@@ -18,6 +18,7 @@ import {
   shouldPreserveUpdatePath,
   syncSourceTree,
   updateManagedAutoUpdateCronContent,
+  validateReleaseArchiveEntryTypes,
   validateReleaseArchiveMembers,
   type GitHubRelease,
 } from "@aripabot/core/update/release-updater.ts";
@@ -41,6 +42,22 @@ describe("validateReleaseArchiveMembers", () => {
     expect(() => validateReleaseArchiveMembers(["repo/src/index.ts"])).not.toThrow();
     expect(() => validateReleaseArchiveMembers(["/etc/passwd"])).toThrow("unsafe path");
     expect(() => validateReleaseArchiveMembers(["repo/../../config.json"])).toThrow("unsafe path");
+  });
+});
+
+describe("validateReleaseArchiveEntryTypes", () => {
+  test("rejects links and device entries before extraction", () => {
+    expect(() =>
+      validateReleaseArchiveEntryTypes(["drwxr-xr-x owner/group 0 2026-07-10 repo/"]),
+    ).not.toThrow();
+    expect(() =>
+      validateReleaseArchiveEntryTypes([
+        "lrwxr-xr-x owner/group 0 2026-07-10 repo/config -> /etc/passwd",
+      ]),
+    ).toThrow("unsupported entry type");
+    expect(() =>
+      validateReleaseArchiveEntryTypes(["crw-r--r-- owner/group 0 2026-07-10 repo/device"]),
+    ).toThrow("unsupported entry type");
   });
 });
 
