@@ -1,7 +1,5 @@
-import { execFile, spawn } from "node:child_process";
 import { access, open, readFile, rename, rm } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { promisify } from "node:util";
 
 import {
   DEFAULT_RUNTIME_CONFIG,
@@ -17,7 +15,9 @@ import {
 } from "@aripabot/core/config/onboarding.ts";
 import {
   installAutoUpdateCron,
+  readUserCrontab,
   removeAutoUpdateCron,
+  writeUserCrontab,
 } from "@aripabot/core/update/release-updater.ts";
 
 import type {
@@ -32,7 +32,6 @@ import { getEnv } from "@/server/env";
 const appRoot = process.cwd();
 const repositoryRoot = join(/* turbopackIgnore: true */ appRoot, "../..");
 const defaultConfigPath = join(repositoryRoot, "config.json");
-const execFileAsync = promisify(execFile);
 const configMutationCoordinator = new ConfigMutationCoordinator();
 
 interface ConfigStoreDependencies {
@@ -202,50 +201,6 @@ async function restoreConfigSnapshot(
   }
 
   await writeConfigAtomically(pathOrUrl, snapshot);
-}
-
-async function readUserCrontab(): Promise<string> {
-  try {
-    const { stdout } = await execFileAsync("crontab", ["-l"]);
-    return stdout;
-  } catch (error) {
-    const stderr =
-      typeof error === "object" && error !== null && "stderr" in error ? String(error.stderr) : "";
-
-    if (/no crontab/i.test(stderr)) {
-      return "";
-    }
-
-    throw error;
-  }
-}
-
-async function writeUserCrontab(content: string): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    const subprocess = spawn("crontab", ["-"], {
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-    const stdoutChunks: Buffer[] = [];
-    const stderrChunks: Buffer[] = [];
-
-    subprocess.stdout.on("data", (chunk: Buffer) => stdoutChunks.push(chunk));
-    subprocess.stderr.on("data", (chunk: Buffer) => stderrChunks.push(chunk));
-    subprocess.on("error", reject);
-    subprocess.on("close", (exitCode) => {
-      if (exitCode === 0) {
-        resolve();
-        return;
-      }
-
-      const output = [...stderrChunks, ...stdoutChunks]
-        .map((chunk) => chunk.toString("utf8").trim())
-        .filter(Boolean)
-        .join("\n");
-      reject(new Error(output || `crontab update failed with exit code ${exitCode}.`));
-    });
-    subprocess.stdin.write(content);
-    subprocess.stdin.end();
-  });
 }
 
 function formatPath(pathOrUrl: string | URL): string {

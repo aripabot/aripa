@@ -17,7 +17,7 @@ import {
 } from "@aripabot/core/config/onboarding-validation.ts";
 import { generateKeyPairSync } from "node:crypto";
 import { access, open, readFile, rename, rm } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export {
@@ -207,7 +207,7 @@ export async function writeRuntimeConfig({
   }
 
   const config = buildRuntimeConfig(input, existingConfig ?? {});
-  await writeRuntimeConfigAtomically(pathOrUrl, config);
+  await writeRuntimeConfigContentAtomically(pathOrUrl, `${JSON.stringify(config, null, 2)}\n`);
 
   return {
     path: formatConfigPath(pathOrUrl),
@@ -216,19 +216,42 @@ export async function writeRuntimeConfig({
   };
 }
 
-async function writeRuntimeConfigAtomically(
+export async function readRuntimeConfigSnapshot(pathOrUrl: string | URL): Promise<string | null> {
+  try {
+    return await readFile(pathOrUrl, "utf8");
+  } catch (error) {
+    if (isMissingFileError(error)) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+export async function restoreRuntimeConfigSnapshot(
   pathOrUrl: string | URL,
-  config: RuntimeConfigDocument,
+  snapshot: string | null,
+): Promise<void> {
+  if (snapshot === null) {
+    await rm(pathOrUrl, { force: true });
+    return;
+  }
+
+  await writeRuntimeConfigContentAtomically(pathOrUrl, snapshot);
+}
+
+async function writeRuntimeConfigContentAtomically(
+  pathOrUrl: string | URL,
+  content: string,
 ): Promise<void> {
   const configPath = pathOrUrl instanceof URL ? fileURLToPath(pathOrUrl) : pathOrUrl;
   const temporaryPath = join(
     dirname(configPath),
-    `.${configPath.split("/").at(-1)}.${crypto.randomUUID()}.tmp`,
+    `.${basename(configPath)}.${crypto.randomUUID()}.tmp`,
   );
   const file = await open(temporaryPath, "w", 0o600);
 
   try {
-    await file.writeFile(`${JSON.stringify(config, null, 2)}\n`);
+    await file.writeFile(content);
     await file.sync();
   } catch (error) {
     await rm(temporaryPath, { force: true });
@@ -243,6 +266,10 @@ async function writeRuntimeConfigAtomically(
     await rm(temporaryPath, { force: true });
     throw error;
   }
+}
+
+function isMissingFileError(error: unknown): boolean {
+  return error instanceof Error && "code" in error && error.code === "ENOENT";
 }
 
 function getDefaultRuntimeConfigPath(): string {

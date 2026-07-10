@@ -5,6 +5,8 @@ import {
   parseAgentRateLimitInput,
   parseAllowlistedServerIds,
   parseRuntimeOnboardingInput,
+  readRuntimeConfigSnapshot,
+  restoreRuntimeConfigSnapshot,
   validateGitHubRepo,
   validateAgentRateLimitMessagesPerMinute,
   validateAllowlistedServerIds,
@@ -204,6 +206,22 @@ describe("parseRuntimeOnboardingInput", () => {
 });
 
 describe("writeRuntimeConfig", () => {
+  test("restores an exact config snapshot or removes a newly-created config", async () => {
+    const existingPath = tempConfigPath("restore-existing");
+    const existingSnapshot = '{\n  "futureFeature": true\n}\n';
+    await Bun.write(existingPath, existingSnapshot);
+    const missingPath = tempConfigPath("restore-missing");
+
+    await Bun.write(existingPath, '{"changed":true}');
+    await Bun.write(missingPath, '{"created":true}');
+    expect(await readRuntimeConfigSnapshot(tempConfigPath("does-not-exist"))).toBeNull();
+    await restoreRuntimeConfigSnapshot(existingPath, existingSnapshot);
+    await restoreRuntimeConfigSnapshot(missingPath, null);
+
+    expect(await Bun.file(existingPath).text()).toBe(existingSnapshot);
+    expect(await Bun.file(missingPath).exists()).toBe(false);
+  });
+
   test("does not leave a temporary config file after replacing a config", async () => {
     const path = tempConfigPath("atomic-config");
     await Bun.write(path, JSON.stringify({ name: "Old config" }));

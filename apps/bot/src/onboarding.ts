@@ -7,6 +7,8 @@ import {
   loadExistingRuntimeConfig,
   parseAgentRateLimitInput,
   parseAllowlistedServerIds,
+  readRuntimeConfigSnapshot,
+  restoreRuntimeConfigSnapshot,
   validateGitHubRepo,
   validateAgentRateLimitMessagesPerMinute,
   validateAllowlistedServerIds,
@@ -18,7 +20,9 @@ import { ConfigMutationCoordinator } from "@aripabot/core/config/config-mutation
 import {
   AUTO_UPDATE_CRON_PRESETS,
   installAutoUpdateCron,
+  readUserCrontab,
   removeAutoUpdateCron,
+  writeUserCrontab,
 } from "@aripabot/core/update/release-updater.ts";
 import type { OnboardingModelRole } from "@aripabot/core/onboarding-models.ts";
 import {
@@ -989,13 +993,29 @@ async function handleReviewSelection(value: string): Promise<void> {
 
   try {
     const { result, cronMessage } = await configMutationCoordinator.run(async () => {
-      const result = await writeRuntimeConfig({
-        pathOrUrl: state.configPath,
-        input: state,
-        overwrite: state.shouldWriteExistingConfig || state.existingConfig === null,
-      });
-      const cronMessage = await syncAutoUpdateCron();
-      return { result, cronMessage };
+      const configSnapshot = await readRuntimeConfigSnapshot(state.configPath);
+      const crontabSnapshot = await readUserCrontab();
+      let configWritten = false;
+
+      try {
+        const result = await writeRuntimeConfig({
+          pathOrUrl: state.configPath,
+          input: state,
+          overwrite: state.shouldWriteExistingConfig || state.existingConfig === null,
+        });
+        configWritten = true;
+        const cronMessage = await syncAutoUpdateCron({
+          read: async () => crontabSnapshot,
+          write: writeUserCrontab,
+        });
+        return { result, cronMessage };
+      } catch (error) {
+        if (configWritten) {
+          await restoreRuntimeConfigSnapshot(state.configPath, configSnapshot);
+        }
+        await writeUserCrontab(crontabSnapshot);
+        throw error;
+      }
     });
     finish(`${result.existed ? "Updated" : "Created"} ${result.path}.${cronMessage}`);
   } catch (error) {
@@ -1004,9 +1024,15 @@ async function handleReviewSelection(value: string): Promise<void> {
   }
 }
 
-async function syncAutoUpdateCron(): Promise<string> {
+async function syncAutoUpdateCron(options: {
+  read: () => Promise<string>;
+  write: (content: string) => Promise<void>;
+}): Promise<string> {
   if (!state.updates.enabled || !state.updates.autoInstall.enabled) {
-    await removeAutoUpdateCron();
+    await removeAutoUpdateCron({
+      crontabRead: options.read,
+      crontabWrite: options.write,
+    });
     return " Automatic update cron is disabled.";
   }
 
@@ -1014,6 +1040,8 @@ async function syncAutoUpdateCron(): Promise<string> {
     cwd: repositoryRoot,
     configPath: state.configPath,
     cronExpression: state.updates.autoInstall.cronExpression,
+    crontabRead: options.read,
+    crontabWrite: options.write,
   });
   return ` Automatic update cron installed for ${state.updates.autoInstall.cronExpression}.`;
 }

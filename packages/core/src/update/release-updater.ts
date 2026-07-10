@@ -622,7 +622,7 @@ async function syncDirectory(
   }
 }
 
-async function readUserCrontab(): Promise<string> {
+export async function readUserCrontab(): Promise<string> {
   const subprocess = Bun.spawn(["crontab", "-l"], {
     stdout: "pipe",
     stderr: "pipe",
@@ -644,7 +644,7 @@ async function readUserCrontab(): Promise<string> {
   throw new Error(stderr.trim() || `crontab -l failed with exit code ${exitCode}.`);
 }
 
-async function writeUserCrontab(content: string): Promise<void> {
+export async function writeUserCrontab(content: string): Promise<void> {
   const subprocess = Bun.spawn(["crontab", "-"], {
     stdin: "pipe",
     stdout: "pipe",
