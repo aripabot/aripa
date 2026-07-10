@@ -4,6 +4,7 @@ import {
   buildRuntimeConfig,
   parseAgentRateLimitInput,
   parseAllowlistedServerIds,
+  parseRuntimeOnboardingInput,
   validateGitHubRepo,
   validateAgentRateLimitMessagesPerMinute,
   validateAllowlistedServerIds,
@@ -178,6 +179,27 @@ describe("buildRuntimeConfig", () => {
       agentMaxConcurrentRequestsPerGuild: 4,
       memory: { maxChannels: 750 },
     });
+  });
+});
+
+describe("parseRuntimeOnboardingInput", () => {
+  test("rejects malformed nested onboarding values before a config write", () => {
+    expect(() => parseRuntimeOnboardingInput({ allowlistedServerIds: [] })).toThrow(
+      "Enter at least one Discord server ID.",
+    );
+    expect(() => parseRuntimeOnboardingInput({})).toThrow("allowlistedServerIds");
+    expect(() =>
+      parseRuntimeOnboardingInput({
+        allowlistedServerIds: ["123456789012345678"],
+        models: {},
+      }),
+    ).toThrow();
+    expect(() =>
+      parseRuntimeOnboardingInput({
+        allowlistedServerIds: ["123456789012345678"],
+        updates: { enabled: true },
+      }),
+    ).toThrow();
   });
 });
 

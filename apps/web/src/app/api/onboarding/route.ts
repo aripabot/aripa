@@ -1,5 +1,5 @@
-import type { CompleteOnboardingRequest } from "@/lib/api-types";
-import { json, jsonError } from "@/app/api/_utils/json";
+import { json, jsonError, parseJsonObject, readObjectField } from "@/app/api/_utils/json";
+import { parseRuntimeOnboardingInput } from "@aripabot/core/config/onboarding.ts";
 import { getOnboardingOptions } from "@/server/config-service";
 import { completeOnboarding } from "@/server/config-store";
 import { requireDashboardApiAuth } from "@/server/dashboard-auth-next";
@@ -27,8 +27,10 @@ export async function POST(request: Request) {
   }
 
   try {
-    const body = (await request.json()) as CompleteOnboardingRequest;
-    return json(await completeOnboarding(body.input));
+    const body = await parseJsonObject(request);
+    return json(
+      await completeOnboarding(parseRuntimeOnboardingInput(readObjectField(body, "input"))),
+    );
   } catch (error) {
     return jsonError(error);
   }

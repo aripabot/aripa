@@ -1,4 +1,4 @@
-import { parseRuntimeJsonConfig } from "@aripabot/core/config/runtime-config.ts";
+import { parseRuntimeJsonConfigForMutation } from "@aripabot/core/config/runtime-config.ts";
 import { json, jsonError, parseJsonObject, readObjectField } from "@/app/api/_utils/json";
 import { readConfig, saveConfig } from "@/server/config-store";
 import { requireDashboardApiAuth } from "@/server/dashboard-auth-next";
@@ -27,7 +27,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await parseJsonObject(request);
-    const config = parseRuntimeJsonConfig(readObjectField(body, "config"));
+    const config = parseRuntimeJsonConfigForMutation(readObjectField(body, "config"));
 
     return json(await saveConfig(config));
   } catch (error) {

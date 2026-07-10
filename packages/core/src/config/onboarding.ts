@@ -1,5 +1,6 @@
 import {
   DEFAULT_RUNTIME_CONFIG,
+  cloneDefaultRuntimeConfig,
   cloneRuntimeModelConfig,
   parseRuntimeJsonConfig,
   parseRuntimeJsonConfigForMutation,
@@ -53,6 +54,42 @@ export interface WriteRuntimeConfigResult {
 }
 
 export type RuntimeConfigDocument = RuntimeJsonConfig & Record<string, unknown>;
+
+export function parseRuntimeOnboardingInput(value: unknown): RuntimeOnboardingInput {
+  if (!isPlainObject(value)) {
+    throw new Error("Onboarding input must be a JSON object.");
+  }
+
+  if (!("allowlistedServerIds" in value)) {
+    throw new Error("Onboarding input must include allowlistedServerIds.");
+  }
+
+  const defaults = cloneDefaultRuntimeConfig();
+  const config = parseRuntimeJsonConfigForMutation({
+    ...defaults,
+    ...value,
+    models: value.models ?? defaults.models,
+    providers: value.providers ?? defaults.providers,
+    updates: value.updates ?? defaults.updates,
+    memory: value.memory ?? defaults.memory,
+  });
+
+  if (config.allowlistedServerIds.length === 0) {
+    throw new Error("Enter at least one Discord server ID.");
+  }
+
+  return {
+    name: config.name,
+    operatorUserId: config.operatorUserId,
+    stylePrompt: config.stylePrompt,
+    allowlistedServerIds: config.allowlistedServerIds,
+    agentRateLimitMessagesPerMinute: config.agentRateLimitMessagesPerMinute,
+    logPrivacy: config.logPrivacy,
+    models: config.models,
+    providers: config.providers,
+    updates: config.updates,
+  };
+}
 
 export interface ReleaseSigningKeyPair {
   privateKeyPemBase64: string;
@@ -200,4 +237,8 @@ export function generateReleaseSigningKeyPair(): ReleaseSigningKeyPair {
     privateKeyPemBase64: Buffer.from(privateKeyPem, "utf8").toString("base64"),
     publicKeyPemBase64: Buffer.from(publicKeyPem, "utf8").toString("base64"),
   };
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
