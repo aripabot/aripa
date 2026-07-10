@@ -14,6 +14,7 @@ import {
   writeRuntimeConfig,
 } from "@aripabot/core/config/onboarding.ts";
 import { DEFAULT_RUNTIME_CONFIG } from "@aripabot/core/config/config.ts";
+import { ConfigMutationCoordinator } from "@aripabot/core/config/config-mutation-coordinator.ts";
 import {
   AUTO_UPDATE_CRON_PRESETS,
   installAutoUpdateCron,
@@ -53,6 +54,7 @@ import type {
 import { createFooterFactory, createSelectControlFactory, createWizardShell } from "./tui/kit.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../..", import.meta.url));
+const configMutationCoordinator = new ConfigMutationCoordinator();
 const CONFIG_PATH = Bun.env.CONFIG_PATH?.trim() || new URL("../../../config.json", import.meta.url);
 
 const existingConfig = await loadExistingRuntimeConfig(CONFIG_PATH);
@@ -986,12 +988,15 @@ async function handleReviewSelection(value: string): Promise<void> {
   }
 
   try {
-    const result = await writeRuntimeConfig({
-      pathOrUrl: state.configPath,
-      input: state,
-      overwrite: state.shouldWriteExistingConfig || state.existingConfig === null,
+    const { result, cronMessage } = await configMutationCoordinator.run(async () => {
+      const result = await writeRuntimeConfig({
+        pathOrUrl: state.configPath,
+        input: state,
+        overwrite: state.shouldWriteExistingConfig || state.existingConfig === null,
+      });
+      const cronMessage = await syncAutoUpdateCron();
+      return { result, cronMessage };
     });
-    const cronMessage = await syncAutoUpdateCron();
     finish(`${result.existed ? "Updated" : "Created"} ${result.path}.${cronMessage}`);
   } catch (error) {
     state.error = error instanceof Error ? error.message : String(error);
