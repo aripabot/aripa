@@ -85,4 +85,29 @@ describe("ActiveMuteStore", () => {
       store.close();
     }
   });
+
+  test("restores an exact prior mute record after a replacement", () => {
+    const store = new ActiveMuteStore(":memory:");
+
+    try {
+      const original = store.upsertRoleMute({
+        guildId: "guild-1",
+        userId: "user-1",
+        muteRoleId: "role-1",
+        expiresAt: "2030-01-01T00:00:00.000Z",
+      });
+      store.upsertRoleMute({
+        guildId: "guild-1",
+        userId: "user-1",
+        muteRoleId: "role-2",
+        expiresAt: "2031-01-01T00:00:00.000Z",
+      });
+
+      store.restore(original);
+
+      expect(store.get("guild-1", "user-1")).toEqual(original);
+    } finally {
+      store.close();
+    }
+  });
 });
