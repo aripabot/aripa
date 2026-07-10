@@ -16,7 +16,7 @@ import {
   validateOperatorUserId,
 } from "@aripabot/core/config/onboarding-validation.ts";
 import { generateKeyPairSync } from "node:crypto";
-import { access, readFile, writeFile } from "node:fs/promises";
+import { access, open, readFile, rename, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -207,13 +207,42 @@ export async function writeRuntimeConfig({
   }
 
   const config = buildRuntimeConfig(input, existingConfig ?? {});
-  await writeFile(pathOrUrl, `${JSON.stringify(config, null, 2)}\n`);
+  await writeRuntimeConfigAtomically(pathOrUrl, config);
 
   return {
     path: formatConfigPath(pathOrUrl),
     config,
     existed,
   };
+}
+
+async function writeRuntimeConfigAtomically(
+  pathOrUrl: string | URL,
+  config: RuntimeConfigDocument,
+): Promise<void> {
+  const configPath = pathOrUrl instanceof URL ? fileURLToPath(pathOrUrl) : pathOrUrl;
+  const temporaryPath = join(
+    dirname(configPath),
+    `.${configPath.split("/").at(-1)}.${crypto.randomUUID()}.tmp`,
+  );
+  const file = await open(temporaryPath, "w", 0o600);
+
+  try {
+    await file.writeFile(`${JSON.stringify(config, null, 2)}\n`);
+    await file.sync();
+  } catch (error) {
+    await rm(temporaryPath, { force: true });
+    throw error;
+  } finally {
+    await file.close();
+  }
+
+  try {
+    await rename(temporaryPath, configPath);
+  } catch (error) {
+    await rm(temporaryPath, { force: true });
+    throw error;
+  }
 }
 
 function getDefaultRuntimeConfigPath(): string {

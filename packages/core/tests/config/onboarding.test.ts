@@ -204,6 +204,31 @@ describe("parseRuntimeOnboardingInput", () => {
 });
 
 describe("writeRuntimeConfig", () => {
+  test("does not leave a temporary config file after replacing a config", async () => {
+    const path = tempConfigPath("atomic-config");
+    await Bun.write(path, JSON.stringify({ name: "Old config" }));
+
+    await writeRuntimeConfig({
+      pathOrUrl: path,
+      input: {
+        allowlistedServerIds: ["123456789012345678"],
+      },
+      overwrite: true,
+    });
+
+    expect(await Bun.file(path).json()).toMatchObject({
+      name: "Old config",
+      allowlistedServerIds: ["123456789012345678"],
+    });
+    expect(
+      Array.from(
+        new Bun.Glob(`.${path.split("/").at(-1)}.*.tmp`).scanSync({
+          cwd: path.slice(0, path.lastIndexOf("/")),
+        }),
+      ),
+    ).toEqual([]);
+  });
+
   test("writes config.json and protects existing files unless overwrite is enabled", async () => {
     const path = tempConfigPath("new-config");
 
