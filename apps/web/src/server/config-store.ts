@@ -1,13 +1,15 @@
 import { execFile, spawn } from "node:child_process";
-import { access, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { access, open, readFile, rename, rm } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 import { promisify } from "node:util";
 
 import {
   DEFAULT_RUNTIME_CONFIG,
   parseRuntimeJsonConfig,
+  parseRuntimeJsonConfigForMutation,
   type RuntimeJsonConfig,
 } from "@aripabot/core/config/runtime-config.ts";
+import { ConfigMutationCoordinator } from "@aripabot/core/config/config-mutation-coordinator.ts";
 import {
   buildRuntimeConfig,
   generateReleaseSigningKeyPair,
@@ -31,6 +33,13 @@ const appRoot = process.cwd();
 const repositoryRoot = join(/* turbopackIgnore: true */ appRoot, "../..");
 const defaultConfigPath = join(repositoryRoot, "config.json");
 const execFileAsync = promisify(execFile);
+const configMutationCoordinator = new ConfigMutationCoordinator();
+
+interface ConfigStoreDependencies {
+  readCrontab?: () => Promise<string>;
+  writeCrontab?: (content: string) => Promise<void>;
+  requestReload?: () => Promise<void>;
+}
 
 export function resolveConfigPath(): string | URL {
   return getEnv("CONFIG_PATH")?.trim() || defaultConfigPath;
@@ -49,48 +58,53 @@ export async function readConfig(): Promise<ConfigResponse> {
   };
 }
 
-export async function saveConfig(config: RuntimeJsonConfig): Promise<SaveConfigResponse> {
+export async function saveConfig(
+  config: RuntimeJsonConfig,
+  dependencies: ConfigStoreDependencies = {},
+): Promise<SaveConfigResponse> {
   const pathOrUrl = resolveConfigPath();
-  const existing = await readExistingJsonObject(pathOrUrl);
-  const savedConfig = parseRuntimeJsonConfig({ ...existing, ...config });
-  const rawConfig = { ...existing, ...savedConfig };
+  return configMutationCoordinator.run(async () => {
+    const existing = await readExistingJsonObject(pathOrUrl);
+    const savedConfig = parseRuntimeJsonConfigForMutation(config);
+    const rawConfig = { ...existing, ...savedConfig };
+    await persistConfigMutation({ pathOrUrl, rawConfig, config: savedConfig, dependencies });
 
-  await writeFile(pathOrUrl, `${JSON.stringify(rawConfig, null, 2)}\n`);
-  await requestBotRuntimeConfigReload();
-
-  return {
-    path: formatPath(pathOrUrl),
-    exists: true,
-    raw: rawConfig,
-    config: savedConfig,
-    savedAt: new Date().toISOString(),
-  };
+    return {
+      path: formatPath(pathOrUrl),
+      exists: true,
+      raw: rawConfig,
+      config: savedConfig,
+      savedAt: new Date().toISOString(),
+    };
+  });
 }
 
 export async function completeOnboarding(
   input: RuntimeOnboardingInput,
+  dependencies: ConfigStoreDependencies = {},
 ): Promise<CompleteOnboardingResponse> {
   const pathOrUrl = resolveConfigPath();
-  const existingConfig = await readExistingJsonObject(pathOrUrl);
+  return configMutationCoordinator.run(async () => {
+    const existingConfig = await readExistingJsonObject(pathOrUrl);
 
-  if (existingConfig) {
-    throw new Error(`${formatPath(pathOrUrl)} already exists.`);
-  }
+    if (existingConfig) {
+      throw new Error(`${formatPath(pathOrUrl)} already exists.`);
+    }
 
-  const rawConfig = buildRuntimeConfig(input);
-  await writeFile(pathOrUrl, `${JSON.stringify(rawConfig, null, 2)}\n`);
-  const config = parseRuntimeJsonConfig(rawConfig);
-  const cronMessage = await syncAutoUpdateCron(config, pathOrUrl);
+    const rawConfig = buildRuntimeConfig(input);
+    const config = parseRuntimeJsonConfigForMutation(rawConfig);
+    const cronMessage = await persistConfigMutation({ pathOrUrl, rawConfig, config, dependencies });
 
-  return {
-    path: formatPath(pathOrUrl),
-    exists: true,
-    raw: rawConfig,
-    config,
-    savedAt: new Date().toISOString(),
-    cronMessage,
-    updates: config.updates,
-  };
+    return {
+      path: formatPath(pathOrUrl),
+      exists: true,
+      raw: rawConfig,
+      config,
+      savedAt: new Date().toISOString(),
+      cronMessage,
+      updates: config.updates,
+    };
+  });
 }
 
 export function createReleaseSigningKeyPair(): GenerateSigningKeyResponse {
@@ -100,11 +114,15 @@ export function createReleaseSigningKeyPair(): GenerateSigningKeyResponse {
 async function syncAutoUpdateCron(
   config: RuntimeJsonConfig,
   configPath: string | URL,
+  dependencies: ConfigStoreDependencies,
 ): Promise<string> {
+  const readCrontab = dependencies.readCrontab ?? readUserCrontab;
+  const writeCrontab = dependencies.writeCrontab ?? writeUserCrontab;
+
   if (!config.updates.enabled || !config.updates.autoInstall.enabled) {
     await removeAutoUpdateCron({
-      crontabRead: readUserCrontab,
-      crontabWrite: writeUserCrontab,
+      crontabRead: readCrontab,
+      crontabWrite: writeCrontab,
     });
     return "Automatic update cron is disabled.";
   }
@@ -113,10 +131,77 @@ async function syncAutoUpdateCron(
     cwd: repositoryRoot,
     configPath,
     cronExpression: config.updates.autoInstall.cronExpression,
-    crontabRead: readUserCrontab,
-    crontabWrite: writeUserCrontab,
+    crontabRead: readCrontab,
+    crontabWrite: writeCrontab,
   });
   return `Automatic update cron installed for ${config.updates.autoInstall.cronExpression}.`;
+}
+
+async function persistConfigMutation(options: {
+  pathOrUrl: string | URL;
+  rawConfig: Record<string, unknown>;
+  config: RuntimeJsonConfig;
+  dependencies: ConfigStoreDependencies;
+}): Promise<string> {
+  const configSnapshot = await readFileIfPresent(options.pathOrUrl);
+  const readCrontab = options.dependencies.readCrontab ?? readUserCrontab;
+  const writeCrontab = options.dependencies.writeCrontab ?? writeUserCrontab;
+  const crontabSnapshot = await readCrontab();
+
+  try {
+    await writeConfigAtomically(
+      options.pathOrUrl,
+      `${JSON.stringify(options.rawConfig, null, 2)}\n`,
+    );
+    const cronMessage = await syncAutoUpdateCron(options.config, options.pathOrUrl, {
+      ...options.dependencies,
+      readCrontab: async () => crontabSnapshot,
+    });
+    await (options.dependencies.requestReload ?? requestBotRuntimeConfigReload)();
+    return cronMessage;
+  } catch (error) {
+    await restoreConfigSnapshot(options.pathOrUrl, configSnapshot);
+    await writeCrontab(crontabSnapshot);
+    throw error;
+  }
+}
+
+async function writeConfigAtomically(pathOrUrl: string | URL, content: string): Promise<void> {
+  const path = formatPath(pathOrUrl);
+  const temporaryPath = join(dirname(path), `.${basename(path)}.${crypto.randomUUID()}.tmp`);
+  const file = await open(temporaryPath, "w", 0o600);
+
+  try {
+    await file.writeFile(content, "utf8");
+    await file.sync();
+  } finally {
+    await file.close();
+  }
+
+  await rename(temporaryPath, path);
+}
+
+async function readFileIfPresent(pathOrUrl: string | URL): Promise<string | null> {
+  try {
+    return await readFile(pathOrUrl, "utf8");
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return null;
+    }
+    throw error;
+  }
+}
+
+async function restoreConfigSnapshot(
+  pathOrUrl: string | URL,
+  snapshot: string | null,
+): Promise<void> {
+  if (snapshot === null) {
+    await rm(pathOrUrl, { force: true });
+    return;
+  }
+
+  await writeConfigAtomically(pathOrUrl, snapshot);
 }
 
 async function readUserCrontab(): Promise<string> {
