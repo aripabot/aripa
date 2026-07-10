@@ -18,6 +18,7 @@ import {
   shouldPreserveUpdatePath,
   syncSourceTree,
   updateManagedAutoUpdateCronContent,
+  validateReleaseArchiveMembers,
   type GitHubRelease,
 } from "@aripabot/core/update/release-updater.ts";
 
@@ -32,6 +33,14 @@ describe("resolveReleaseTrustPolicy", () => {
     expect(() => resolveReleaseTrustPolicy({ repo: "fork/aripa", env: {} })).toThrow(
       "Release verification public key is required",
     );
+  });
+});
+
+describe("validateReleaseArchiveMembers", () => {
+  test("rejects absolute and traversal paths before extraction", () => {
+    expect(() => validateReleaseArchiveMembers(["repo/src/index.ts"])).not.toThrow();
+    expect(() => validateReleaseArchiveMembers(["/etc/passwd"])).toThrow("unsafe path");
+    expect(() => validateReleaseArchiveMembers(["repo/../../config.json"])).toThrow("unsafe path");
   });
 });
 

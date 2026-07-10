@@ -219,6 +219,8 @@ export async function applyReleaseUpdate(
     });
 
     options.onProgress?.("Extracting source archive...");
+    const archiveMembers = await Bun.$`tar -tzf ${archivePath}`.text();
+    validateReleaseArchiveMembers(archiveMembers.split("\n").filter(Boolean));
     await Bun.$`tar -xzf ${archivePath} -C ${tempDir}`.quiet();
     const sourceRoot = await findExtractedSourceRoot(tempDir);
 
@@ -358,6 +360,19 @@ export function shouldPreserveUpdatePath(relativePath: string): boolean {
     fileName.endsWith(".sqlite-shm") ||
     fileName.endsWith(".sqlite-wal")
   );
+}
+
+export function validateReleaseArchiveMembers(members: readonly string[]): void {
+  for (const member of members) {
+    const normalized = member.replaceAll("\\", "/");
+    if (
+      normalized.startsWith("/") ||
+      normalized.split("/").some((segment) => segment === "..") ||
+      normalized.includes("\0")
+    ) {
+      throw new Error(`Release archive contains an unsafe path: ${member}.`);
+    }
+  }
 }
 
 async function fetchAndVerifyReleaseManifest(options: {
