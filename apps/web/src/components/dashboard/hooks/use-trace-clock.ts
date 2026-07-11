@@ -2,15 +2,22 @@
 
 import { useEffect, useState } from "react";
 
-export function useTraceClock(active: boolean): number {
+export function useTraceClock(active: boolean, wakeAt: number | null = null): number {
   const [now, setNow] = useState(0);
 
   useEffect(() => {
-    if (!active) return;
     setNow(Date.now());
-    const interval = setInterval(() => setNow(Date.now()), 1_000);
-    return () => clearInterval(interval);
-  }, [active]);
+    if (active) {
+      const interval = setInterval(() => setNow(Date.now()), 1_000);
+      return () => clearInterval(interval);
+    }
+    if (wakeAt === null) return;
+
+    const delay = wakeAt - Date.now();
+    if (delay <= 0) return;
+    const timeout = setTimeout(() => setNow(Date.now()), delay);
+    return () => clearTimeout(timeout);
+  }, [active, wakeAt]);
 
   return now;
 }

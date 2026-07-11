@@ -1,8 +1,10 @@
 "use client";
 
 import { RefreshCw, Server, UserRound } from "lucide-react";
+import type { AgentTrace } from "@aripabot/core/agent/traces.ts";
 
 import { Button } from "@/components/ui/button";
+import { AgentActivityRail } from "@/components/dashboard/components/agent-activity-rail";
 import { Metric } from "@/components/dashboard/components/metric";
 import { ResponsiveDatum, RuntimeDetail } from "@/components/dashboard/components/overview-display";
 import { EmptyPanel, ErrorPanel, LoadingPanel } from "@/components/dashboard/components/panels";
@@ -12,12 +14,19 @@ import { formatCount, formatDateTime } from "@/components/dashboard/lib/format";
 import type { DashboardStatus } from "@/lib/api-types";
 import type { LoadState } from "@/server/dashboard-page-data";
 import type { RuntimeModelSelection } from "@aripabot/core/config/config.ts";
+import type { TraceStreamState } from "@/components/dashboard/hooks/use-trace-stream";
 
 export function Overview({
   status,
+  traces,
+  traceStreamState,
+  guildNames,
   onRefresh,
 }: {
   status: LoadState<DashboardStatus>;
+  traces: readonly AgentTrace[];
+  traceStreamState: TraceStreamState;
+  guildNames: ReadonlyMap<string, string | null>;
   onRefresh: () => void;
 }) {
   if (status.status === "loading") {
@@ -36,12 +45,9 @@ export function Overview({
     <div className="grid gap-10">
       <section className="grid gap-5">
         <div className="flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-baseline gap-2.5">
-            <StatusText tone={runtimeTone(botRuntime.state)} className="font-medium">
-              {botRuntime.label}
-            </StatusText>
-            <span className="truncate text-sm text-muted-foreground">{botRuntime.detail}</span>
-          </div>
+          <StatusText tone={runtimeTone(botRuntime.state)} className="font-medium">
+            {botRuntime.label}
+          </StatusText>
           <Button
             type="button"
             variant="ghost"
@@ -54,6 +60,7 @@ export function Overview({
             <RefreshCw aria-hidden="true" />
           </Button>
         </div>
+        <AgentActivityRail traces={traces} streamState={traceStreamState} guildNames={guildNames} />
         <div className="grid grid-cols-2 gap-6 border-y py-5 sm:grid-cols-4">
           <Metric label="Servers" value={operations.totals.guilds} />
           <Metric
